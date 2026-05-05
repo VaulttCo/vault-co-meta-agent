@@ -991,6 +991,7 @@ function AICampaignBuilderContent() {
                 </label>
                 <div className="relative">
                   <select
+                    key={selectedClientId ?? 'no-client'}
                     value={service}
                     onChange={(e) => setService(e.target.value)}
                     disabled={!selectedClient}

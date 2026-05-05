@@ -11,7 +11,7 @@
  *
  * Limitations:
  * - Scanned / image-only PDFs are NOT supported (no OCR in this phase)
- * - Password-protected PDFs will return an error
+ * - Password-protected PDFs will return a specific error message
  * - Maximum file size: 50 MB
  */
 
@@ -55,9 +55,9 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await fileObj.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
 
-    // Use pdfjs-dist legacy build (Node.js compatible, no filesystem access on load)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.mjs");
+    // Use dynamic ESM import for pdfjs-dist (it ships as .mjs — must use import())
+    // The legacy build is recommended for Node.js environments
+    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
     let text = "";
     let pageCount = 0;
@@ -68,6 +68,10 @@ export async function POST(req: NextRequest) {
         data: uint8,
         // Suppress font warnings — text extraction still works without standard fonts
         verbosity: 0,
+        // Disable worker in Node.js serverless environment
+        useWorkerFetch: false,
+        isEvalSupported: false,
+        useSystemFonts: true,
       });
 
       const pdf = await loadingTask.promise;

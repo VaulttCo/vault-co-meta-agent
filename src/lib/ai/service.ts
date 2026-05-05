@@ -257,7 +257,8 @@ function parseExtractionJson(text: string, clientId: string): ClientIntelligence
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic (Claude Haiku) — campaign generation
-// max_tokens reduced to 2048 to stay well within 60s Hobby limit
+// max_tokens 4096 — campaign schema requires ~3000+ tokens to fill completely
+// Haiku is fast enough to complete 4096 tokens within 50s on Vercel Hobby
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
@@ -270,7 +271,7 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildCampaignPrompt(input) }],
     }),

@@ -1,6 +1,10 @@
-import type { MockUser } from "./types";
+import type { AppUser } from "./types";
 
-export const MOCK_USERS: MockUser[] = [
+/**
+ * Demo users — only used when NEXT_PUBLIC_AUTH_MODE=demo (local development).
+ * These are NEVER shown in production (NEXT_PUBLIC_AUTH_MODE=supabase).
+ */
+export const MOCK_USERS: AppUser[] = [
   {
     id: "nick-moore",
     name: "Nick Moore",
@@ -8,6 +12,7 @@ export const MOCK_USERS: MockUser[] = [
     role: "admin",
     initials: "NM",
     color: "#c9a84c",
+    isReal: false,
   },
   {
     id: "jaxon-parton",
@@ -16,6 +21,7 @@ export const MOCK_USERS: MockUser[] = [
     role: "admin",
     initials: "JP",
     color: "#c9a84c",
+    isReal: false,
   },
   {
     id: "vault-media-buyer",
@@ -24,6 +30,7 @@ export const MOCK_USERS: MockUser[] = [
     role: "media_buyer",
     initials: "MB",
     color: "#18b8f0",
+    isReal: false,
   },
   {
     id: "sam-setter",
@@ -32,13 +39,6 @@ export const MOCK_USERS: MockUser[] = [
     role: "setter",
     initials: "S",
     color: "#22c55e",
-  },
-  {
-    id: "kaczmar-client",
-    name: "Kaczmar Builders",
-    email: "client@kaczmarbuilders.com",
-    role: "client_viewer",
-    initials: "KB",
-    color: "#a78bfa",
+    isReal: false,
   },
 ];

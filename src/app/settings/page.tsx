@@ -88,7 +88,7 @@ const PERMISSION_LABELS: { key: keyof Permissions; label: string }[] = [
 
 export default function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
-  const { user, permissions, signOut, can } = useAuth();
+  const { user, permissions, signOut, can, isDemoMode } = useAuth();
   const [providerName, setProviderName] = useState<"mock" | "supabase">("mock");
   const supabaseConfigured = isSupabaseConfigured();
   // NEXT_PUBLIC_ vars are baked in at build time — read directly
@@ -134,9 +134,9 @@ export default function SettingsPage() {
             },
             {
               label: "Auth Provider",
-              value: "Demo / Internal Mode",
-              ok: false,
-              warn: true,
+              value: isDemoMode ? "Demo / Internal Mode" : "Supabase Auth Live",
+              ok: !isDemoMode,
+              warn: isDemoMode,
             },
             {
               label: "Meta Ads",

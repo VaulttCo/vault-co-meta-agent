@@ -269,7 +269,7 @@ export function Sidebar() {
                 </div>
               </div>
               <button
-                onClick={signOut}
+                onClick={() => void signOut()}
                 title="Sign out"
                 className="w-6 h-6 flex items-center justify-center rounded-md transition-colors flex-shrink-0"
                 style={{ color: "var(--t-dim)" }}

@@ -262,7 +262,7 @@ export function Topbar() {
                     </Link>
                   )}
                   <button
-                    onClick={() => { signOut(); setShowUserMenu(false); }}
+                    onClick={() => { void signOut(); setShowUserMenu(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-[12px] transition-colors"
                     style={{ color: "var(--t-muted)" }}
                     onMouseEnter={(e) => {

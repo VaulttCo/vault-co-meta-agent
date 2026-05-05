@@ -99,53 +99,11 @@ const CAMPAIGN_DRAFT_SCHEMA = `{
     "pauseRule": "string",
     "humanApprovalTriggers": ["string"]
   },
-  "buyerPsychologyUsed": {
-    "buyerInsight": "string",
-    "urgencyTrigger": "string",
-    "trustTriggerUsed": "string",
-    "objectionAddressed": "string",
-    "hookRationale": "string",
-    "ctaRationale": "string"
-  },
-  "marketResearchUsed": {
-    "marketSummary": "string",
-    "competitorAngle": "string",
-    "audienceRationale": "string",
-    "locationRationale": "string",
-    "seasonalityNote": "string"
-  },
-  "clientIntelligenceUsed": {
-    "onboardingSummaryUsed": true,
-    "keyIntelligenceApplied": ["string"],
-    "offerAngle": "string",
-    "servicesPrioritized": ["string"]
-  },
   "strategicRationale": {
     "whyThisCampaign": "string",
-    "buyerInsightUsed": "string",
-    "marketInsightUsed": "string",
-    "offerAngleUsed": "string",
-    "creativeAngleUsed": "string",
-    "trustTriggerUsed": "string",
-    "objectionAddressed": "string",
     "audienceRationale": "string",
-    "leadFormRationale": "string",
-    "followUpRationale": "string"
-  },
-  "creativeIntelligenceUsed": {
-    "assetId": null,
-    "assetType": "string",
-    "creativeStrength": "string",
-    "trustSignals": ["string"],
-    "buyerIntent": "Cold | Warm | Hot",
-    "recommendedAngle": "string",
-    "recommendedHook": "string",
-    "recommendedCTA": "string",
-    "placementRecommendation": ["string"],
-    "complianceNote": "string",
-    "whyThisCreative": "string",
-    "retargetingUse": "string",
-    "approvedForAds": true
+    "offerAngleUsed": "string",
+    "creativeAngleUsed": "string"
   }
 }`;
 

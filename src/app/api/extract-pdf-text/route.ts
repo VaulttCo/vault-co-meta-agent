@@ -2,21 +2,21 @@
  * /api/extract-pdf-text
  *
  * Accepts a multipart/form-data POST with a single "file" field containing
- * a PDF. Extracts embedded text using pdf-parse (no OCR — scanned PDFs
- * without embedded text will return an empty string and the client should
- * fall back to manual paste).
+ * a PDF. Extracts embedded text using pdfjs-dist (Mozilla PDF.js) — no OCR.
  *
- * NOTE: Scanned PDFs (image-only, no embedded text layer) are NOT supported
- * in this phase. If text.trim() is empty the response includes
- * { scanned: true } so the UI can show the manual-paste fallback message.
+ * Scanned PDFs (image-only, no embedded text layer) will return an empty
+ * string and { scanned: true } so the UI can show the manual-paste fallback.
  *
  * All processing is server-side. No API keys are exposed to the browser.
+ *
+ * Limitations:
+ * - Scanned / image-only PDFs are NOT supported (no OCR in this phase)
+ * - Password-protected PDFs will return an error
+ * - Maximum file size: 50 MB
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
-// pdf-parse uses CommonJS; we import it dynamically to avoid ESM issues
-// in the Next.js App Router edge/node runtime.
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -32,48 +32,81 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const fileObj = file as File;
+
     // Validate MIME type
-    const mime = (file as File).type;
-    if (mime && mime !== "application/pdf") {
+    if (fileObj.type && fileObj.type !== "application/pdf") {
       return NextResponse.json(
-        { error: `Unsupported file type: ${mime}. Only PDF files are accepted.` },
+        { error: `Unsupported file type: ${fileObj.type}. Only PDF files are accepted.` },
         { status: 415 }
       );
     }
 
     // Validate size — 50 MB hard limit
     const MAX_BYTES = 50 * 1024 * 1024;
-    if ((file as File).size > MAX_BYTES) {
+    if (fileObj.size > MAX_BYTES) {
       return NextResponse.json(
         { error: "PDF exceeds the 50 MB size limit." },
         { status: 413 }
       );
     }
 
-    // Convert browser File → Node Buffer
-    const arrayBuffer = await (file as File).arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    // Convert browser File → Uint8Array
+    const arrayBuffer = await fileObj.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
 
-    // Dynamically import pdf-parse to avoid CJS/ESM issues at module load time
+    // Use pdfjs-dist legacy build (Node.js compatible, no filesystem access on load)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require("pdf-parse");
+    const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.mjs");
 
     let text = "";
     let pageCount = 0;
     let scanned = false;
 
     try {
-      const parsed = await pdfParse(buffer);
-      text = (parsed.text ?? "").trim();
-      pageCount = parsed.numpages ?? 0;
-      // If no text was extracted, the PDF is likely scanned (image-only)
+      const loadingTask = pdfjsLib.getDocument({
+        data: uint8,
+        // Suppress font warnings — text extraction still works without standard fonts
+        verbosity: 0,
+      });
+
+      const pdf = await loadingTask.promise;
+      pageCount = pdf.numPages;
+
+      const pageTexts: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((item: any) => item.str ?? "")
+          .join(" ");
+        pageTexts.push(pageText);
+      }
+
+      text = pageTexts.join("\n").trim();
       scanned = text.length === 0;
-    } catch (parseErr) {
-      console.error("[extract-pdf-text] pdf-parse error:", parseErr);
+    } catch (parseErr: unknown) {
+      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+      console.error("[extract-pdf-text] pdfjs error:", msg);
+
+      // Distinguish password-protected PDFs
+      if (msg.toLowerCase().includes("password")) {
+        return NextResponse.json(
+          {
+            error:
+              "This PDF is password-protected. Remove the password and re-upload, or paste the onboarding summary manually.",
+            scanned: false,
+            text: "",
+          },
+          { status: 422 }
+        );
+      }
+
       return NextResponse.json(
         {
           error:
-            "PDF text extraction failed. The file may be corrupted, password-protected, or a scanned image PDF. Paste the onboarding summary manually.",
+            "PDF text extraction failed. The file may be corrupted or in an unsupported format. Paste the onboarding summary manually.",
           scanned: true,
           text: "",
         },
@@ -86,7 +119,7 @@ export async function POST(req: NextRequest) {
       pageCount,
       scanned,
       charCount: text.length,
-      fileName: (file as File).name,
+      fileName: fileObj.name,
     });
   } catch (err) {
     console.error("[extract-pdf-text] unexpected error:", err);

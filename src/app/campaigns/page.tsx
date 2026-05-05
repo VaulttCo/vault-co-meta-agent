@@ -1,17 +1,17 @@
+"use client";
+import { useState, useEffect } from "react";
 import { Plus, Filter, Search, MoreHorizontal, Play, Pause } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { clients, clientStatusVariant, campaignStatusVariant, type CampaignStatus } from "@/lib/data";
+import { clientStatusVariant, campaignStatusVariant, type CampaignStatus } from "@/lib/data";
+import { getDataProvider } from "@/lib/data/data-provider";
+import type { Client } from "@/lib/data";
 
-// Flatten all campaigns across all clients
-const allCampaigns = clients.flatMap((client) =>
-  client.campaigns.map((c) => ({
-    ...c,
-    clientName: client.name,
-    clientStatus: client.status,
-    market: client.market,
-  }))
-);
+interface CampaignRow {
+  id: string; name: string; type: string; status: CampaignStatus;
+  budget: string; spend: string; leads: number; cpl: string; booked: number;
+  clientName: string; clientStatus: string; market: string;
+}
 
 function getCpba(spend: string, booked: number): string {
   if (booked === 0) return "—";
@@ -37,13 +37,31 @@ function getNextAction(status: CampaignStatus, leads: number, booked: number, sp
 }
 
 export default function CampaignsPage() {
+  const [allCampaigns, setAllCampaigns] = useState<CampaignRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDataProvider().getClients().then((clients: Client[]) => {
+      const rows: CampaignRow[] = clients.flatMap((client) =>
+        (client.campaigns ?? []).map((c) => ({
+          ...c,
+          clientName: client.name,
+          clientStatus: client.status,
+          market: client.market,
+        }))
+      );
+      setAllCampaigns(rows);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
   const activeCount = allCampaigns.filter((c) => c.status === "active").length;
 
   return (
     <div className="max-w-7xl mx-auto">
       <PageHeader
         title="Campaigns"
-        description={`${allCampaigns.length} campaigns · ${activeCount} active`}
+        description={loading ? "Loading…" : `${allCampaigns.length} campaigns · ${activeCount} active`}
         action={
           <button className="flex items-center gap-2 px-4 py-2 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg transition-opacity hover:opacity-90">
             <Plus size={14} />
@@ -82,7 +100,16 @@ export default function CampaignsPage() {
 
       {/* Table */}
       <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
-        <table className="w-full text-[13px]">
+        {loading && (
+          <div className="px-5 py-12 text-center text-[12px]" style={{ color: "#3d4f6e" }}>Loading campaigns…</div>
+        )}
+        {!loading && allCampaigns.length === 0 && (
+          <div className="px-5 py-12 text-center">
+            <p className="text-[13px] font-medium" style={{ color: "#6b7a99" }}>No campaigns yet</p>
+            <p className="text-[11px] mt-1" style={{ color: "#3d4f6e" }}>Campaign data is pulled from client records in Supabase.</p>
+          </div>
+        )}
+        {!loading && allCampaigns.length > 0 && <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[rgba(0, 129, 242, 0.15)]">
               {["Client", "Campaign", "Market", "Status", "Spend", "Leads", "CPL", "Booked", "CPBA", "Next Action", ""].map(
@@ -116,7 +143,7 @@ export default function CampaignsPage() {
                 >
                   <td className="px-4 py-3.5">
                     <div className="font-semibold text-[#f8f8f7]">{c.clientName}</div>
-                    <Badge label={c.clientStatus} variant={clientStatusVariant[c.clientStatus]} />
+                    <Badge label={c.clientStatus} variant={clientStatusVariant[c.clientStatus as keyof typeof clientStatusVariant] ?? "neutral"} />
                   </td>
                   <td className="px-4 py-3.5 text-[#6b7a99]">{c.name}</td>
                   <td className="px-4 py-3.5 text-[#6b7a99]">{c.market}</td>
@@ -164,7 +191,7 @@ export default function CampaignsPage() {
               );
             })}
           </tbody>
-        </table>
+        </table>}
       </div>
     </div>
   );

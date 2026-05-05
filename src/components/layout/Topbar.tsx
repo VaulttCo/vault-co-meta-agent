@@ -114,30 +114,30 @@ export function Topbar() {
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#ff8400] rounded-full"></span>
         </button>
 
-        {/* GHL connection badge */}
+        {/* GHL connection badge — not connected */}
         <div
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
           style={{
             backgroundColor: "var(--t-input-bg)",
-            border: "1px solid rgba(0, 129, 242, 0.15)",
+            border: "1px solid rgba(61, 79, 110, 0.25)",
           }}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] flex-shrink-0"></span>
-          <span style={{ color: "var(--t-muted)" }}>GHL</span>
-          <span className="font-medium" style={{ color: "var(--t-text)" }}>Connected</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e] flex-shrink-0"></span>
+          <span style={{ color: "#3d4f6e" }}>GHL</span>
+          <span className="font-medium" style={{ color: "#3d4f6e" }}>Not connected</span>
         </div>
 
-        {/* Meta connection badge */}
+        {/* Meta connection badge — not connected */}
         <div
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
+          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
           style={{
             backgroundColor: "var(--t-input-bg)",
-            border: "1px solid rgba(0, 129, 242, 0.15)",
+            border: "1px solid rgba(61, 79, 110, 0.25)",
           }}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#0081f2] flex-shrink-0"></span>
-          <span style={{ color: "var(--t-muted)" }}>Meta</span>
-          <span className="font-medium" style={{ color: "var(--t-text)" }}>Connected</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e] flex-shrink-0"></span>
+          <span style={{ color: "#3d4f6e" }}>Meta</span>
+          <span className="font-medium" style={{ color: "#3d4f6e" }}>Not connected</span>
         </div>
 
         {/* User dropdown */}

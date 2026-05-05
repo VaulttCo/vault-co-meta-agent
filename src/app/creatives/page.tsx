@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -31,7 +31,8 @@ import {
   type AssetCategory,
 } from "@/lib/creativeAssets";
 import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
-import { clients } from "@/lib/data";
+import { getDataProvider } from "@/lib/data/data-provider";
+import type { Client } from "@/lib/data";
 import { useAuth } from "@/components/AuthProvider";
 
 // ─────────────────────────────────────────────────────────────
@@ -41,10 +42,12 @@ function UploadModal({
   onClose,
   onAdd,
   usingSupabase,
+  clients,
 }: {
   onClose: () => void;
   onAdd: (asset: CreativeAsset) => Promise<void>;
   usingSupabase: boolean;
+  clients: Client[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pickedFileName, setPickedFileName] = useState<string | null>(null);
@@ -314,7 +317,7 @@ function UploadModal({
 // ─────────────────────────────────────────────────────────────
 // Asset card
 // ─────────────────────────────────────────────────────────────
-function AssetCard({ asset }: { asset: CreativeAsset }) {
+function AssetCard({ asset, resolveClientName }: { asset: CreativeAsset; resolveClientName: (a: CreativeAsset) => string }) {
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
   const Icon = asset.fileType === "video" ? Video : ImageIcon;
   return (
@@ -346,7 +349,7 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
       <div className="p-4 space-y-2.5">
         <div>
           <div className="text-[12px] font-semibold text-[#f8f8f7] truncate">{asset.fileName}</div>
-          <div className="text-[11px] text-[#6b7a99] mt-0.5">{asset.clientName}</div>
+          <div className="text-[11px] text-[#6b7a99] mt-0.5">{resolveClientName(asset)}</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Category badge */}
@@ -392,11 +395,35 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
 export default function CreativesPage() {
   const { can } = useAuth();
   const { allAssets, addAsset, usingSupabase, loading } = usePersistedCreativeAssets();
+  const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
+
+  // Load clients from Supabase for dropdowns and display name resolution
+  useEffect(() => {
+    getDataProvider().getClients().then(setClients).catch(() => setClients([]));
+  }, []);
+
+  // Build a map of clientId → display name to resolve raw slugs in asset cards
+  const clientNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of clients) map[c.id] = c.name;
+    return map;
+  }, [clients]);
+
+  // Resolve display name: use stored clientName if it looks like a real name,
+  // otherwise fall back to the clientNameMap lookup
+  function resolveClientName(asset: CreativeAsset): string {
+    const stored = asset.clientName ?? "";
+    // If stored name looks like a slug (no spaces, all lowercase with hyphens), resolve it
+    if (!stored || /^[a-z0-9-]+$/.test(stored)) {
+      return clientNameMap[asset.clientId] ?? asset.clientId;
+    }
+    return stored;
+  }
 
   const filtered = useMemo(() => {
     return allAssets.filter((a) => {
@@ -550,7 +577,7 @@ export default function CreativesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((a) => (
-            <AssetCard key={a.id} asset={a} />
+            <AssetCard key={a.id} asset={a} resolveClientName={resolveClientName} />
           ))}
         </div>
       )}
@@ -560,6 +587,7 @@ export default function CreativesPage() {
           onClose={() => setShowUpload(false)}
           onAdd={addAsset}
           usingSupabase={usingSupabase}
+          clients={clients}
         />
       )}
     </div>

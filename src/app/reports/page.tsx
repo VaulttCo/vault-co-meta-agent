@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
   Download,
@@ -17,18 +17,17 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { clients } from "@/lib/data";
+import { getDataProvider } from "@/lib/data/data-provider";
+import type { Client } from "@/lib/data";
 import type { PersistedReport } from "@/lib/data/data-provider";
 import { usePersistedReports } from "@/lib/usePersistedReports";
 import type { WeeklyReportInput } from "@/lib/ai/service";
 
 // ── Helpers ───────────────────────────────────────────────────
 function generateId(): string {
-  // Use crypto.randomUUID() for valid UUID format required by Supabase
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  // Fallback: generate UUID v4 manually
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
@@ -39,7 +38,7 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function buildReportInput(client: (typeof clients)[number]): WeeklyReportInput {
+function buildReportInput(client: Client): WeeklyReportInput {
   return {
     clientId: client.id,
     clientName: client.name,
@@ -80,7 +79,7 @@ function ViewReportModal({
               </span>
             </div>
             <h2 className="text-[18px] font-bold text-[#f8f8f7] leading-tight">
-              {gc?.reportTitle ?? `${report.clientId} — Report`}
+              {gc?.reportTitle ?? `${report.clientName ?? report.clientId} — Report`}
             </h2>
             <div className="flex items-center gap-3 mt-1.5">
               <span className="text-[12px] text-[#6b7a99]">{report.reportPeriod}</span>
@@ -119,7 +118,6 @@ function ViewReportModal({
             ))}
           </div>
 
-          {/* Executive Summary */}
           {gc?.executiveSummary && (
             <div>
               <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-2">
@@ -129,7 +127,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Wins */}
           {gc?.winsSection && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -142,7 +139,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Issues */}
           {gc?.issuesSection && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -155,7 +151,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Next Actions */}
           {gc?.nextActionsSection && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -168,7 +163,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Agent Recommendations */}
           {gc?.agentRecommendations && gc.agentRecommendations.length > 0 && (
             <div>
               <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-2">
@@ -185,7 +179,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Client-Ready Narrative */}
           {gc?.clientReadyNarrative && (
             <div className="bg-[#0a1220] border border-[rgba(0,129,242,0.12)] rounded-xl p-4">
               <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-3">
@@ -197,7 +190,6 @@ function ViewReportModal({
             </div>
           )}
 
-          {/* Approval Note */}
           {gc?.approvalNote && (
             <div className="flex items-start gap-2 p-3 bg-[#ff8400]/5 border border-[#ff8400]/20 rounded-lg">
               <AlertCircle size={13} className="text-[#ff8400] shrink-0 mt-0.5" />
@@ -213,14 +205,28 @@ function ViewReportModal({
 // ── Main Page ─────────────────────────────────────────────────
 export default function ReportsPage() {
   const { reports, addReport, usingSupabase, loading } = usePersistedReports();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [viewReport, setViewReport] = useState<PersistedReport | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
 
+  // Load clients from Supabase (or mock in dev)
+  useEffect(() => {
+    const db = getDataProvider();
+    db.getClients()
+      .then(setClients)
+      .catch((err) => {
+        console.error("[ReportsPage] Failed to load clients:", err);
+        setClients([]);
+      })
+      .finally(() => setClientsLoading(false));
+  }, []);
+
   const getReportForClient = (clientId: string): PersistedReport | undefined =>
     reports.find((r) => r.clientId === clientId);
 
-  async function handleGenerate(client: (typeof clients)[number]) {
+  async function handleGenerate(client: Client) {
     setGenerating((prev) => ({ ...prev, [client.id]: true }));
     try {
       const input = buildReportInput(client);
@@ -234,7 +240,6 @@ export default function ReportsPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const draft = result.report as any;
 
-      // Surface mock fallback notice if AI timed out or failed
       if (result.mockMode && result.notice) {
         setAiNotice(result.notice);
       } else {
@@ -282,16 +287,17 @@ export default function ReportsPage() {
     }
   }
 
-  // Summary stats from active clients
+  // Summary stats from active Supabase clients
   const activeClients = clients.filter((c) => c.status === "active");
-  const totalLeads = activeClients.reduce((sum, c) => sum + c.stats.leads, 0);
-  const totalBooked = activeClients.reduce((sum, c) => sum + c.stats.booked, 0);
+  const totalLeads = activeClients.reduce((sum, c) => sum + (c.stats?.leads ?? 0), 0);
+  const totalBooked = activeClients.reduce((sum, c) => sum + (c.stats?.booked ?? 0), 0);
   const totalSpend = activeClients.reduce(
-    (sum, c) => sum + parseInt(c.stats.spend.replace(/\D/g, ""), 10),
+    (sum, c) => sum + parseInt((c.stats?.spend ?? "$0").replace(/\D/g, ""), 10),
     0
   );
   const avgCpl = totalLeads > 0 ? `$${(totalSpend / totalLeads).toFixed(2)}` : "—";
   const anyGenerating = Object.values(generating).some(Boolean);
+  const isLoading = loading || clientsLoading;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -317,18 +323,20 @@ export default function ReportsPage() {
               <Calendar size={13} />
               May 2026
             </button>
-            <button
-              onClick={handleGenerateAll}
-              disabled={anyGenerating}
-              className="flex items-center gap-2 px-4 py-2 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {anyGenerating ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <FileText size={13} />
-              )}
-              Generate All
-            </button>
+            {clients.length > 0 && (
+              <button
+                onClick={handleGenerateAll}
+                disabled={anyGenerating || isLoading}
+                className="flex items-center gap-2 px-4 py-2 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {anyGenerating ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <FileText size={13} />
+                )}
+                Generate All
+              </button>
+            )}
           </div>
         }
       />
@@ -336,10 +344,10 @@ export default function ReportsPage() {
       {/* Summary */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Total Leads (Active Clients)", value: String(totalLeads), icon: Users, color: "#0081f2" },
-          { label: "Total Booked (MTD)", value: String(totalBooked), icon: CalendarCheck, color: "#22c55e" },
-          { label: "Avg. CPL (All Active)", value: avgCpl, icon: TrendingUp, color: "#ff8400" },
-          { label: "Total Spend (MTD)", value: `$${totalSpend.toLocaleString()}`, icon: DollarSign, color: "#a78bfa" },
+          { label: "Total Leads (Active Clients)", value: isLoading ? "…" : String(totalLeads), icon: Users, color: "#0081f2" },
+          { label: "Total Booked (MTD)", value: isLoading ? "…" : String(totalBooked), icon: CalendarCheck, color: "#22c55e" },
+          { label: "Avg. CPL (All Active)", value: isLoading ? "…" : avgCpl, icon: TrendingUp, color: "#ff8400" },
+          { label: "Total Spend (MTD)", value: isLoading ? "…" : `$${totalSpend.toLocaleString()}`, icon: DollarSign, color: "#a78bfa" },
         ].map((s) => (
           <div
             key={s.label}
@@ -373,132 +381,147 @@ export default function ReportsPage() {
 
       {/* Reports table */}
       <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
-        {loading && (
+        {isLoading && (
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(0,129,242,0.15)] text-[12px] text-[#6b7a99]">
             <Loader2 size={12} className="animate-spin" />
-            Loading saved reports…
+            Loading clients and reports…
           </div>
         )}
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-[rgba(0,129,242,0.15)]">
-              {["Client", "Report Period", "Status", "Leads", "Booked", "CPL", "Spend", ""].map(
-                (h, i) => (
-                  <th
-                    key={`${h}-${i}`}
-                    className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${
-                      h === "Client" || h === "Report Period"
-                        ? "text-left"
-                        : h === ""
-                        ? ""
-                        : "text-right"
+
+        {!isLoading && clients.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+            <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] flex items-center justify-center mb-4">
+              <FileText size={18} className="text-[#3d4f6e]" />
+            </div>
+            <div className="text-[14px] font-semibold text-[#f8f8f7] mb-2">No clients found</div>
+            <p className="text-[12px] text-[#6b7a99] max-w-sm">
+              Add clients in the Clients section to start generating weekly performance reports.
+            </p>
+          </div>
+        )}
+
+        {!isLoading && clients.length > 0 && (
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-[rgba(0,129,242,0.15)]">
+                {["Client", "Report Period", "Status", "Leads", "Booked", "CPL", "Spend", ""].map(
+                  (h, i) => (
+                    <th
+                      key={`${h}-${i}`}
+                      className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${
+                        h === "Client" || h === "Report Period"
+                          ? "text-left"
+                          : h === ""
+                          ? ""
+                          : "text-right"
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  )
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map((client, i) => {
+                const persisted = getReportForClient(client.id);
+                const isGenerating = generating[client.id] ?? false;
+                const hasReport = !!persisted;
+                const leads = persisted?.leads ?? client.stats?.leads ?? 0;
+                const booked = persisted?.booked ?? client.stats?.booked ?? 0;
+                const cpl = persisted?.cpl ?? client.stats?.cpl ?? "—";
+                const spend = persisted?.spend ?? client.stats?.spend ?? "$0";
+
+                return (
+                  <tr
+                    key={client.id}
+                    className={`border-b border-[rgba(0,129,242,0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors group ${
+                      i === clients.length - 1 ? "border-b-0" : ""
                     }`}
                   >
-                    {h}
-                  </th>
-                )
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((client, i) => {
-              const persisted = getReportForClient(client.id);
-              const isGenerating = generating[client.id] ?? false;
-              const hasReport = !!persisted;
-              const leads = persisted?.leads ?? client.stats.leads;
-              const booked = persisted?.booked ?? client.stats.booked;
-              const cpl = persisted?.cpl ?? client.stats.cpl;
-              const spend = persisted?.spend ?? client.stats.spend;
-
-              return (
-                <tr
-                  key={client.id}
-                  className={`border-b border-[rgba(0,129,242,0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors group ${
-                    i === clients.length - 1 ? "border-b-0" : ""
-                  }`}
-                >
-                  <td className="px-4 py-3.5">
-                    <div className="font-semibold text-[#f8f8f7]">{client.name}</div>
-                    {client.status !== "active" && (
-                      <div className="text-[10px] text-[#6b7a99] mt-0.5 capitalize">
-                        {client.status} — {hasReport ? "report generated" : "no data yet"}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5 text-[#6b7a99]">
-                    {persisted?.reportPeriod ?? "May 2026 — Week 1"}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    {isGenerating ? (
-                      <div className="flex items-center gap-1.5">
-                        <Loader2 size={11} className="animate-spin text-[#ff8400]" />
-                        <span className="text-[11px] text-[#ff8400]">Generating…</span>
-                      </div>
-                    ) : hasReport ? (
-                      <>
-                        <Badge label="Ready" variant="success" />
-                        <div className="flex items-center gap-1 mt-1">
-                          <Sparkles size={9} className="text-[#ff8400]" />
-                          <span className="text-[10px] text-[#6b7a99]">Prepared by Veronica</span>
+                    <td className="px-4 py-3.5">
+                      <div className="font-semibold text-[#f8f8f7]">{client.name}</div>
+                      {client.status !== "active" && (
+                        <div className="text-[10px] text-[#6b7a99] mt-0.5 capitalize">
+                          {client.status} — {hasReport ? "report generated" : "no data yet"}
                         </div>
-                      </>
-                    ) : (
-                      <Badge label="No data" variant="neutral" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    {leads > 0 ? (
-                      <span className="text-[#0081f2] font-semibold">{leads}</span>
-                    ) : (
-                      <span className="text-[#3d4f6e]">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    {booked > 0 ? (
-                      <span className="text-[#22c55e] font-semibold">{booked}</span>
-                    ) : (
-                      <span className="text-[#3d4f6e]">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{cpl}</td>
-                  <td className="px-4 py-3.5 text-right text-[#f8f8f7]">
-                    {spend !== "$0" ? spend : "—"}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {hasReport ? (
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-[#6b7a99]">
+                      {persisted?.reportPeriod ?? "—"}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {isGenerating ? (
+                        <div className="flex items-center gap-1.5">
+                          <Loader2 size={11} className="animate-spin text-[#ff8400]" />
+                          <span className="text-[11px] text-[#ff8400]">Generating…</span>
+                        </div>
+                      ) : hasReport ? (
                         <>
-                          <button
-                            onClick={() => setViewReport(persisted!)}
-                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-[#0081f2] bg-[#0081f2]/10 border border-[#0081f2]/20 rounded-md hover:bg-[#0081f2]/18 transition-colors"
-                          >
-                            View
-                          </button>
-                          <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
-                            <Download size={12} />
-                          </button>
+                          <Badge label="Ready" variant="success" />
+                          <div className="flex items-center gap-1 mt-1">
+                            <Sparkles size={9} className="text-[#ff8400]" />
+                            <span className="text-[10px] text-[#6b7a99]">Prepared by Veronica</span>
+                          </div>
                         </>
                       ) : (
-                        <button
-                          onClick={() => handleGenerate(client)}
-                          disabled={isGenerating}
-                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-[#ff8400] bg-[#ff8400]/10 border border-[#ff8400]/20 rounded-md hover:bg-[#ff8400]/18 transition-colors disabled:opacity-50"
-                        >
-                          {isGenerating ? (
-                            <Loader2 size={10} className="animate-spin" />
-                          ) : (
-                            <Sparkles size={10} />
-                          )}
-                          Generate
-                        </button>
+                        <Badge label="No data" variant="neutral" />
                       )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {leads > 0 ? (
+                        <span className="text-[#0081f2] font-semibold">{leads}</span>
+                      ) : (
+                        <span className="text-[#3d4f6e]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-right">
+                      {booked > 0 ? (
+                        <span className="text-[#22c55e] font-semibold">{booked}</span>
+                      ) : (
+                        <span className="text-[#3d4f6e]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{cpl}</td>
+                    <td className="px-4 py-3.5 text-right text-[#f8f8f7]">
+                      {spend !== "$0" ? spend : "—"}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {hasReport ? (
+                          <>
+                            <button
+                              onClick={() => setViewReport(persisted!)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-[#0081f2] bg-[#0081f2]/10 border border-[#0081f2]/20 rounded-md hover:bg-[#0081f2]/18 transition-colors"
+                            >
+                              View
+                            </button>
+                            <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
+                              <Download size={12} />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleGenerate(client)}
+                            disabled={isGenerating}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-[#ff8400] bg-[#ff8400]/10 border border-[#ff8400]/20 rounded-md hover:bg-[#ff8400]/18 transition-colors disabled:opacity-50"
+                          >
+                            {isGenerating ? (
+                              <Loader2 size={10} className="animate-spin" />
+                            ) : (
+                              <Sparkles size={10} />
+                            )}
+                            Generate
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

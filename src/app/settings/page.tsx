@@ -33,9 +33,9 @@ const integrationSections = [
     icon: Link2,
     color: "#0081f2",
     items: [
-      { label: "Meta Business Manager", description: "Ad account connected · Account #110482930", status: "connected" },
-      { label: "Meta Marketing API", description: "v20.0 · All 4 client ad accounts linked", status: "connected" },
-      { label: "GoHighLevel (GHL)", description: "4 location IDs connected · Webhooks active", status: "connected" },
+      { label: "Meta Business Manager", description: "Not connected — connect to enable ad performance reporting", status: "disconnected" },
+      { label: "Meta Marketing API", description: "Not connected — required for campaign analytics and spend data", status: "disconnected" },
+      { label: "GoHighLevel (GHL)", description: "Not connected — required for appointment and pipeline sync", status: "disconnected" },
       { label: "Google Analytics 4", description: "Not connected", status: "disconnected" },
     ],
   },
@@ -45,8 +45,7 @@ const integrationSections = [
     icon: Key,
     color: "#ff8400",
     items: [
-      { label: "Anthropic API", description: "claude-sonnet-4-6 · Last used: 2 min ago", status: "connected" },
-      { label: "Meta Marketing API", description: "v20.0 · Token expires in 47 days", status: "connected" },
+      { label: "Anthropic API", description: "claude-haiku-4-5 · Live AI generation active", status: "connected" },
     ],
   },
   {
@@ -109,6 +108,68 @@ export default function SettingsPage() {
         title="Settings"
         description="Manage your account, integrations, and agent configuration"
       />
+
+      {/* System Status Summary */}
+      <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
+          <Database size={14} className="text-[#0081f2]" />
+          <span className="text-sm font-semibold text-[#f8f8f7]">System Status</span>
+        </div>
+        <div className="divide-y divide-[rgba(0,129,242,0.08)]">
+          {[
+            {
+              label: "Data Provider",
+              value: providerName === "supabase" ? "Supabase Live" : "Mock (local)",
+              ok: providerName === "supabase",
+            },
+            {
+              label: "AI Provider",
+              value: aiLive ? `Anthropic Live (claude-haiku-4-5)` : "Mock Mode",
+              ok: aiLive,
+            },
+            {
+              label: "Storage Provider",
+              value: providerName === "supabase" ? "Supabase Live" : "Mock (local)",
+              ok: providerName === "supabase",
+            },
+            {
+              label: "Auth Provider",
+              value: "Demo / Internal Mode",
+              ok: false,
+              warn: true,
+            },
+            {
+              label: "Meta Ads",
+              value: "Not Connected",
+              ok: false,
+            },
+            {
+              label: "GoHighLevel",
+              value: "Not Connected",
+              ok: false,
+            },
+          ].map((row) => (
+            <div
+              key={row.label}
+              className="flex items-center justify-between px-5 py-3"
+            >
+              <span className="text-[12px] text-[#6b7a99]">{row.label}</span>
+              <span
+                className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                  row.ok ? "text-[#22c55e]" : row.warn ? "text-[#f59e0b]" : "text-[#3d4f6e]"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    row.ok ? "bg-[#22c55e]" : row.warn ? "bg-[#f59e0b]" : "bg-[#3d4f6e]"
+                  }`}
+                />
+                {row.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Current User & Role */}
       {user && (
@@ -266,7 +327,7 @@ export default function SettingsPage() {
               <p className="text-[12px] text-[#6b7a99] leading-snug">
                 <span className="text-[#22c55e] font-semibold">Veronica is live.</span>{" "}
                 Using{" "}
-                <span className="font-mono text-[#f8f8f7]">{aiProvider === "anthropic" ? "claude-sonnet-4-5" : "gpt-4o"}</span>{" "}
+                <span className="font-mono text-[#f8f8f7]">{aiProvider === "anthropic" ? "claude-haiku-4-5" : "gpt-4o"}</span>{" "}
                 for campaign generation, intelligence extraction, creative analysis, and report drafting.
               </p>
             </div>
@@ -290,7 +351,7 @@ export default function SettingsPage() {
               },
               {
                 label: "AI_PROVIDER=anthropic",
-                desc: "claude-sonnet-4-5 via Anthropic API — requires ANTHROPIC_API_KEY",
+                desc: "claude-haiku-4-5 via Anthropic API — requires ANTHROPIC_API_KEY",
                 active: aiProvider === "anthropic",
               },
               {
@@ -491,28 +552,43 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Mock AI notice */}
-          <div className="flex items-start gap-3 px-4 py-3 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
-            <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
-            <div className="text-[12px] text-[#6b7a99] leading-snug">
-              <span className="text-[#f8f8f7] font-semibold">Veronica is running in mock mode. </span>
-              Add AI keys to enable live generation. Set{" "}
-              <span className="font-mono text-[#f8f8f7]">AI_PROVIDER=anthropic</span> and{" "}
-              <span className="font-mono text-[#f8f8f7]">ANTHROPIC_API_KEY</span> in{" "}
-              <span className="font-mono text-[#0081f2]">.env.local</span>.
+          {/* AI provider status */}
+          {aiLive ? (
+            <div className="flex items-start gap-3 px-4 py-3 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg">
+              <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0 mt-0.5" />
+              <div className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#22c55e] font-semibold">Veronica AI is live. </span>
+                Using Anthropic claude-haiku-4-5 for campaign generation, intelligence extraction, creative analysis, and report drafting.
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-start gap-3 px-4 py-3 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
+              <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+              <div className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Veronica is running in mock mode. </span>
+                Set <span className="font-mono text-[#f8f8f7]">AI_PROVIDER=anthropic</span> and <span className="font-mono text-[#f8f8f7]">ANTHROPIC_API_KEY</span> in Vercel env vars to enable live generation.
+              </div>
+            </div>
+          )}
 
-          {/* Mock storage notice */}
-          <div className="flex items-start gap-3 px-4 py-3 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
-            <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
-            <div className="text-[12px] text-[#6b7a99] leading-snug">
-              <span className="text-[#f8f8f7] font-semibold">Mock storage mode active. </span>
-              Uploaded files may not persist. Connect Supabase Storage (see{" "}
-              <span className="font-mono text-[#f8f8f7]">docs/storage-setup.md</span>) before
-              accepting client file uploads.
+          {/* Storage status */}
+          {providerName === "supabase" ? (
+            <div className="flex items-start gap-3 px-4 py-3 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-lg">
+              <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0 mt-0.5" />
+              <div className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#22c55e] font-semibold">Supabase Storage active. </span>
+                Uploaded creative assets and client files persist to Supabase Storage.
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-start gap-3 px-4 py-3 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
+              <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+              <div className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Mock storage mode active. </span>
+                Uploaded files may not persist. Connect Supabase Storage before accepting client file uploads.
+              </div>
+            </div>
+          )}
 
           <div className="px-4 py-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
             <div className="text-[11px] text-[#6b7a99] leading-snug">

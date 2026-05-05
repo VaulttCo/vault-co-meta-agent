@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   DollarSign,
   Users,
@@ -12,48 +13,61 @@ import {
   Zap,
   CheckSquare,
   Activity,
+  WifiOff,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { StatCard } from "@/components/ui/StatCard";
-import { clients, approvals } from "@/lib/data";
+import { getDataProvider } from "@/lib/data/data-provider";
+import type { Client } from "@/lib/data";
+import { usePlans } from "@/components/PlanProvider";
 
-// Aggregate stats from active clients only
-const activeClients = clients.filter((c) => c.status === "active");
-const totalSpend = activeClients.reduce((sum, c) => sum + parseInt(c.stats.spend.replace(/\D/g, "")), 0);
-const totalLeads = activeClients.reduce((sum, c) => sum + c.stats.leads, 0);
-const totalBooked = activeClients.reduce((sum, c) => sum + c.stats.booked, 0);
-const avgCpl = totalLeads > 0 ? `$${(totalSpend / totalLeads).toFixed(2)}` : "—";
-
-const stats = [
-  { label: "Total Ad Spend", value: `$${totalSpend.toLocaleString()}`, change: "+9.2%", changeType: "up" as const, icon: DollarSign, iconColor: "#ff8400" },
-  { label: "Leads Generated", value: totalLeads.toString(), change: "+24.1%", changeType: "up" as const, icon: Users, iconColor: "#0081f2" },
-  { label: "Booked Appointments", value: totalBooked.toString(), change: "+11.8%", changeType: "up" as const, icon: CalendarCheck, iconColor: "#22c55e" },
-  { label: "Avg. Cost Per Lead", value: avgCpl, change: "-12.4%", changeType: "up" as const, icon: TrendingDown, iconColor: "#a78bfa" },
-];
-
-const activeCampaignRows = clients.flatMap((client) =>
-  client.campaigns
-    .filter((c) => c.status === "active")
-    .map((c) => ({ ...c, clientName: client.name, market: client.market }))
-);
-
+// ── Veronica status messages (honest, not fake activity) ──────
 const agentLog = [
-  { time: "14 min ago", action: "Veronica generated a roof inspection campaign draft for JJ Roofing Group — ready for review", type: "blue" },
-  { time: "1 hr ago", action: "Veronica flagged low booking rate for Open Forge Construction — Bathroom Remodeling campaign at 20%", type: "warning" },
-  { time: "2 hrs ago", action: "Veronica recommended storm damage creative for Acorns Roofing — storm season window active", type: "orange" },
-  { time: "3 hrs ago", action: "Veronica detected high CPL on Kaczmar Builders remodeling campaign — $339 vs $200 target", type: "warning" },
-  { time: "Yesterday", action: "Veronica prepared weekly report draft for JJ Roofing Group — 27 leads, 7 booked, $55 CPL", type: "success" },
-  { time: "Yesterday", action: "Veronica is waiting for approval before Acorns Roofing Meta campaign can go live", type: "neutral" },
+  { time: "System", action: "Veronica is online and ready to generate campaign drafts, analyse creatives, and prepare weekly reports.", type: "blue" },
+  { time: "Tip", action: "Open a client, run Client Intelligence extraction, then use the AI Campaign Builder to generate a live Anthropic campaign draft.", type: "success" },
+  { time: "Reminder", action: "All AI-generated drafts require human approval before any campaign can be marked Ready for Meta.", type: "neutral" },
 ];
-
-const pendingApprovals = approvals.slice(0, 3);
 
 export default function DashboardPage() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { plans } = usePlans();
+
+  useEffect(() => {
+    getDataProvider().getClients().then((data) => {
+      setClients(data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const activeClients = clients.filter((c) => c.status === "active");
+  const totalSpend = activeClients.reduce((sum, c) => sum + parseInt((c.stats?.spend ?? "$0").replace(/\D/g, "") || "0"), 0);
+  const totalLeads = activeClients.reduce((sum, c) => sum + (c.stats?.leads ?? 0), 0);
+  const totalBooked = activeClients.reduce((sum, c) => sum + (c.stats?.booked ?? 0), 0);
+  const avgCpl = totalLeads > 0 ? `$${(totalSpend / totalLeads).toFixed(0)}` : "—";
+
+  const stats = [
+    { label: "Total Ad Spend", value: loading ? "—" : `$${totalSpend.toLocaleString()}`, icon: DollarSign, iconColor: "#ff8400" },
+    { label: "Leads Generated", value: loading ? "—" : totalLeads.toString(), icon: Users, iconColor: "#0081f2" },
+    { label: "Booked Appointments", value: loading ? "—" : totalBooked.toString(), icon: CalendarCheck, iconColor: "#22c55e" },
+    { label: "Avg. Cost Per Lead", value: loading ? "—" : avgCpl, icon: TrendingDown, iconColor: "#a78bfa" },
+  ];
+
+  // Pending campaign drafts from Supabase (needs_review status)
+  const pendingDrafts = plans.filter((p) => p.status === "needs_review").slice(0, 3);
+
+  // Active campaigns from Supabase clients
+  const activeCampaignRows = clients.flatMap((client) =>
+    (client.campaigns ?? [])
+      .filter((c) => c.status === "active")
+      .map((c) => ({ ...c, clientName: client.name, market: client.market }))
+  );
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
 
-      {/* Branded hero — matches onboarding portal dual-gradient style */}
+      {/* Branded hero */}
       <div
         className="relative overflow-hidden rounded-xl"
         style={{
@@ -61,12 +75,10 @@ export default function DashboardPage() {
           border: "1px solid rgba(0, 129, 242, 0.15)",
         }}
       >
-        {/* Blue glow top-left */}
         <div
           className="absolute -top-20 -left-20 w-80 h-80 rounded-full blur-3xl pointer-events-none"
           style={{ backgroundColor: "rgba(0, 129, 242, 0.08)" }}
         />
-        {/* Orange glow top-right */}
         <div
           className="absolute -top-20 right-0 w-64 h-64 rounded-full blur-3xl pointer-events-none"
           style={{ backgroundColor: "rgba(255, 132, 0, 0.07)" }}
@@ -104,7 +116,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-[12px]" style={{ color: "#6b7a99" }}>
-              {clients.length} clients · {activeClients.length} active · Veronica monitoring 24/7 · GHL + Meta connected
+              {loading ? "Loading…" : `${clients.length} clients · ${activeClients.length} active`} · Veronica monitoring 24/7
             </p>
             <p className="text-[11px] mt-0.5" style={{ color: "#3d4f6e" }}>
               Veronica by Vault Co — AI Growth Operator
@@ -115,9 +127,9 @@ export default function DashboardPage() {
             style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
           >
             {[
-              { label: "Active Clients", value: String(activeClients.length), color: "#0081f2" },
-              { label: "Leads (MTD)", value: String(totalLeads), color: "#22c55e" },
-              { label: "Pending Approvals", value: String(approvals.length), color: "#ff8400" },
+              { label: "Active Clients", value: loading ? "—" : String(activeClients.length), color: "#0081f2" },
+              { label: "Leads (MTD)", value: loading ? "—" : String(totalLeads), color: "#22c55e" },
+              { label: "Pending Approvals", value: String(pendingDrafts.length), color: "#ff8400" },
             ].map((s) => (
               <div
                 key={s.label}
@@ -142,13 +154,47 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — from Supabase client records (no fake change %) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s) => <StatCard key={s.label} {...s} />)}
       </div>
 
+      {/* Meta / GHL not-connected notice */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className="flex items-start gap-3 px-4 py-3.5 rounded-xl"
+          style={{
+            backgroundColor: "#0D1520",
+            border: "1px solid rgba(61, 79, 110, 0.35)",
+          }}
+        >
+          <WifiOff size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#3d4f6e" }} />
+          <div>
+            <p className="text-[12px] font-semibold" style={{ color: "#6b7a99" }}>Meta Ads not connected</p>
+            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "#3d4f6e" }}>
+              Performance analytics will appear once Meta read-only reporting is connected.
+            </p>
+          </div>
+        </div>
+        <div
+          className="flex items-start gap-3 px-4 py-3.5 rounded-xl"
+          style={{
+            backgroundColor: "#0D1520",
+            border: "1px solid rgba(61, 79, 110, 0.35)",
+          }}
+        >
+          <WifiOff size={14} className="flex-shrink-0 mt-0.5" style={{ color: "#3d4f6e" }} />
+          <div>
+            <p className="text-[12px] font-semibold" style={{ color: "#6b7a99" }}>GoHighLevel not connected</p>
+            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "#3d4f6e" }}>
+              Appointment and pipeline data will appear once GHL sync is connected.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Campaign table */}
+        {/* Campaign table — Supabase data */}
         <div
           className="lg:col-span-2 rounded-xl overflow-hidden"
           style={{
@@ -181,48 +227,57 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b" style={{ borderColor: "rgba(0, 129, 242, 0.10)" }}>
-                  {["Client", "Campaign", "Spend", "Leads", "CPL", "Booked"].map((h) => (
-                    <th
-                      key={h}
-                      className={`px-4 py-3 text-[9px] font-bold uppercase tracking-widest ${h === "Client" || h === "Campaign" ? "text-left" : "text-right"}`}
-                      style={{ color: "#3d4f6e" }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {activeCampaignRows.map((c, i) => (
-                  <tr
-                    key={c.id}
-                    className="border-b transition-colors"
-                    style={{
-                      borderColor: i === activeCampaignRows.length - 1 ? "transparent" : "rgba(0, 129, 242, 0.08)",
-                    }}
-                  >
-                    <td className="px-4 py-3.5">
-                      <div className="font-semibold" style={{ color: "#f8f8f7" }}>{c.clientName}</div>
-                      <div className="text-[10px]" style={{ color: "#6b7a99" }}>{c.market}</div>
-                    </td>
-                    <td className="px-4 py-3.5" style={{ color: "#6b7a99" }}>{c.name}</td>
-                    <td className="px-4 py-3.5 text-right" style={{ color: "#f8f8f7" }}>{c.spend}</td>
-                    <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#0081f2" }}>{c.leads}</td>
-                    <td className="px-4 py-3.5 text-right" style={{ color: "#f8f8f7" }}>{c.cpl}</td>
-                    <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#22c55e" }}>{c.booked}</td>
+            {loading ? (
+              <div className="px-5 py-8 text-center text-[12px]" style={{ color: "#3d4f6e" }}>Loading campaigns…</div>
+            ) : activeCampaignRows.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <p className="text-[12px] font-medium" style={{ color: "#6b7a99" }}>No active campaigns yet</p>
+                <p className="text-[11px] mt-1" style={{ color: "#3d4f6e" }}>Use the AI Campaign Builder to generate a campaign draft for a client.</p>
+              </div>
+            ) : (
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: "rgba(0, 129, 242, 0.10)" }}>
+                    {["Client", "Campaign", "Spend", "Leads", "CPL", "Booked"].map((h) => (
+                      <th
+                        key={h}
+                        className={`px-4 py-3 text-[9px] font-bold uppercase tracking-widest ${h === "Client" || h === "Campaign" ? "text-left" : "text-right"}`}
+                        style={{ color: "#3d4f6e" }}
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeCampaignRows.map((c, i) => (
+                    <tr
+                      key={c.id}
+                      className="border-b transition-colors"
+                      style={{
+                        borderColor: i === activeCampaignRows.length - 1 ? "transparent" : "rgba(0, 129, 242, 0.08)",
+                      }}
+                    >
+                      <td className="px-4 py-3.5">
+                        <div className="font-semibold" style={{ color: "#f8f8f7" }}>{c.clientName}</div>
+                        <div className="text-[10px]" style={{ color: "#6b7a99" }}>{c.market}</div>
+                      </td>
+                      <td className="px-4 py-3.5" style={{ color: "#6b7a99" }}>{c.name}</td>
+                      <td className="px-4 py-3.5 text-right" style={{ color: "#f8f8f7" }}>{c.spend}</td>
+                      <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#0081f2" }}>{c.leads}</td>
+                      <td className="px-4 py-3.5 text-right" style={{ color: "#f8f8f7" }}>{c.cpl}</td>
+                      <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#22c55e" }}>{c.booked}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
 
         {/* Right column */}
         <div className="space-y-4">
-          {/* Veronica Activity feed */}
+          {/* Veronica Status */}
           <div
             className="rounded-xl overflow-hidden"
             style={{
@@ -243,7 +298,7 @@ export default function DashboardPage() {
                     color: "#f8f8f7",
                   }}
                 >
-                  Veronica Activity
+                  Veronica Status
                 </span>
               </div>
               <span
@@ -255,7 +310,7 @@ export default function DashboardPage() {
                 }}
               >
                 <span className="w-1.5 h-1.5 bg-[#22c55e] rounded-full animate-pulse"></span>
-                Live
+                Online
               </span>
             </div>
             <div className="p-3 space-y-2">
@@ -297,7 +352,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Pending approvals */}
+          {/* Pending Approvals — Supabase campaign drafts only */}
           <div
             className="rounded-xl overflow-hidden"
             style={{
@@ -329,40 +384,44 @@ export default function DashboardPage() {
                   border: "1px solid rgba(255, 132, 0, 0.20)",
                 }}
               >
-                {approvals.length} pending
+                {pendingDrafts.length} pending
               </span>
             </div>
             <div className="p-3 space-y-2">
-              {pendingApprovals.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-start justify-between gap-3 p-2.5 rounded-lg"
-                  style={{
-                    backgroundColor: "rgba(255, 132, 0, 0.04)",
-                    border: "1px solid rgba(255, 132, 0, 0.10)",
-                  }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-semibold truncate" style={{ color: "#f8f8f7" }}>
-                      {a.clientName}
-                    </div>
-                    <div className="text-[10px] mt-0.5 leading-snug truncate" style={{ color: "#6b7a99" }}>
-                      {a.item}
-                    </div>
-                  </div>
-                  <Link
-                    href="/approvals"
-                    className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold rounded-md transition-colors whitespace-nowrap"
+              {pendingDrafts.length === 0 ? (
+                <p className="text-[11px] px-1 py-3 text-center" style={{ color: "#3d4f6e" }}>No pending approvals</p>
+              ) : (
+                pendingDrafts.map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-start justify-between gap-3 p-2.5 rounded-lg"
                     style={{
-                      color: "#ff8400",
-                      backgroundColor: "rgba(255, 132, 0, 0.10)",
-                      border: "1px solid rgba(255, 132, 0, 0.20)",
+                      backgroundColor: "rgba(255, 132, 0, 0.04)",
+                      border: "1px solid rgba(255, 132, 0, 0.10)",
                     }}
                   >
-                    Review
-                  </Link>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-semibold truncate" style={{ color: "#f8f8f7" }}>
+                        {a.clientName}
+                      </div>
+                      <div className="text-[10px] mt-0.5 leading-snug truncate" style={{ color: "#6b7a99" }}>
+                        {a.campaignName}
+                      </div>
+                    </div>
+                    <Link
+                      href="/approvals"
+                      className="flex-shrink-0 px-2 py-1 text-[10px] font-semibold rounded-md transition-colors whitespace-nowrap"
+                      style={{
+                        color: "#ff8400",
+                        backgroundColor: "rgba(255, 132, 0, 0.10)",
+                        border: "1px solid rgba(255, 132, 0, 0.20)",
+                      }}
+                    >
+                      Review
+                    </Link>
+                  </div>
+                ))
+              )}
             </div>
             <div className="px-3 pb-3">
               <Link

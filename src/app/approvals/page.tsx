@@ -32,7 +32,6 @@ import {
   type CampaignDraft,
 } from "@/lib/planStore";
 import {
-  approvals,
   approvalPriorityVariant,
   approvalPriorityLabel,
   type ApprovalIconType,
@@ -373,7 +372,7 @@ export default function ApprovalsPage() {
       ).length
     : 0;
 
-  const totalPending = needsReviewCount + approvals.length + creativePendingDrafts.length;
+  const totalPending = needsReviewCount + creativePendingDrafts.length;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -480,70 +479,7 @@ export default function ApprovalsPage() {
         </section>
       )}
 
-      {/* ── Other Pending Actions ── */}
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
-            Other Pending Actions
-          </h3>
-          <span className="text-[10px] font-bold px-2 py-0.5 bg-[#ff8400]/15 text-[#ff8400] border border-[#ff8400]/25 rounded-full">
-            {approvals.length}
-          </span>
-        </div>
-        <div className="space-y-3">
-          {approvals.map((a) => {
-            const Icon = iconMap[a.iconType];
-            const color = iconColorMap[a.iconType];
-            return (
-              <div
-                key={a.id}
-                className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-5 hover:border-[rgba(0, 129, 242, 0.25)] transition-colors"
-              >
-                <div className="flex items-start gap-4">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: `${color}15`,
-                      border: `1px solid ${color}28`,
-                    }}
-                  >
-                    <Icon size={15} style={{ color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-                      <span className="text-[12px] font-bold text-[#f8f8f7]">{a.clientName}</span>
-                      <span className="text-[11px] text-[#6b7a99]">·</span>
-                      <span className="text-[11px] text-[#6b7a99]">{a.type}</span>
-                      <Badge
-                        label={approvalPriorityLabel[a.priority]}
-                        variant={approvalPriorityVariant[a.priority]}
-                      />
-                    </div>
-                    <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1.5">{a.item}</div>
-                    <p className="text-[12px] text-[#6b7a99] leading-relaxed mb-3">{a.detail}</p>
-                    <div className="text-[10px] text-[#3d4f6e]">
-                      Submitted by {a.submittedBy} · {a.submittedAt}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors">
-                      <Eye size={12} />
-                      Review
-                    </button>
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 vc-blue-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
-                      <CheckSquare size={12} />
-                      Approve
-                    </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-lg border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#ef4444] hover:border-[#ef4444]/30 transition-colors">
-                      <X size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+
     </div>
   );
 }

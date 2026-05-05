@@ -5,13 +5,13 @@ import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 interface StatCardProps {
   label: string;
   value: string;
-  change: string;
-  changeType: "up" | "down" | "neutral";
+  change?: string;
+  changeType?: "up" | "down" | "neutral";
   icon: LucideIcon;
   iconColor?: string;
 }
 
-export function StatCard({ label, value, change, changeType, icon: Icon, iconColor = "#0081f2" }: StatCardProps) {
+export function StatCard({ label, value, change, changeType = "neutral", icon: Icon, iconColor = "#0081f2" }: StatCardProps) {
   return (
     <div
       className="rounded-xl p-5 transition-all duration-150 hover:shadow-[0_0_20px_rgba(0,129,242,0.06)]"
@@ -30,20 +30,22 @@ export function StatCard({ label, value, change, changeType, icon: Icon, iconCol
         >
           <Icon size={16} style={{ color: iconColor }} />
         </div>
-        <div
-          className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
-          style={
-            changeType === "up"
-              ? { backgroundColor: "rgba(34, 197, 94, 0.10)", color: "#22c55e" }
-              : changeType === "down"
-              ? { backgroundColor: "rgba(239, 68, 68, 0.10)", color: "#ef4444" }
-              : { backgroundColor: "rgba(107, 122, 153, 0.10)", color: "#6b7a99" }
-          }
-        >
-          {changeType === "up" && <TrendingUp size={10} />}
-          {changeType === "down" && <TrendingDown size={10} />}
-          {change}
-        </div>
+        {change && (
+          <div
+            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+            style={
+              changeType === "up"
+                ? { backgroundColor: "rgba(34, 197, 94, 0.10)", color: "#22c55e" }
+                : changeType === "down"
+                ? { backgroundColor: "rgba(239, 68, 68, 0.10)", color: "#ef4444" }
+                : { backgroundColor: "rgba(107, 122, 153, 0.10)", color: "#6b7a99" }
+            }
+          >
+            {changeType === "up" && <TrendingUp size={10} />}
+            {changeType === "down" && <TrendingDown size={10} />}
+            {change}
+          </div>
+        )}
       </div>
       <div
         className="text-2xl font-bold mb-1 tracking-wide"

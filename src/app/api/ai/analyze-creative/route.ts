@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzeCreativeAsset } from "@/lib/ai/service";
 import type { CreativeAnalysisInput } from "@/lib/ai/service";
 
+// Extend Vercel function timeout to 60s (max for Hobby plan)
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: CreativeAnalysisInput;
 

@@ -21,100 +21,74 @@ export interface CampaignGenerationInput {
 // System prompt
 // ─────────────────────────────────────────────────────────────
 
-export const SYSTEM_PROMPT = `You are a senior Meta advertising strategist and growth operator working exclusively for Vault Co — a premium growth partner for roofing and construction companies. Vault Co is not a cheap lead generation agency. We build revenue systems: Meta campaigns, GHL follow-up infrastructure, and conversion workflows designed to generate booked appointments and closed jobs — not just clicks.
+export const SYSTEM_PROMPT = `You are a Meta advertising strategist for Vault Co, a premium growth partner for roofing and construction companies. Generate production-ready campaign drafts for human review.
 
-## Vault Co Operating Principles
-- Measure success in booked appointments and revenue, not lead counts alone
-- Every campaign is client-specific, service-specific, market-specific, and creative-led
-- Buyers are homeowners making a $10,000–$50,000 decision — treat the copy accordingly
-- Premium-positioned clients never compete on price — never use "cheapest" language
-- The follow-up system is as important as the ad — GHL must capture every lead immediately
-- Compliance is non-negotiable — one insurance guarantee claim can kill an ad account
+Core rules:
+- Measure success in booked appointments and revenue, not just leads
+- Buyers are homeowners making $10K–$50K decisions — copy must reflect this
+- Never use "cheapest" language for premium clients
+- NEVER imply guaranteed insurance coverage or ROI
+- ALL SMS requires TCPA opt-in consent in the lead form
+- This is a DRAFT only — no live actions without human approval
 
-## Your Role
-Generate complete, production-ready Meta advertising campaign drafts that are fully compliant, conversion-optimized, and ready for human review before any live action.
-
-## Expertise
-- Facebook and Instagram lead generation campaigns (Instant Forms, landing pages)
-- Roofing and home improvement industry: inspection offers, storm damage campaigns, remodeling consultations
-- GoHighLevel (GHL) CRM follow-up workflows: SMS, email, AI voice, task assignment
-- Meta ad copy: primary text, headlines, descriptions, CTAs
-- Creative direction: video shot lists, text overlays, voiceover scripts
-- Compliance: Meta ad policies, TCPA/SMS consent, insurance advertising rules
-- Performance optimization: CPL thresholds, booking rate floors, budget scaling rules
-- Buyer psychology: understanding what homeowners fear, trust, delay on, and respond to
-
-## Absolute Safety Rules (NEVER violate)
-1. The AI generates drafts and recommendations ONLY. It CANNOT publish campaigns, activate ads, increase budgets, send reports, or push GHL workflows without explicit human approval.
-2. NEVER use phrases implying guaranteed insurance coverage: "insurance will cover it", "100% covered", "guaranteed approval", "file a claim and pay nothing"
-3. NEVER use unverifiable superlative claims: "best roofer in [city]", "cheapest in [area]"
-4. NEVER guarantee specific ROI, conversion rates, or lead volumes
-5. NEVER include discriminatory audience targeting (race, religion, national origin in housing-adjacent categories)
-6. ALL SMS sequences require explicit TCPA opt-in consent captured in the lead form
-7. ALL before/after creative must reference authentic client work only
-8. NEVER imply urgency that cannot be enforced ("only 5 spots left" unless enforced)
-9. NEVER say "cheapest" for clients positioned as premium — wrong brand positioning
-10. NEVER guarantee storm damage claim approval or insurance payout outcomes
-
-## Output Format
-Return ONLY a valid JSON object with no text before or after it. No markdown, no explanation. Follow the exact schema in the user prompt.`;
+Return ONLY valid JSON. No markdown, no explanation. Follow the schema exactly.`;
 
 // ─────────────────────────────────────────────────────────────
 // JSON schema
 // ─────────────────────────────────────────────────────────────
 
 const CAMPAIGN_DRAFT_SCHEMA = `{
-  "campaignName": "string — descriptive name e.g. 'Free Roof Inspection — Lead Generation — Phoenix'",
+  "campaignName": "string",
   "metaStructure": {
-    "campaignObjective": "LEAD_GENERATION | CONVERSIONS | AWARENESS",
-    "campaignType": "string — e.g. 'Instant Form (Native Lead Form)'",
-    "adSetNames": ["string — 4 ad set names targeting distinct audience segments"],
-    "audience": "string — detailed audience description with demographics, interests, est. reach",
-    "locationTargeting": "string — primary city, radius, DMA, exclusions",
-    "placements": ["string — list of Meta placements"],
-    "budgetSplit": "string — budget allocation across ad sets",
-    "optimizationEvent": "string — e.g. 'LEAD (Meta Instant Form Submit)'"
+    "campaignObjective": "LEAD_GENERATION",
+    "campaignType": "string",
+    "adSetNames": ["string", "string"],
+    "audience": "string",
+    "locationTargeting": "string",
+    "placements": ["string"],
+    "budgetSplit": "string",
+    "optimizationEvent": "string"
   },
   "adCopy": {
-    "primaryTexts": ["string — 3 primary text variants (200–400 chars each), compelling and compliant"],
-    "headlines": ["string — 3 headline variants (40 chars max each)"],
-    "descriptions": ["string — 3 description variants (30 chars max each)"],
-    "cta": "string — CTA button text e.g. 'Get My Free Inspection'"
+    "primaryTexts": ["string (3 variants, 200-300 chars)"],
+    "headlines": ["string (3 variants, 40 chars max)"],
+    "descriptions": ["string (3 variants, 30 chars max)"],
+    "cta": "string"
   },
   "leadForm": {
     "formName": "string",
-    "introCopy": "string — 2-3 sentence intro explaining the offer and what happens next",
-    "qualificationQuestions": ["string — 2-4 pre-qualification questions"],
-    "contactFields": ["string — fields to collect: name, phone, email, etc."],
-    "consentLanguage": "string — TCPA-compliant SMS/email consent text with STOP opt-out instruction",
-    "thankYouCopy": "string — confirmation message with next-step expectation setting"
+    "introCopy": "string",
+    "qualificationQuestions": ["string"],
+    "contactFields": ["string"],
+    "consentLanguage": "string (TCPA-compliant, include STOP opt-out)",
+    "thankYouCopy": "string"
   },
   "ghlWorkflow": {
-    "tags": ["string — CRM tags to apply on lead creation"],
+    "tags": ["string"],
     "pipelineStage": "string",
-    "immediateSms": "string — SMS sent within 60 seconds of lead submission, personalized",
+    "immediateSms": "string (within 60s of lead)",
     "immediateEmail": { "subject": "string", "body": "string" },
-    "internalNotification": "string — internal alert to setter/owner with lead details",
-    "setterTask": "string — task instructions for the setter",
-    "aiVoiceTrigger": "string — AI voice script triggered if no call within 10 min",
-    "bookedStopCondition": "string — instructions to stop sequences when appointment is booked",
-    "steps": ["string — numbered list of all workflow steps with timing"]
+    "internalNotification": "string",
+    "setterTask": "string",
+    "aiVoiceTrigger": "string",
+    "bookedStopCondition": "string",
+    "steps": ["string"]
   },
   "creativeDirection": {
-    "angle": "string — creative angle/concept name",
-    "hook": "string — opening hook line for the ad",
-    "shotList": ["string — 6-8 specific shots for video production"],
-    "textOverlays": ["string — 4 text overlay directions with placement notes"],
-    "voiceoverScript": "string — full 30-second voiceover script with timestamps",
-    "recommendedFormat": "string — format specs for different placements",
-    "recommendedPlacements": ["string — ordered list of recommended placements, primary first"]
+    "angle": "string",
+    "hook": "string",
+    "shotList": ["string (4-6 shots)"],
+    "textOverlays": ["string (3-4 overlays)"],
+    "voiceoverScript": "string (30s script)",
+    "recommendedFormat": "string",
+    "recommendedPlacements": ["string"]
   },
   "compliance": {
-    "metaRisk": "LOW — description | MEDIUM — description | HIGH — description",
-    "smsCompliance": "string — TCPA compliance notes",
-    "insuranceRisk": "string — insurance claim language risk or N/A",
-    "disallowedPhrases": ["string — specific phrases to avoid in this campaign"],
-    "approvalWarnings": ["string — specific items requiring human review before launch"]
+    "metaRisk": "LOW | MEDIUM | HIGH — reason",
+    "smsCompliance": "string",
+    "insuranceRisk": "string",
+    "disallowedPhrases": ["string"],
+    "approvalWarnings": ["string"]
   },
   "optimization": {
     "cplThreshold": "string",
@@ -126,51 +100,51 @@ const CAMPAIGN_DRAFT_SCHEMA = `{
     "humanApprovalTriggers": ["string"]
   },
   "buyerPsychologyUsed": {
-    "buyerInsight": "string — who the buyer is and what drives them",
-    "urgencyTrigger": "string — what specific trigger creates urgency for this buyer right now",
-    "trustTriggerUsed": "string — which trust signals were emphasized and why",
-    "objectionAddressed": "string — the primary objection this campaign is designed to overcome",
-    "hookRationale": "string — why this specific hook will resonate with this buyer",
-    "ctaRationale": "string — why this CTA fits the buyer's decision stage"
+    "buyerInsight": "string",
+    "urgencyTrigger": "string",
+    "trustTriggerUsed": "string",
+    "objectionAddressed": "string",
+    "hookRationale": "string",
+    "ctaRationale": "string"
   },
   "marketResearchUsed": {
-    "marketSummary": "string — local market context used to inform this campaign",
-    "competitorAngle": "string — how this positions against local competition",
-    "audienceRationale": "string — why this specific audience was chosen",
-    "locationRationale": "string — which areas/neighborhoods were targeted and why",
-    "seasonalityNote": "string — seasonal context that informed the campaign timing or angle"
+    "marketSummary": "string",
+    "competitorAngle": "string",
+    "audienceRationale": "string",
+    "locationRationale": "string",
+    "seasonalityNote": "string"
   },
   "clientIntelligenceUsed": {
     "onboardingSummaryUsed": true,
-    "keyIntelligenceApplied": ["string — list of specific intelligence points used"],
-    "offerAngle": "string — the specific offer angle derived from intelligence",
-    "servicesPrioritized": ["string — services selected based on profitability/priority data"]
+    "keyIntelligenceApplied": ["string"],
+    "offerAngle": "string",
+    "servicesPrioritized": ["string"]
   },
   "strategicRationale": {
-    "whyThisCampaign": "string — 2-3 sentence explanation of the core strategic decision",
-    "buyerInsightUsed": "string — specific buyer insight that shaped the campaign",
-    "marketInsightUsed": "string — specific market insight applied",
-    "offerAngleUsed": "string — why this offer angle was chosen",
-    "creativeAngleUsed": "string — why this creative format was chosen for this client",
-    "trustTriggerUsed": "string — which trust triggers were selected and why",
-    "objectionAddressed": "string — the specific objection this campaign is built to handle",
-    "audienceRationale": "string — audience selection rationale based on intelligence",
-    "leadFormRationale": "string — why these specific lead form questions were chosen",
-    "followUpRationale": "string — follow-up sequence design rationale"
+    "whyThisCampaign": "string",
+    "buyerInsightUsed": "string",
+    "marketInsightUsed": "string",
+    "offerAngleUsed": "string",
+    "creativeAngleUsed": "string",
+    "trustTriggerUsed": "string",
+    "objectionAddressed": "string",
+    "audienceRationale": "string",
+    "leadFormRationale": "string",
+    "followUpRationale": "string"
   },
   "creativeIntelligenceUsed": {
-    "assetId": "string | null — ID of selected asset or null if type-only selection",
-    "assetType": "string — creative type (Before/After, Owner On Camera, Storm Damage, etc.)",
-    "creativeStrength": "string — e.g. 'Very High — emotional trust-first hook with owner face'",
-    "trustSignals": ["string — specific trust signals this creative communicates"],
-    "buyerIntent": "Cold | Warm | Hot — audience temperature this creative is best suited for",
-    "recommendedAngle": "string — the specific campaign angle this creative should drive",
-    "recommendedHook": "string — specific opening hook line for this creative",
-    "recommendedCTA": "string — best CTA for this creative type and buyer stage",
-    "placementRecommendation": ["string — ordered placements, primary first"],
-    "complianceNote": "string — any compliance risks specific to this creative type",
-    "whyThisCreative": "string — strategic rationale for using this creative in this campaign",
-    "retargetingUse": "string — how this creative should be used in retargeting sequences",
+    "assetId": null,
+    "assetType": "string",
+    "creativeStrength": "string",
+    "trustSignals": ["string"],
+    "buyerIntent": "Cold | Warm | Hot",
+    "recommendedAngle": "string",
+    "recommendedHook": "string",
+    "recommendedCTA": "string",
+    "placementRecommendation": ["string"],
+    "complianceNote": "string",
+    "whyThisCreative": "string",
+    "retargetingUse": "string",
     "approvedForAds": true
   }
 }`;
@@ -261,20 +235,17 @@ IMPORTANT — Use this creative to shape the campaign:
 - Recommended themes: ${intel.contentPlanning.recommendedContentThemes.slice(0, 3).join("; ")}
 ` : "";
 
-  return `Generate a complete Meta advertising campaign draft for this client and campaign.
+  return `Generate a complete Meta advertising campaign draft for this client.
 
-## Client Profile
+## Client
 - **Name**: ${input.client.name}
 - **Owner**: ${input.client.owner}
 - **Market**: ${input.market}
 - **Services**: ${input.client.services.join(", ")}
-- **Average Job Value**: ${input.client.avgJobValue}
-- **Monthly Ad Budget**: $${budgetNum.toLocaleString()}/mo
-- **Core Offer**: ${input.client.offer}
+- **Avg Job Value**: ${input.client.avgJobValue}
+- **Budget**: $${budgetNum.toLocaleString()}/mo
+- **Offer**: ${input.client.offer}
 - **Brand Tone**: ${input.client.brandTone}
-- **Phone**: ${input.client.phone}
-- **Meta Account ID**: ${input.client.metaAccountId}
-- **GHL Location ID**: ${input.client.ghlLocationId}
 
 ## Campaign Parameters
 - **Service to Promote**: ${input.service}
@@ -382,15 +353,9 @@ const INTELLIGENCE_SCHEMA = `{
     "proofPoints": ["string — 4–6 credibility proof points"]
   },
   "salesIntelligence": {
-    "bestSalesAngles": ["string — 3–5 proven angles"],
-    "worstFitLeads": ["string — 2–3 lead types to avoid"],
-    "commonObjections": ["string — top objections in sales"],
-    "objectionResponses": ["string — how to respond to each"],
-    "faqs": ["string — common questions prospects ask"],
-    "pastClientWins": ["string — notable client success stories"],
-    "testimonials": ["string — any quoted testimonials"],
-    "reviewHighlights": ["string — what reviewers say most"],
-    "beforeAfterNotes": "string — before/after content potential"
+    "bestSalesAngles": ["string — 3 proven angles, short phrases"],
+    "worstFitLeads": ["string — 2 lead types to avoid"],
+    "lostLeadRecovery": "string — or empty string if none"
   },
   "brandIntelligence": {
     "brandTone": "string — e.g. 'Professional, direct, family-owned warmth'",
@@ -403,32 +368,17 @@ const INTELLIGENCE_SCHEMA = `{
     "complianceNotes": ["string — any legal/compliance sensitivities"]
   },
   "kpiBaseline": {
-    "monthlyLeads": "number", "monthlyAppointments": "number",
-    "monthlyCloses": "number", "monthlyRevenue": "string",
-    "avgJobSize": "string", "closePercentage": "string",
-    "costPerLead": "string", "showRate": "string",
-    "currentAdSpend": "string",
-    "currentLeadSources": ["string"]
+    "monthlyLeads": 0, "monthlyRevenue": "string",
+    "currentCloseRate": "string", "currentAdSpend": "string"
   },
   "salesAudit": {
-    "leadProcess": "string — how leads are handled end-to-end",
     "avgResponseTime": "string",
-    "whoAnswersCalls": "string",
-    "hasSalesScript": "boolean",
-    "inspectionBookingProcess": "string",
-    "estimatePresentation": "string",
-    "followUpCadence": "string",
     "lostLeadRecovery": "string — or empty string if none exists",
-    "leadFallOffPoint": "string — where leads drop off most"
+    "leadFallOffPoint": "string"
   },
   "contentPlanning": {
-    "ownerOnCamera": "boolean",
-    "ownerPersonality": "string",
-    "contentTone": "string",
-    "testimonialsAvailable": "boolean",
-    "crewWillingToFilm": "boolean",
-    "biggestSellingPoints": ["string — 4–6 visual selling points"],
-    "recommendedContentThemes": ["string — 4–6 content themes"]
+    "ownerOnCamera": false,
+    "recommendedContentThemes": ["string — 3 themes"]
   },
   "campaignImplications": {
     "bestCampaignAngles": ["string — 4–6 specific campaign angles"],
@@ -441,34 +391,20 @@ const INTELLIGENCE_SCHEMA = `{
   }
 }`;
 
-export const EXTRACTION_SYSTEM_PROMPT = `You are a client intelligence analyst for Vault Co, a premium Meta advertising agency for roofing and construction companies.
+export const EXTRACTION_SYSTEM_PROMPT = `You are a client intelligence analyst for Vault Co, a Meta advertising agency for roofing and construction companies.
 
-Your job: extract structured intelligence from a client onboarding summary and return a complete JSON object.
-
-Rules:
-- Return ONLY valid JSON — no markdown, no explanation, no text before or after the JSON object
-- If a field is not explicitly mentioned, infer it from context or use an empty string / empty array
-- Be specific and actionable — vague answers ("good quality", "local company") are useless
-- The campaignImplications section is the most important — make it specific and campaign-ready
-- Flag real compliance risks in brandIntelligence.complianceNotes
-- Numbers in kpiBaseline must be actual numbers (not strings), except where string is specified`;
+Extract structured intelligence from the onboarding summary. Return ONLY valid JSON — no markdown, no explanation.
+- If a field is not mentioned, infer from context or use empty string / empty array
+- Be specific and actionable — the campaignImplications section drives campaign generation
+- Flag compliance risks in brandIntelligence.complianceNotes
+- Keep all string values concise (under 100 chars each)`;
 
 export function buildExtractionPrompt(clientId: string, summary: string): string {
-  return `Extract complete structured intelligence from this client onboarding summary.
+  return `Extract client intelligence from this onboarding summary. Client ID: "${clientId}"
 
-Client ID: "${clientId}"
-
-## Onboarding Summary
 ${summary}
 
-## Instructions
-Extract all intelligence into the JSON schema below. Be thorough and specific:
-- Use actual quotes and numbers from the summary where available
-- Infer missing fields from context (e.g., if they're a premium roofer, infer appropriate HHI target)
-- The campaignImplications section drives campaign generation — make every item specific and actionable
-- Write salesAudit.lostLeadRecovery as an empty string "" if the summary indicates there is none
-
-Return ONLY this JSON object with no other text:
+Return ONLY this JSON (no other text):
 
 ${INTELLIGENCE_SCHEMA}`;
 }

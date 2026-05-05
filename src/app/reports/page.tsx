@@ -215,6 +215,7 @@ export default function ReportsPage() {
   const { reports, addReport, usingSupabase, loading } = usePersistedReports();
   const [generating, setGenerating] = useState<Record<string, boolean>>({});
   const [viewReport, setViewReport] = useState<PersistedReport | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
 
   const getReportForClient = (clientId: string): PersistedReport | undefined =>
     reports.find((r) => r.clientId === clientId);
@@ -232,6 +233,13 @@ export default function ReportsPage() {
       const result = await res.json();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const draft = result.report as any;
+
+      // Surface mock fallback notice if AI timed out or failed
+      if (result.mockMode && result.notice) {
+        setAiNotice(result.notice);
+      } else {
+        setAiNotice(null);
+      }
 
       const report: PersistedReport = {
         id: generateId(),
@@ -348,6 +356,20 @@ export default function ReportsPage() {
           </div>
         ))}
       </div>
+
+      {/* AI fallback notice banner */}
+      {aiNotice && (
+        <div className="flex items-start gap-3 p-3 bg-[#ff8400]/8 border border-[#ff8400]/25 rounded-xl">
+          <AlertCircle size={14} className="text-[#ff8400] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-[12px] text-[#ff8400] font-semibold">AI Fallback Active</p>
+            <p className="text-[11px] text-[#ff8400]/75 mt-0.5">{aiNotice}</p>
+          </div>
+          <button onClick={() => setAiNotice(null)} className="text-[#ff8400]/50 hover:text-[#ff8400] transition-colors">
+            <X size={13} />
+          </button>
+        </div>
+      )}
 
       {/* Reports table */}
       <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">

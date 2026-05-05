@@ -51,6 +51,24 @@ export interface GenerateReportResult {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Timeout helper — wraps fetch with an AbortController
+// 50s gives Anthropic time to respond within Vercel Hobby's 60s limit
+// ─────────────────────────────────────────────────────────────
+
+const ANTHROPIC_TIMEOUT_MS = 50_000;
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = ANTHROPIC_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Campaign generation — main entry point
 // ─────────────────────────────────────────────────────────────
 
@@ -68,8 +86,15 @@ export async function generateCampaignDraft(
       const draft = await callAnthropic(input, apiKey);
       return { draft, mockMode: false, provider: "anthropic" };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
       console.error("[AI Service] Anthropic error:", err);
-      return mockFallback(input, "Anthropic generation failed — using mock fallback.");
+      return mockFallback(
+        input,
+        isTimeout
+          ? "Anthropic timed out (>50s) — using mock fallback. Consider upgrading to Vercel Pro for longer function timeouts."
+          : "Anthropic generation failed — using mock fallback."
+      );
     }
   }
 
@@ -109,8 +134,16 @@ export async function extractClientIntelligence(
       const intelligence = await callAnthropicExtract(clientId, onboardingSummary, apiKey);
       return { intelligence, mockMode: false, provider: "anthropic" };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
       console.error("[AI Service] Anthropic extraction error:", err);
-      return mockExtractionFallback(clientId, onboardingSummary, "Anthropic extraction failed — using mock fallback.");
+      return mockExtractionFallback(
+        clientId,
+        onboardingSummary,
+        isTimeout
+          ? "Anthropic timed out (>50s) — using mock fallback."
+          : "Anthropic extraction failed — using mock fallback."
+      );
     }
   }
 
@@ -223,11 +256,12 @@ function parseExtractionJson(text: string, clientId: string): ClientIntelligence
 }
 
 // ─────────────────────────────────────────────────────────────
-// Anthropic (Claude) — campaign generation
+// Anthropic (Claude Haiku) — campaign generation
+// max_tokens reduced to 2048 to stay well within 60s Hobby limit
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -235,8 +269,8 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildCampaignPrompt(input) }],
     }),
@@ -256,10 +290,11 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic — intelligence extraction
+// max_tokens reduced from 8192 to 2048 — slimmer schema used in prompts.ts
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropicExtract(clientId: string, summary: string, apiKey: string): Promise<ClientIntelligence> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
@@ -267,8 +302,8 @@ async function callAnthropicExtract(clientId: string, summary: string, apiKey: s
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2048,
       system: EXTRACTION_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildExtractionPrompt(clientId, summary) }],
     }),
@@ -291,22 +326,25 @@ async function callAnthropicExtract(clientId: string, summary: string, apiKey: s
 // ─────────────────────────────────────────────────────────────
 
 async function callOpenAI(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildCampaignPrompt(input) },
-      ],
-    }),
-  });
+  const response = await fetch(
+    `${process.env.OPENAI_API_BASE ?? "https://api.openai.com"}/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildCampaignPrompt(input) },
+        ],
+      }),
+    }
+  );
 
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -325,22 +363,25 @@ async function callOpenAI(input: CampaignGenerationInput, apiKey: string): Promi
 // ─────────────────────────────────────────────────────────────
 
 async function callOpenAIExtract(clientId: string, summary: string, apiKey: string): Promise<ClientIntelligence> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-        { role: "user", content: buildExtractionPrompt(clientId, summary) },
-      ],
-    }),
-  });
+  const response = await fetch(
+    `${process.env.OPENAI_API_BASE ?? "https://api.openai.com"}/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: 4096,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+          { role: "user", content: buildExtractionPrompt(clientId, summary) },
+        ],
+      }),
+    }
+  );
 
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
@@ -370,8 +411,15 @@ export async function analyzeCreativeAsset(
       const analysis = await callAnthropicAnalyzeCreative(input, apiKey);
       return { analysis, mockMode: false, provider: "anthropic" };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
       console.error("[AI Service] Anthropic creative analysis error:", err);
-      return mockCreativeFallback(input, "Anthropic analysis failed — using mock fallback.");
+      return mockCreativeFallback(
+        input,
+        isTimeout
+          ? "Anthropic timed out (>50s) — using mock fallback."
+          : "Anthropic analysis failed — using mock fallback."
+      );
     }
   }
 
@@ -406,8 +454,15 @@ export async function generateWeeklyReport(
       const report = await callAnthropicReport(input, apiKey);
       return { report, mockMode: false, provider: "anthropic" };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
       console.error("[AI Service] Anthropic report error:", err);
-      return mockReportFallback(input, "Anthropic report generation failed — using mock fallback.");
+      return mockReportFallback(
+        input,
+        isTimeout
+          ? "Anthropic timed out (>50s) — using mock fallback."
+          : "Anthropic report generation failed — using mock fallback."
+      );
     }
   }
 
@@ -466,15 +521,16 @@ function parseReportJson(text: string): WeeklyReportDraft {
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic — creative analysis
+// max_tokens reduced to 1024 — compact schema, fast response
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropicAnalyzeCreative(input: CreativeAnalysisInput, apiKey: string): Promise<CreativeAnalysisResult> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
       system: CREATIVE_ANALYSIS_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildCreativeAnalysisPrompt(input) }],
     }),
@@ -491,19 +547,22 @@ async function callAnthropicAnalyzeCreative(input: CreativeAnalysisInput, apiKey
 // ─────────────────────────────────────────────────────────────
 
 async function callOpenAIAnalyzeCreative(input: CreativeAnalysisInput, apiKey: string): Promise<CreativeAnalysisResult> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      max_tokens: 2048,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: CREATIVE_ANALYSIS_SYSTEM_PROMPT },
-        { role: "user", content: buildCreativeAnalysisPrompt(input) },
-      ],
-    }),
-  });
+  const response = await fetch(
+    `${process.env.OPENAI_API_BASE ?? "https://api.openai.com"}/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: 2048,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: CREATIVE_ANALYSIS_SYSTEM_PROMPT },
+          { role: "user", content: buildCreativeAnalysisPrompt(input) },
+        ],
+      }),
+    }
+  );
   if (!response.ok) throw new Error(`OpenAI API ${response.status}: ${await response.text().catch(() => response.statusText)}`);
   const data = await response.json();
   const text: string = data?.choices?.[0]?.message?.content ?? "";
@@ -513,15 +572,16 @@ async function callOpenAIAnalyzeCreative(input: CreativeAnalysisInput, apiKey: s
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic — weekly report
+// max_tokens reduced to 1500 — concise report schema
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropicReport(input: WeeklyReportInput, apiKey: string): Promise<WeeklyReportDraft> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
       system: REPORT_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildReportPrompt(input) }],
     }),
@@ -538,19 +598,22 @@ async function callAnthropicReport(input: WeeklyReportInput, apiKey: string): Pr
 // ─────────────────────────────────────────────────────────────
 
 async function callOpenAIReport(input: WeeklyReportInput, apiKey: string): Promise<WeeklyReportDraft> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: REPORT_SYSTEM_PROMPT },
-        { role: "user", content: buildReportPrompt(input) },
-      ],
-    }),
-  });
+  const response = await fetch(
+    `${process.env.OPENAI_API_BASE ?? "https://api.openai.com"}/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: 2048,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: REPORT_SYSTEM_PROMPT },
+          { role: "user", content: buildReportPrompt(input) },
+        ],
+      }),
+    }
+  );
   if (!response.ok) throw new Error(`OpenAI API ${response.status}: ${await response.text().catch(() => response.statusText)}`);
   const data = await response.json();
   const text: string = data?.choices?.[0]?.message?.content ?? "";

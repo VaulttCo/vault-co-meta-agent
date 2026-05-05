@@ -10,6 +10,28 @@ import type { Client } from "@/lib/data";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { ClientCreateInput } from "@/lib/data/data-provider";
 
+// ── Shared input style ─────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "#0D1520",
+  border: "1px solid rgba(0, 129, 242, 0.18)",
+  color: "#f8f8f7",
+  borderRadius: "8px",
+};
+
+const inputFocusStyle = {
+  borderColor: "rgba(0, 129, 242, 0.40)",
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.08em",
+  color: "#6b7a99",
+  display: "block",
+  marginBottom: "6px",
+};
+
 // ── Add Client Modal ──────────────────────────────────────────
 
 function AddClientModal({
@@ -70,19 +92,35 @@ function AddClientModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#13151c] border border-[#2a2e42] rounded-2xl w-full max-w-lg shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div
+        className="w-full max-w-lg shadow-2xl rounded-xl overflow-hidden"
+        style={{
+          backgroundColor: "#0a1118",
+          border: "1px solid rgba(0, 129, 242, 0.20)",
+          boxShadow: "0 25px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 129, 242, 0.10)",
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c2438]">
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+        >
           <div>
-            <div className="text-sm font-semibold text-[#eef1f8]">Add New Client</div>
-            <div className="text-[11px] text-[#5a6278] mt-0.5">
+            <div
+              className="text-[15px] font-bold tracking-wide"
+              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#f8f8f7" }}
+            >
+              Add New Client
+            </div>
+            <div className="text-[11px] mt-0.5" style={{ color: "#6b7a99" }}>
               Fill in the basics — you can update everything else in the client profile.
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#5a6278] hover:text-[#eef1f8] hover:bg-[#1c2438] transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+            style={{ color: "#6b7a99" }}
           >
             <X size={14} />
           </button>
@@ -91,96 +129,107 @@ function AddClientModal({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="px-4 py-2.5 bg-[#ef4444]/10 border border-[#ef4444]/25 rounded-lg text-[12px] text-[#ef4444]">
+            <div
+              className="px-4 py-2.5 rounded-lg text-[12px]"
+              style={{
+                backgroundColor: "rgba(239, 68, 68, 0.08)",
+                border: "1px solid rgba(239, 68, 68, 0.20)",
+                color: "#ef4444",
+              }}
+            >
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Company Name <span className="text-[#ef4444]">*</span>
-              </label>
+              <label style={labelStyle}>Company Name <span style={{ color: "#ef4444" }}>*</span></label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Acme Roofing"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Owner Name <span className="text-[#ef4444]">*</span>
-              </label>
+              <label style={labelStyle}>Owner Name <span style={{ color: "#ef4444" }}>*</span></label>
               <input
                 type="text"
                 value={form.owner}
                 onChange={(e) => set("owner", e.target.value)}
                 placeholder="John Smith"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Email
-              </label>
+              <label style={labelStyle}>Email</label>
               <input
                 type="email"
                 value={form.email ?? ""}
                 onChange={(e) => set("email", e.target.value)}
                 placeholder="john@company.com"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Phone
-              </label>
+              <label style={labelStyle}>Phone</label>
               <input
                 type="tel"
                 value={form.phone ?? ""}
                 onChange={(e) => set("phone", e.target.value)}
                 placeholder="(555) 000-0000"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Market / City
-              </label>
+              <label style={labelStyle}>Market / City</label>
               <input
                 type="text"
                 value={form.market ?? ""}
                 onChange={(e) => set("market", e.target.value)}
                 placeholder="Phoenix, AZ"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
             <div>
-              <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-                Monthly Budget
-              </label>
+              <label style={labelStyle}>Monthly Budget</label>
               <input
                 type="text"
                 value={form.monthlyBudget ?? ""}
                 onChange={(e) => set("monthlyBudget", e.target.value)}
                 placeholder="$2,000/mo"
-                className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-              Services
-            </label>
+            <label style={labelStyle}>Services</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
@@ -188,12 +237,20 @@ function AddClientModal({
                 onChange={(e) => setServiceInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addService(); } }}
                 placeholder="Roof Replacement"
-                className="flex-1 px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+                className="flex-1 px-3 py-2 text-[13px] focus:outline-none transition-colors"
+                style={inputStyle}
+                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
+                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
               />
               <button
                 type="button"
                 onClick={addService}
-                className="px-3 py-2 bg-[#1c2438] hover:bg-[#263050] text-[#eef1f8] text-[12px] rounded-lg transition-colors"
+                className="px-3 py-2 text-[12px] rounded-lg transition-colors"
+                style={{
+                  backgroundColor: "rgba(0, 129, 242, 0.10)",
+                  border: "1px solid rgba(0, 129, 242, 0.20)",
+                  color: "#0081f2",
+                }}
               >
                 Add
               </button>
@@ -203,7 +260,12 @@ function AddClientModal({
                 {(form.services ?? []).map((s) => (
                   <span
                     key={s}
-                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full"
+                    className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full"
+                    style={{
+                      color: "#ff8400",
+                      backgroundColor: "rgba(255, 132, 0, 0.10)",
+                      border: "1px solid rgba(255, 132, 0, 0.20)",
+                    }}
                   >
                     {s}
                     <button type="button" onClick={() => removeService(s)} className="hover:text-white">
@@ -216,13 +278,12 @@ function AddClientModal({
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-[#5a6278] uppercase tracking-wide mb-1.5">
-              Status
-            </label>
+            <label style={labelStyle}>Status</label>
             <select
               value={form.status}
               onChange={(e) => set("status", e.target.value as Client["status"])}
-              className="w-full px-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] focus:outline-none focus:border-[#c9a84c]/50 transition-colors"
+              className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
+              style={inputStyle}
             >
               <option value="onboarding">Onboarding</option>
               <option value="setup">Setup</option>
@@ -235,14 +296,20 @@ function AddClientModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 text-[13px] font-medium text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] hover:border-[#263050] transition-colors"
+              className="flex-1 py-2.5 text-[13px] font-medium rounded-lg transition-colors"
+              style={{
+                color: "#6b7a99",
+                border: "1px solid rgba(0, 129, 242, 0.15)",
+                backgroundColor: "transparent",
+              }}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 text-white text-[13px] font-semibold rounded-lg transition-opacity disabled:opacity-60"
+              style={{ backgroundColor: "#ff8400" }}
             >
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
               {saving ? "Adding…" : "Add Client"}
@@ -303,7 +370,8 @@ export default function ClientsPage() {
         action={
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg transition-opacity hover:opacity-90"
+            className="flex items-center gap-2 px-4 py-2 text-white text-[13px] font-semibold rounded-lg transition-all"
+            style={{ backgroundColor: "#ff8400", borderRadius: "6px" }}
           >
             <Plus size={14} />
             Add Client
@@ -314,24 +382,30 @@ export default function ClientsPage() {
       {/* Search & filters */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a6278]" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7a99" }} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search clients…"
-            className="w-full pl-8 pr-3 py-2 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
+            className="w-full pl-8 pr-3 py-2 text-[13px] focus:outline-none transition-colors rounded-lg"
+            style={inputStyle}
           />
         </div>
         {(["All", "Active", "Setup", "Onboarding", "Paused"] as FilterStatus[]).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+            className="px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
+            style={
               filter === f
-                ? "bg-[#131720] border border-[#263050] text-[#eef1f8]"
-                : "text-[#5a6278] hover:text-[#eef1f8]"
-            }`}
+                ? {
+                    backgroundColor: "rgba(0, 129, 242, 0.10)",
+                    border: "1px solid rgba(0, 129, 242, 0.22)",
+                    color: "#f8f8f7",
+                  }
+                : { color: "#6b7a99", backgroundColor: "transparent" }
+            }
           >
             {f}
           </button>
@@ -339,18 +413,24 @@ export default function ClientsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          backgroundColor: "#0D1520",
+          border: "1px solid rgba(0, 129, 242, 0.15)",
+        }}
+      >
         {!hasLoaded ? (
-          <div className="flex items-center justify-center py-16 text-[#5a6278] text-[13px] gap-2">
+          <div className="flex items-center justify-center py-16 text-[13px] gap-2" style={{ color: "#6b7a99" }}>
             <Loader2 size={14} className="animate-spin" />
             Loading clients…
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">
+            <div className="text-[13px] font-semibold mb-1" style={{ color: "#f8f8f7" }}>
               {search || filter !== "All" ? "No clients match your filter" : "No clients yet"}
             </div>
-            <p className="text-[12px] text-[#5a6278] mb-4">
+            <p className="text-[12px] mb-4" style={{ color: "#6b7a99" }}>
               {search || filter !== "All"
                 ? "Try adjusting your search or filter."
                 : "Add your first client to get started."}
@@ -358,7 +438,8 @@ export default function ClientsPage() {
             {!search && filter === "All" && (
               <button
                 onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 px-4 py-2 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity"
+                className="flex items-center gap-2 px-4 py-2 text-white text-[12px] font-semibold rounded-lg"
+                style={{ backgroundColor: "#ff8400" }}
               >
                 <Plus size={13} />
                 Add Client
@@ -368,14 +449,15 @@ export default function ClientsPage() {
         ) : (
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-[#1c2438]">
+              <tr className="border-b" style={{ borderColor: "rgba(0, 129, 242, 0.10)" }}>
                 {["Client", "Market", "Status", "Budget", "Leads", "Booked", "CPL", "Avg. Job Value", ""].map(
                   (h, i) => (
                     <th
                       key={`${h}-${i}`}
-                      className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4460] uppercase tracking-widest ${
+                      className={`px-4 py-3.5 text-[9px] font-bold uppercase tracking-widest ${
                         h === "Client" || h === "Market" ? "text-left" : h === "" ? "" : "text-right"
                       }`}
+                      style={{ color: "#3d4f6e" }}
                     >
                       {h}
                     </th>
@@ -387,39 +469,41 @@ export default function ClientsPage() {
               {filtered.map((c, i) => (
                 <tr
                   key={c.id}
-                  className={`border-b border-[#1c2438]/60 hover:bg-[#131720]/60 transition-colors group ${
-                    i === filtered.length - 1 ? "border-b-0" : ""
-                  }`}
+                  className="border-b transition-colors group"
+                  style={{
+                    borderColor: i === filtered.length - 1 ? "transparent" : "rgba(0, 129, 242, 0.08)",
+                  }}
                 >
                   <td className="px-4 py-4">
-                    <div className="font-semibold text-[#eef1f8]">{c.name}</div>
-                    <div className="flex items-center gap-1 text-[10px] text-[#5a6278] mt-0.5">
+                    <div className="font-semibold" style={{ color: "#f8f8f7" }}>{c.name}</div>
+                    <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "#6b7a99" }}>
                       <Phone size={9} />
                       {c.owner} · {c.phone || "—"}
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-[#5a6278]">{c.market || "—"}</td>
+                  <td className="px-4 py-4" style={{ color: "#6b7a99" }}>{c.market || "—"}</td>
                   <td className="px-4 py-4">
                     <Badge label={c.status} variant={clientStatusVariant[c.status]} />
                   </td>
-                  <td className="px-4 py-4 text-right text-[#eef1f8]">{c.monthlyBudget || "—"}</td>
-                  <td className="px-4 py-4 text-right text-[#18b8f0] font-semibold">
+                  <td className="px-4 py-4 text-right" style={{ color: "#f8f8f7" }}>{c.monthlyBudget || "—"}</td>
+                  <td className="px-4 py-4 text-right font-semibold" style={{ color: "#0081f2" }}>
                     {c.stats.leads > 0 ? c.stats.leads : "—"}
                   </td>
-                  <td className="px-4 py-4 text-right text-[#22c55e] font-semibold">
+                  <td className="px-4 py-4 text-right font-semibold" style={{ color: "#22c55e" }}>
                     {c.stats.booked > 0 ? c.stats.booked : "—"}
                   </td>
-                  <td className="px-4 py-4 text-right text-[#eef1f8]">{c.stats.cpl}</td>
+                  <td className="px-4 py-4 text-right" style={{ color: "#f8f8f7" }}>{c.stats.cpl}</td>
                   <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 text-[#eef1f8]">
-                      <DollarSign size={10} className="text-[#f07820]" />
+                    <div className="flex items-center justify-end gap-1" style={{ color: "#f8f8f7" }}>
+                      <DollarSign size={10} style={{ color: "#ff8400" }} />
                       {(c.avgJobValue || "0").replace("$", "").replace(",", "")}
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     <Link
                       href={`/clients/${c.id}`}
-                      className="flex items-center gap-1 text-[11px] text-[#5a6278] hover:text-[#18b8f0] transition-colors opacity-0 group-hover:opacity-100"
+                      className="flex items-center gap-1 text-[11px] transition-colors opacity-0 group-hover:opacity-100"
+                      style={{ color: "#6b7a99" }}
                     >
                       Open <ChevronRight size={11} />
                     </Link>

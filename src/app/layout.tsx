@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Rajdhani, Manrope } from "next/font/google";
 import "./globals.css";
 import { PortalShell } from "@/components/layout/PortalShell";
 import { PlanProvider } from "@/components/PlanProvider";
@@ -7,19 +7,21 @@ import { IntelligenceProvider } from "@/components/IntelligenceProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const rajdhani = Rajdhani({
+  variable: "--font-rajdhani",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "Vault Co — Veronica",
-  description: "AI-powered Meta advertising management for Vault Co",
+  title: "Vault Co — Veronica | Internal Growth Portal",
+  description: "Veronica by Vault Co — AI Growth Operator. Internal command center for campaign strategy, client intelligence, and approval-ready growth plans.",
 };
 
 export default function RootLayout({
@@ -32,9 +34,9 @@ export default function RootLayout({
       lang="en"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${rajdhani.variable} ${manrope.variable} h-full antialiased`}
     >
-      <body className="h-full flex bg-[#0d0e12] text-[#e8eaf0]">
+      <body className="h-full flex bg-[#05070B] text-[#f8f8f7]">
         <ThemeProvider>
           <AuthProvider>
             <PlanProvider>

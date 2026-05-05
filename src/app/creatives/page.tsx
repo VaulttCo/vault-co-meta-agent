@@ -94,28 +94,28 @@ function UploadModal({
     onClose();
   }
 
-  const labelCls = "text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1 block";
-  const inputCls = "w-full bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2 text-[12px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/50 transition-colors";
+  const labelCls = "text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1 block";
+  const inputCls = "w-full bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2 text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-[#0c0f15] border border-[#1c2438] rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1c2438]">
+      <div className="relative w-full max-w-lg bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
           <div className="flex items-center gap-2">
-            <Film size={14} className="text-[#c9a84c]" />
-            <span className="text-[13px] font-semibold text-[#eef1f8]">Upload Creative Asset</span>
+            <Film size={14} className="text-[#ff8400]" />
+            <span className="text-[13px] font-semibold text-[#f8f8f7]">Upload Creative Asset</span>
           </div>
-          <button onClick={onClose} className="text-[#5a6278] hover:text-[#eef1f8] transition-colors">
+          <button onClick={onClose} className="text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
             <X size={15} />
           </button>
         </div>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Mock storage notice */}
-          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4460]/15 border border-[#3d4460]/30 rounded-lg">
-            <AlertCircle size={11} className="text-[#5a6278] flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-[#5a6278]">
-              <span className="text-[#eef1f8] font-semibold">Mock storage mode. </span>
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
+            <AlertCircle size={11} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-[#6b7a99]">
+              <span className="text-[#f8f8f7] font-semibold">Mock storage mode. </span>
               Asset metadata is saved locally. Connect Supabase Storage to persist file bytes.
             </p>
           </div>
@@ -130,23 +130,23 @@ function UploadModal({
           />
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[#1c2438] rounded-xl p-8 text-center hover:border-[#263050] transition-colors cursor-pointer"
+            className="border-2 border-dashed border-[rgba(0, 129, 242, 0.15)] rounded-xl p-8 text-center hover:border-[rgba(0, 129, 242, 0.25)] transition-colors cursor-pointer"
           >
             {pickedFileName ? (
               <div className="space-y-1">
-                <Upload size={18} className="text-[#c9a84c] mx-auto" />
-                <div className="text-[12px] font-semibold text-[#eef1f8]">{pickedFileName}</div>
-                <div className="text-[10px] text-[#5a6278]">Click to change file</div>
+                <Upload size={18} className="text-[#ff8400] mx-auto" />
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">{pickedFileName}</div>
+                <div className="text-[10px] text-[#6b7a99]">Click to change file</div>
               </div>
             ) : (
               <>
-                <div className="w-10 h-10 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mx-auto mb-3">
-                  <ImageIcon size={16} className="text-[#3d4460]" />
+                <div className="w-10 h-10 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
+                  <ImageIcon size={16} className="text-[#3d4f6e]" />
                 </div>
-                <div className="text-[12px] text-[#5a6278]">
-                  Drop file here or <span className="text-[#18b8f0]">browse</span>
+                <div className="text-[12px] text-[#6b7a99]">
+                  Drop file here or <span className="text-[#0081f2]">browse</span>
                 </div>
-                <div className="text-[10px] text-[#3d4460] mt-1">JPG, PNG, MP4, MOV · Max 100MB</div>
+                <div className="text-[10px] text-[#3d4f6e] mt-1">JPG, PNG, MP4, MOV · Max 100MB</div>
               </>
             )}
           </div>
@@ -170,8 +170,8 @@ function UploadModal({
                     onClick={() => setForm({ ...form, fileType: t })}
                     className={`flex-1 py-2 text-[11px] font-medium rounded-lg border transition-colors capitalize ${
                       form.fileType === t
-                        ? "bg-[#18b8f0]/10 border-[#18b8f0]/40 text-[#18b8f0]"
-                        : "bg-[#131720] border-[#1c2438] text-[#5a6278] hover:text-[#eef1f8]"
+                        ? "bg-[#0081f2]/10 border-[#0081f2]/40 text-[#0081f2]"
+                        : "bg-[#0f1a28] border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#f8f8f7]"
                     }`}
                   >
                     {t}
@@ -194,7 +194,7 @@ function UploadModal({
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
-              <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+              <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
             </div>
           </div>
 
@@ -210,7 +210,7 @@ function UploadModal({
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-              <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+              <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
             </div>
           </div>
 
@@ -256,22 +256,22 @@ function UploadModal({
             />
           </div>
 
-          <div className="flex items-center justify-between px-3 py-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+          <div className="flex items-center justify-between px-3 py-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
             <div>
-              <div className="text-[12px] text-[#eef1f8] font-medium">Approved for Ads</div>
-              <div className="text-[11px] text-[#5a6278] mt-0.5">Mark as reviewed and safe to use in Meta campaigns</div>
+              <div className="text-[12px] text-[#f8f8f7] font-medium">Approved for Ads</div>
+              <div className="text-[11px] text-[#6b7a99] mt-0.5">Mark as reviewed and safe to use in Meta campaigns</div>
             </div>
             <button
               onClick={() => setForm({ ...form, approvedForAds: !form.approvedForAds })}
-              className={`w-10 h-5.5 rounded-full relative transition-colors flex-shrink-0 ${form.approvedForAds ? "bg-[#22c55e]/70" : "bg-[#1c2438]"}`}
+              className={`w-10 h-5.5 rounded-full relative transition-colors flex-shrink-0 ${form.approvedForAds ? "bg-[#22c55e]/70" : "bg-[rgba(0, 129, 242, 0.15)]"}`}
               style={{ height: "22px", minWidth: "40px" }}
             >
               <div className={`absolute top-[3px] w-4 h-4 rounded-full bg-white transition-transform shadow-sm ${form.approvedForAds ? "translate-x-5" : "translate-x-1"}`} />
             </button>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-[#1c2438] flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-[12px] text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] transition-colors">
+        <div className="px-5 py-4 border-t border-[rgba(0, 129, 242, 0.15)] flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-[12px] text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] transition-colors">
             Cancel
           </button>
           <button
@@ -292,13 +292,13 @@ function UploadModal({
 // ─────────────────────────────────────────────────────────────
 
 function AssetCard({ asset }: { asset: CreativeAsset }) {
-  const color = assetTypeColors[asset.assetType] ?? "#5a6278";
+  const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
   const Icon = asset.fileType === "video" ? Video : ImageIcon;
 
   return (
-    <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden hover:border-[#263050] transition-colors group">
+    <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden hover:border-[rgba(0, 129, 242, 0.25)] transition-colors group">
       {/* Thumbnail */}
-      <div className="h-40 bg-[#131720] border-b border-[#1c2438] flex items-center justify-center relative">
+      <div className="h-40 bg-[#0f1a28] border-b border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center relative">
         <div
           className="w-16 h-16 rounded-xl flex items-center justify-center"
           style={{ backgroundColor: `${color}15`, border: `1px solid ${color}28` }}
@@ -324,8 +324,8 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
       {/* Info */}
       <div className="p-4 space-y-2.5">
         <div>
-          <div className="text-[12px] font-semibold text-[#eef1f8] truncate">{asset.fileName}</div>
-          <div className="text-[11px] text-[#5a6278] mt-0.5">{asset.clientName}</div>
+          <div className="text-[12px] font-semibold text-[#f8f8f7] truncate">{asset.fileName}</div>
+          <div className="text-[11px] text-[#6b7a99] mt-0.5">{asset.clientName}</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span
@@ -334,24 +334,24 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
           >
             {asset.assetType}
           </span>
-          <span className="text-[10px] text-[#5a6278] uppercase font-mono">{asset.fileType}</span>
+          <span className="text-[10px] text-[#6b7a99] uppercase font-mono">{asset.fileType}</span>
         </div>
-        <div className="text-[11px] text-[#5a6278] leading-snug line-clamp-2">{asset.campaignUseCase}</div>
-        <div className="flex items-center justify-between pt-1 border-t border-[#1c2438]/50">
-          <div className="text-[10px] text-[#3d4460]">
+        <div className="text-[11px] text-[#6b7a99] leading-snug line-clamp-2">{asset.campaignUseCase}</div>
+        <div className="flex items-center justify-between pt-1 border-t border-[rgba(0, 129, 242, 0.15)]/50">
+          <div className="text-[10px] text-[#3d4f6e]">
             {asset.service} · {asset.market}
           </div>
-          <div className="text-[10px] text-[#3d4460]">{asset.uploadDate}</div>
+          <div className="text-[10px] text-[#3d4f6e]">{asset.uploadDate}</div>
         </div>
         {asset.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {asset.tags.slice(0, 3).map((t) => (
-              <span key={t} className="flex items-center gap-0.5 text-[9px] font-mono text-[#3d4460] bg-[#131720] border border-[#1c2438] px-1.5 py-0.5 rounded">
+              <span key={t} className="flex items-center gap-0.5 text-[9px] font-mono text-[#3d4f6e] bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] px-1.5 py-0.5 rounded">
                 <Tag size={7} />{t}
               </span>
             ))}
             {asset.tags.length > 3 && (
-              <span className="text-[9px] text-[#3d4460]">+{asset.tags.length - 3}</span>
+              <span className="text-[9px] text-[#3d4f6e]">+{asset.tags.length - 3}</span>
             )}
           </div>
         )}
@@ -409,7 +409,7 @@ export default function CreativesPage() {
         description={`${stats.total} assets · ${stats.approved} approved for ads`}
         action={
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-3 py-2 bg-[#0c0f15] border border-[#18b8f0]/30 rounded-lg text-[12px] text-[#18b8f0] hover:border-[#18b8f0]/50 transition-colors font-medium">
+            <button className="flex items-center gap-2 px-3 py-2 bg-[#0D1520] border border-[#0081f2]/30 rounded-lg text-[12px] text-[#0081f2] hover:border-[#0081f2]/50 transition-colors font-medium">
               <Film size={13} />
               Analyze with AI
             </button>
@@ -422,7 +422,7 @@ export default function CreativesPage() {
                 Upload Asset
               </button>
             ) : (
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-[#131720] border border-[#1c2438] rounded-lg text-[11px] text-[#3d4460]">
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[11px] text-[#3d4f6e]">
                 <ShieldCheck size={12} />
                 Upload requires Media Buyer+
               </div>
@@ -434,13 +434,13 @@ export default function CreativesPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total Assets", value: stats.total, color: "#18b8f0" },
+          { label: "Total Assets", value: stats.total, color: "#0081f2" },
           { label: "Approved for Ads", value: stats.approved, color: "#22c55e" },
           { label: "Needs Review", value: stats.needsReview, color: "#f59e0b" },
           { label: "Used in Campaigns", value: stats.inCampaign, color: "#a78bfa" },
         ].map(({ label, value, color }) => (
-          <div key={label} className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-4">
-            <div className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1">{label}</div>
+          <div key={label} className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-4">
+            <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">{label}</div>
             <div className="text-[22px] font-bold" style={{ color }}>{value}</div>
           </div>
         ))}
@@ -450,13 +450,13 @@ export default function CreativesPage() {
       <div className="flex items-center gap-2 flex-wrap">
         {/* Search */}
         <div className="relative">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5a6278]" />
+          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7a99]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search assets..."
-            className="w-48 pl-8 pr-3 py-1.5 bg-[#0c0f15] border border-[#1c2438] rounded-lg text-[12px] text-[#eef1f8] placeholder-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
+            className="w-48 pl-8 pr-3 py-1.5 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[12px] text-[#f8f8f7] placeholder-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
           />
         </div>
 
@@ -465,14 +465,14 @@ export default function CreativesPage() {
           <select
             value={filterClient}
             onChange={(e) => setFilterClient(e.target.value)}
-            className="appearance-none bg-[#0c0f15] border border-[#1c2438] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
+            className="appearance-none bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
           >
             <option value="all">All Clients</option>
             {clients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+          <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
         </div>
 
         {/* Type filter */}
@@ -480,27 +480,27 @@ export default function CreativesPage() {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="appearance-none bg-[#0c0f15] border border-[#1c2438] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
+            className="appearance-none bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg pl-3 pr-7 py-1.5 text-[12px] text-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
           >
             <option value="all">All Types</option>
             {ALL_ASSET_TYPES.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
-          <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+          <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
         </div>
 
         {/* Status filter */}
         <div className="flex items-center gap-1">
-          <Filter size={11} className="text-[#3d4460]" />
+          <Filter size={11} className="text-[#3d4f6e]" />
           {(["all", ...ALL_ASSET_STATUSES] as const).map((s) => (
             <button
               key={s}
               onClick={() => setFilterStatus(s)}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
                 filterStatus === s
-                  ? "bg-[#131720] border border-[#263050] text-[#eef1f8]"
-                  : "text-[#5a6278] hover:text-[#eef1f8]"
+                  ? "bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.25)] text-[#f8f8f7]"
+                  : "text-[#6b7a99] hover:text-[#f8f8f7]"
               }`}
             >
               {s === "all" ? "All" : s}
@@ -511,10 +511,10 @@ export default function CreativesPage() {
 
       {/* Grid */}
       {filtered.length === 0 ? (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-16 flex flex-col items-center text-center">
-          <Film size={24} className="text-[#3d4460] mb-3" />
-          <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">No assets match your filters</div>
-          <p className="text-[12px] text-[#5a6278]">Try a different filter or upload a new asset.</p>
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center text-center">
+          <Film size={24} className="text-[#3d4f6e] mb-3" />
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No assets match your filters</div>
+          <p className="text-[12px] text-[#6b7a99]">Try a different filter or upload a new asset.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

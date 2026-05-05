@@ -413,18 +413,18 @@ const sectionTabs: {
   icon: React.ElementType;
   color: string;
 }[] = [
-  { id: "overview", label: "Overview", icon: Megaphone, color: "#18b8f0" },
+  { id: "overview", label: "Overview", icon: Megaphone, color: "#0081f2" },
   { id: "meta", label: "Meta Structure", icon: Target, color: "#a78bfa" },
-  { id: "copy", label: "Ad Copy", icon: FileText, color: "#f07820" },
+  { id: "copy", label: "Ad Copy", icon: FileText, color: "#ff8400" },
   { id: "leadform", label: "Lead Form", icon: ClipboardList, color: "#22c55e" },
-  { id: "ghl", label: "GHL Workflow", icon: Workflow, color: "#18b8f0" },
-  { id: "creative", label: "Creative", icon: Video, color: "#f07820" },
+  { id: "ghl", label: "GHL Workflow", icon: Workflow, color: "#0081f2" },
+  { id: "creative", label: "Creative", icon: Video, color: "#ff8400" },
   { id: "compliance", label: "Compliance", icon: ShieldCheck, color: "#f59e0b" },
   { id: "optimization", label: "Optimization", icon: TrendingUp, color: "#a78bfa" },
   { id: "buyer", label: "Buyer Psychology", icon: Brain, color: "#a78bfa" },
   { id: "market", label: "Market Research", icon: MapPin, color: "#22c55e" },
-  { id: "rationale", label: "Strategy", icon: Lightbulb, color: "#c9a84c" },
-  { id: "creative-intel", label: "Creative Intel", icon: Film, color: "#c9a84c" },
+  { id: "rationale", label: "Strategy", icon: Lightbulb, color: "#ff8400" },
+  { id: "creative-intel", label: "Creative Intel", icon: Film, color: "#ff8400" },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -461,17 +461,17 @@ const agentSuggestions = [
 
 function SubLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1.5">
+    <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1.5">
       {children}
     </div>
   );
 }
 
-function BulletList({ items, color = "#5a6278" }: { items: string[]; color?: string }) {
+function BulletList({ items, color = "#6b7a99" }: { items: string[]; color?: string }) {
   return (
     <ul className="space-y-1.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-[12px] text-[#5a6278] leading-snug">
+        <li key={i} className="flex items-start gap-2 text-[12px] text-[#6b7a99] leading-snug">
           <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           {item}
         </li>
@@ -484,8 +484,8 @@ function NumberedList({ items }: { items: string[] }) {
   return (
     <ol className="space-y-1.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2.5 text-[12px] text-[#5a6278] leading-snug">
-          <span className="mt-0.5 w-4 h-4 rounded flex-shrink-0 bg-[#131720] border border-[#1c2438] text-[10px] font-bold text-[#3d4460] flex items-center justify-center">
+        <li key={i} className="flex items-start gap-2.5 text-[12px] text-[#6b7a99] leading-snug">
+          <span className="mt-0.5 w-4 h-4 rounded flex-shrink-0 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[10px] font-bold text-[#3d4f6e] flex items-center justify-center">
             {i + 1}
           </span>
           {item}
@@ -499,12 +499,12 @@ function CopyVariant({ label, text, index }: { label: string; text: string; inde
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-[#3d4460] uppercase tracking-wider">{label}</span>
-        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-[#131720] border border-[#1c2438] text-[#5a6278] rounded">
+        <span className="text-[10px] font-bold text-[#3d4f6e] uppercase tracking-wider">{label}</span>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] rounded">
           V{index + 1}
         </span>
       </div>
-      <p className="text-[12px] text-[#eef1f8] leading-relaxed bg-[#131720] border border-[#1c2438] rounded-lg p-3">
+      <p className="text-[12px] text-[#f8f8f7] leading-relaxed bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">
         {text}
       </p>
     </div>
@@ -538,7 +538,7 @@ function ApprovalBar({
     <div className="flex items-center gap-2 flex-wrap">
       {plan.status === "draft" && (
         <>
-          <button onClick={onSave} className={`${btn} text-[#5a6278] border border-[#1c2438] hover:text-[#eef1f8] hover:border-[#263050] transition-colors`}>
+          <button onClick={onSave} className={`${btn} text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors`}>
             Save Draft
           </button>
           {hasUnapprovedCreative ? (
@@ -764,42 +764,62 @@ function AICampaignBuilderContent() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-5 border-b border-[#1c2438]">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <h2 className="text-[17px] font-bold text-[#eef1f8] tracking-tight">Veronica</h2>
-            <span className="text-[10px] font-semibold text-[#c9a84c] bg-[#c9a84c]/10 border border-[#c9a84c]/25 rounded-full px-2 py-0.5">by Vault Co</span>
+      {/* Header — Vault Co branded hero */}
+      <div
+        className="relative overflow-hidden rounded-xl"
+        style={{ backgroundColor: "#0D1520", border: "1px solid rgba(0, 129, 242, 0.15)" }}
+      >
+        <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: "rgba(0, 129, 242, 0.07)" }} />
+        <div className="absolute -top-16 right-0 w-48 h-48 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: "rgba(255, 132, 0, 0.07)" }} />
+        <div className="relative flex items-center justify-between px-6 py-5">
+          <div>
+            <div className="flex items-center gap-2.5 mb-1">
+              <h2
+                className="text-[22px] font-bold tracking-wide"
+                style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#f8f8f7" }}
+              >
+                Veronica
+              </h2>
+              <span
+                className="text-[10px] font-bold rounded-full px-2 py-0.5"
+                style={{ color: "#ff8400", backgroundColor: "rgba(255, 132, 0, 0.10)", border: "1px solid rgba(255, 132, 0, 0.22)" }}
+              >
+                by Vault Co
+              </span>
+            </div>
+            <p className="text-[12px]" style={{ color: "#6b7a99" }}>
+              AI Growth Operator — Campaign strategy, client intelligence, creative analysis, and approval-ready growth plans.
+            </p>
           </div>
-          <p className="text-[12px] text-[#5a6278] mt-0.5">
-            AI Growth Operator — Campaign strategy, client intelligence, creative analysis, and approval-ready growth plans.
-          </p>
+          <span
+            className="flex items-center gap-1.5 text-[11px] font-bold rounded-full px-3 py-1.5"
+            style={{ color: "#22c55e", backgroundColor: "rgba(34, 197, 94, 0.10)", border: "1px solid rgba(34, 197, 94, 0.20)" }}
+          >
+            <span className="w-2 h-2 bg-[#22c55e] rounded-full animate-pulse" />
+            Veronica Active
+          </span>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-full px-3 py-1.5">
-          <span className="w-2 h-2 bg-[#22c55e] rounded-full animate-pulse" />
-          Veronica Active
-        </span>
       </div>
 
       {/* Veronica intro card */}
-      <div className="relative overflow-hidden bg-[#0c0f15] border border-[#c9a84c]/20 rounded-xl px-5 py-4">
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#c9a84c]/5 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden bg-[#0D1520] border border-[#ff8400]/20 rounded-xl px-5 py-4">
+        <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#ff8400]/5 rounded-full blur-2xl pointer-events-none" />
         <div className="relative flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-[#c9a84c]/10 border border-[#c9a84c]/25 flex items-center justify-center flex-shrink-0">
-            <Sparkles size={15} className="text-[#c9a84c]" />
+          <div className="w-10 h-10 rounded-xl bg-[#ff8400]/10 border border-[#ff8400]/25 flex items-center justify-center flex-shrink-0">
+            <Sparkles size={15} className="text-[#ff8400]" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[13px] font-bold text-[#eef1f8]">Veronica</span>
-              <span className="text-[10px] font-semibold text-[#c9a84c] bg-[#c9a84c]/10 border border-[#c9a84c]/25 rounded-full px-1.5 py-0.5">by Vault Co</span>
-              <span className="text-[10px] text-[#5a6278]">· AI Growth Operator</span>
+              <span className="text-[13px] font-bold text-[#f8f8f7]">Veronica</span>
+              <span className="text-[10px] font-semibold text-[#ff8400] bg-[#ff8400]/10 border border-[#ff8400]/25 rounded-full px-1.5 py-0.5">by Vault Co</span>
+              <span className="text-[10px] text-[#6b7a99]">· AI Growth Operator</span>
             </div>
-            <p className="text-[12px] text-[#5a6278] leading-relaxed mb-2">
+            <p className="text-[12px] text-[#6b7a99] leading-relaxed mb-2">
               Veronica studies client onboarding data, buyer psychology, market context, creative assets, and campaign performance to build approval-ready campaign drafts for roofing and construction clients.
             </p>
             <div className="flex items-start gap-1.5">
               <ShieldCheck size={11} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-[#5a6278] leading-snug">
+              <p className="text-[11px] text-[#6b7a99] leading-snug">
                 Veronica can research, generate, recommend, and draft.{" "}
                 <span className="text-[#f59e0b]">Veronica cannot publish campaigns, activate ads, increase budgets, send reports, or push GHL workflows without human approval.</span>
               </p>
@@ -811,7 +831,7 @@ function AICampaignBuilderContent() {
       {/* Safety notice */}
       <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/15 rounded-xl">
         <ShieldCheck size={13} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] text-[#5a6278] leading-snug">
+        <p className="text-[12px] text-[#6b7a99] leading-snug">
           <span className="text-[#f59e0b] font-semibold">Approval Required: </span>
           Veronica-generated campaign drafts require human approval before launch, budget changes, or Meta publishing.
         </p>
@@ -819,14 +839,14 @@ function AICampaignBuilderContent() {
 
       {/* AI provider notice */}
       {mockModeActive ? (
-        <div className="flex items-start gap-2.5 px-4 py-3 bg-[#3d4460]/20 border border-[#3d4460]/40 rounded-xl">
-          <AlertCircle size={13} className="text-[#5a6278] flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 px-4 py-3 bg-[#3d4f6e]/20 border border-[#3d4f6e]/40 rounded-xl">
+          <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
           <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
-            <p className="text-[12px] text-[#5a6278] leading-snug">
-              <span className="text-[#eef1f8] font-semibold">Veronica is running in mock mode. </span>
+            <p className="text-[12px] text-[#6b7a99] leading-snug">
+              <span className="text-[#f8f8f7] font-semibold">Veronica is running in mock mode. </span>
               {mockModeNotice ?? "Add an API key and set AI_PROVIDER in .env.local to enable live generation."}
             </p>
-            <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3d4460]/40 text-[#5a6278] border border-[#3d4460]/60 uppercase tracking-wider">
+            <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3d4f6e]/40 text-[#6b7a99] border border-[#3d4f6e]/60 uppercase tracking-wider">
               Mock
             </span>
           </div>
@@ -848,7 +868,7 @@ function AICampaignBuilderContent() {
       {generateError && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-[#5a6278] leading-snug">
+          <p className="text-[12px] text-[#6b7a99] leading-snug">
             <span className="text-[#ef4444] font-semibold">Generation error: </span>
             {generateError}
           </p>
@@ -859,7 +879,7 @@ function AICampaignBuilderContent() {
       {displayPlan?.creativeIntelligenceUsed && !displayPlan.creativeIntelligenceUsed.approvedForAds && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-[#5a6278] leading-snug">
+          <p className="text-[12px] text-[#6b7a99] leading-snug">
             <span className="text-[#f59e0b] font-semibold">Creative needs approval: </span>
             The selected creative asset ({displayPlan.creativeIntelligenceUsed.assetType}) has not been approved for Meta ads.
             Approve it in the{" "}
@@ -873,9 +893,9 @@ function AICampaignBuilderContent() {
       {selectedAsset && !selectedAsset.approvedForAds && !displayPlan?.creativeIntelligenceUsed && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-[#5a6278] leading-snug">
+          <p className="text-[12px] text-[#6b7a99] leading-snug">
             <span className="text-[#f59e0b] font-semibold">Unapproved creative selected: </span>
-            <span className="text-[#eef1f8]">{selectedAsset.fileName}</span> has not been approved for Meta ads.
+            <span className="text-[#f8f8f7]">{selectedAsset.fileName}</span> has not been approved for Meta ads.
             This campaign cannot be submitted for final approval until the creative is reviewed.
             Go to the{" "}
             <a href="/creatives" className="text-[#f59e0b] hover:underline">Creative Library</a>
@@ -885,15 +905,15 @@ function AICampaignBuilderContent() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-0 border-b border-[#1c2438]">
+      <div className="flex items-center gap-0 border-b border-[rgba(0, 129, 242, 0.15)]">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 -mb-px ${
               activeTab === id
-                ? "text-[#18b8f0] border-[#18b8f0]"
-                : "text-[#5a6278] border-transparent hover:text-[#eef1f8]"
+                ? "text-[#0081f2] border-[#0081f2]"
+                : "text-[#6b7a99] border-transparent hover:text-[#f8f8f7]"
             }`}
           >
             <Icon size={13} />
@@ -906,22 +926,22 @@ function AICampaignBuilderContent() {
       {activeTab === "builder" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
           {/* Form */}
-          <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-[#1c2438]">
-              <Sparkles size={13} className="text-[#18b8f0]" />
-              <span className="text-[13px] font-semibold text-[#eef1f8]">Build with Veronica</span>
+          <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
+              <Sparkles size={13} className="text-[#0081f2]" />
+              <span className="text-[13px] font-semibold text-[#f8f8f7]">Build with Veronica</span>
             </div>
             <div className="p-5 space-y-5">
               {/* 1. Client */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider">
                   1. Select Client
                 </label>
                 <div className="relative">
                   <select
                     value={selectedClientId}
                     onChange={(e) => handleClientChange(e.target.value)}
-                    className="w-full appearance-none bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2.5 text-[13px] text-[#eef1f8] focus:outline-none focus:border-[#18b8f0]/50 transition-colors pr-8"
+                    className="w-full appearance-none bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2.5 text-[13px] text-[#f8f8f7] focus:outline-none focus:border-[#0081f2]/50 transition-colors pr-8"
                   >
                     <option value="">— Select a client —</option>
                     {clients.map((c) => (
@@ -930,12 +950,12 @@ function AICampaignBuilderContent() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+                  <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
                 </div>
                 {selectedClient && (
                   <div className="flex items-center gap-2 mt-1.5">
                     <Badge label={selectedClient.status} variant={clientStatusVariant[selectedClient.status]} />
-                    <span className="text-[11px] text-[#5a6278]">
+                    <span className="text-[11px] text-[#6b7a99]">
                       {selectedClient.market} · {selectedClient.monthlyBudget}
                     </span>
                   </div>
@@ -944,7 +964,7 @@ function AICampaignBuilderContent() {
 
               {/* 2. Goal */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider">
                   2. Campaign Goal
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -954,8 +974,8 @@ function AICampaignBuilderContent() {
                       onClick={() => setGoal(g)}
                       className={`px-3 py-2 rounded-lg text-[12px] font-medium text-left transition-colors border ${
                         goal === g
-                          ? "bg-[#18b8f0]/10 border-[#18b8f0]/40 text-[#18b8f0]"
-                          : "bg-[#131720] border-[#1c2438] text-[#5a6278] hover:text-[#eef1f8] hover:border-[#263050]"
+                          ? "bg-[#0081f2]/10 border-[#0081f2]/40 text-[#0081f2]"
+                          : "bg-[#0f1a28] border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)]"
                       }`}
                     >
                       {g}
@@ -966,7 +986,7 @@ function AICampaignBuilderContent() {
 
               {/* 3. Service */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider">
                   3. Service to Promote
                 </label>
                 <div className="relative">
@@ -974,20 +994,20 @@ function AICampaignBuilderContent() {
                     value={service}
                     onChange={(e) => setService(e.target.value)}
                     disabled={!selectedClient}
-                    className="w-full appearance-none bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2.5 text-[13px] text-[#eef1f8] focus:outline-none focus:border-[#18b8f0]/50 transition-colors pr-8 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full appearance-none bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2.5 text-[13px] text-[#f8f8f7] focus:outline-none focus:border-[#0081f2]/50 transition-colors pr-8 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <option value="">— Select a service —</option>
                     {(selectedClient?.services ?? []).map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
-                  <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5a6278] pointer-events-none" />
+                  <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
                 </div>
               </div>
 
               {/* 4. Creative */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider">
                   4. Creative Asset
                 </label>
 
@@ -996,7 +1016,7 @@ function AICampaignBuilderContent() {
                   <div className="relative">
                     <button
                       onClick={() => setShowAssetPicker(!showAssetPicker)}
-                      className="w-full flex items-center justify-between px-3 py-2 bg-[#131720] border border-[#1c2438] rounded-lg text-[12px] text-[#5a6278] hover:text-[#eef1f8] hover:border-[#263050] transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[12px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors"
                     >
                       <span className="flex items-center gap-2">
                         <Film size={11} />
@@ -1005,20 +1025,20 @@ function AICampaignBuilderContent() {
                       <ChevronDown size={11} className={`transition-transform ${showAssetPicker ? "rotate-180" : ""}`} />
                     </button>
                     {showAssetPicker && (
-                      <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-[#0c0f15] border border-[#1c2438] rounded-lg shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
+                      <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
                         {clientAssets.length === 0 ? (
-                          <div className="px-3 py-3 text-[11px] text-[#5a6278] text-center">
+                          <div className="px-3 py-3 text-[11px] text-[#6b7a99] text-center">
                             No assets in library for this client
                           </div>
                         ) : (
                           clientAssets.map((asset) => {
-                            const color = assetTypeColors[asset.assetType as AssetType] ?? "#5a6278";
+                            const color = assetTypeColors[asset.assetType as AssetType] ?? "#6b7a99";
                             const AIcon = asset.fileType === "video" ? Video : ImageIcon;
                             return (
                               <button
                                 key={asset.id}
                                 onClick={() => { setSelectedAsset(asset); setCreative(asset.assetType); setShowAssetPicker(false); }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#131720] transition-colors text-left border-b border-[#1c2438]/40 last:border-0"
+                                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-[#0f1a28] transition-colors text-left border-b border-[rgba(0, 129, 242, 0.15)]/40 last:border-0"
                               >
                                 <div
                                   className="w-6 h-6 rounded flex-shrink-0 flex items-center justify-center"
@@ -1027,8 +1047,8 @@ function AICampaignBuilderContent() {
                                   <AIcon size={10} style={{ color }} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="text-[11px] text-[#eef1f8] font-medium truncate">{asset.fileName}</div>
-                                  <div className="text-[10px] text-[#5a6278]">{asset.assetType}</div>
+                                  <div className="text-[11px] text-[#f8f8f7] font-medium truncate">{asset.fileName}</div>
+                                  <div className="text-[10px] text-[#6b7a99]">{asset.assetType}</div>
                                 </div>
                                 {asset.approvedForAds
                                   ? <CheckCircle2 size={11} className="text-[#22c55e] flex-shrink-0" />
@@ -1045,23 +1065,23 @@ function AICampaignBuilderContent() {
 
                 {/* Selected asset card */}
                 {selectedAsset ? (
-                  <div className="bg-[#131720] border border-[#1c2438] rounded-lg p-3">
+                  <div className="bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">
                     <div className="flex items-start gap-2.5">
                       <div
                         className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center"
                         style={{
-                          backgroundColor: `${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#5a6278"}15`,
-                          border: `1px solid ${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#5a6278"}28`,
+                          backgroundColor: `${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99"}15`,
+                          border: `1px solid ${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99"}28`,
                         }}
                       >
                         {selectedAsset.fileType === "video"
-                          ? <Video size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#5a6278" }} />
-                          : <ImageIcon size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#5a6278" }} />
+                          ? <Video size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99" }} />
+                          : <ImageIcon size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99" }} />
                         }
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-[#eef1f8] truncate">{selectedAsset.fileName}</div>
-                        <div className="text-[11px] text-[#5a6278]">{selectedAsset.assetType}</div>
+                        <div className="text-[12px] font-semibold text-[#f8f8f7] truncate">{selectedAsset.fileName}</div>
+                        <div className="text-[11px] text-[#6b7a99]">{selectedAsset.assetType}</div>
                         <div className="mt-1">
                           {selectedAsset.approvedForAds
                             ? <span className="text-[10px] text-[#22c55e] flex items-center gap-1"><CheckCircle2 size={9} />Approved for Ads</span>
@@ -1071,7 +1091,7 @@ function AICampaignBuilderContent() {
                       </div>
                       <button
                         onClick={() => { setSelectedAsset(null); setCreative(""); }}
-                        className="text-[#5a6278] hover:text-[#ef4444] flex-shrink-0 mt-0.5 transition-colors"
+                        className="text-[#6b7a99] hover:text-[#ef4444] flex-shrink-0 mt-0.5 transition-colors"
                       >
                         <XCircle size={13} />
                       </button>
@@ -1079,16 +1099,16 @@ function AICampaignBuilderContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="border-2 border-dashed border-[#1c2438] rounded-lg p-4 text-center hover:border-[#263050] transition-colors cursor-pointer">
-                      <div className="w-8 h-8 rounded-lg bg-[#131720] border border-[#1c2438] flex items-center justify-center mx-auto mb-2">
-                        <ImageIcon size={13} className="text-[#3d4460]" />
+                    <div className="border-2 border-dashed border-[rgba(0, 129, 242, 0.15)] rounded-lg p-4 text-center hover:border-[rgba(0, 129, 242, 0.25)] transition-colors cursor-pointer">
+                      <div className="w-8 h-8 rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-2">
+                        <ImageIcon size={13} className="text-[#3d4f6e]" />
                       </div>
-                      <div className="text-[11px] text-[#5a6278]">
-                        Drop image/video or <span className="text-[#18b8f0]">browse</span>
+                      <div className="text-[11px] text-[#6b7a99]">
+                        Drop image/video or <span className="text-[#0081f2]">browse</span>
                       </div>
-                      <div className="text-[10px] text-[#3d4460] mt-0.5">JPG, PNG, MP4 · Max 50MB</div>
+                      <div className="text-[10px] text-[#3d4f6e] mt-0.5">JPG, PNG, MP4 · Max 50MB</div>
                     </div>
-                    <div className="text-[10px] text-[#3d4460] text-center">or select creative type</div>
+                    <div className="text-[10px] text-[#3d4f6e] text-center">or select creative type</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {["Before/After", "Testimonial", "Inspection Day", "Storm Damage", "Project Reveal", "Team Photo", "Owner On Camera", "Drone Footage", "UGC Style Video"].map((lbl) => (
                         <button
@@ -1096,8 +1116,8 @@ function AICampaignBuilderContent() {
                           onClick={() => setCreative(lbl)}
                           className={`px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors border text-center ${
                             creative === lbl
-                              ? "bg-[#18b8f0]/10 border-[#18b8f0]/40 text-[#18b8f0]"
-                              : "bg-[#131720] border-[#1c2438] text-[#5a6278] hover:text-[#eef1f8] hover:border-[#263050]"
+                              ? "bg-[#0081f2]/10 border-[#0081f2]/40 text-[#0081f2]"
+                              : "bg-[#0f1a28] border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)]"
                           }`}
                         >
                           {lbl}
@@ -1105,9 +1125,9 @@ function AICampaignBuilderContent() {
                       ))}
                     </div>
                     {creative && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#18b8f0]/8 border border-[#18b8f0]/20 rounded-lg">
-                        <CheckCircle2 size={11} className="text-[#18b8f0] flex-shrink-0" />
-                        <span className="text-[11px] text-[#18b8f0]">{creative} selected</span>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0081f2]/8 border border-[#0081f2]/20 rounded-lg">
+                        <CheckCircle2 size={11} className="text-[#0081f2] flex-shrink-0" />
+                        <span className="text-[11px] text-[#0081f2]">{creative} selected</span>
                       </div>
                     )}
                   </>
@@ -1119,13 +1139,13 @@ function AICampaignBuilderContent() {
                   onChange={(e) => setCreativeNotes(e.target.value)}
                   placeholder="Creative notes — tone, specific shots, restrictions..."
                   rows={2}
-                  className="w-full px-3 py-2 bg-[#131720] border border-[#1c2438] rounded-lg text-[12px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/50 transition-colors resize-none"
+                  className="w-full px-3 py-2 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors resize-none"
                 />
               </div>
 
               {/* 5. Market */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider flex items-center gap-1.5">
                   <MapPin size={10} />5. Market / City
                 </label>
                 <input
@@ -1133,13 +1153,13 @@ function AICampaignBuilderContent() {
                   value={market}
                   onChange={(e) => setMarket(e.target.value)}
                   placeholder="e.g. Tempe, AZ"
-                  className="w-full bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2.5 text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/50 transition-colors"
+                  className="w-full bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2.5 text-[13px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors"
                 />
               </div>
 
               {/* 6. Budget */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider flex items-center gap-1.5">
                   <DollarSign size={10} />6. Monthly Budget
                 </label>
                 <input
@@ -1147,7 +1167,7 @@ function AICampaignBuilderContent() {
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                   placeholder="e.g. $1,500"
-                  className="w-full bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2.5 text-[13px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/50 transition-colors"
+                  className="w-full bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2.5 text-[13px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors"
                 />
               </div>
 
@@ -1163,7 +1183,7 @@ function AICampaignBuilderContent() {
                 )}
               </button>
               {!selectedClient && (
-                <p className="text-[11px] text-[#3d4460] text-center">Select a client to get started</p>
+                <p className="text-[11px] text-[#3d4f6e] text-center">Select a client to get started</p>
               )}
             </div>
           </div>
@@ -1171,17 +1191,17 @@ function AICampaignBuilderContent() {
           {/* Output panel */}
           <div className="lg:col-span-2">
             {!isGenerating && !displayPlan && (
-              <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-16 flex flex-col items-center justify-center text-center">
-                <div className="w-14 h-14 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mb-4">
-                  <Bot size={22} className="text-[#18b8f0]" />
+              <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mb-4">
+                  <Bot size={22} className="text-[#0081f2]" />
                 </div>
-                <div className="text-[14px] font-semibold text-[#eef1f8] mb-1.5">Full Campaign Draft will appear here</div>
-                <p className="text-[12px] text-[#5a6278] max-w-xs leading-relaxed">
+                <div className="text-[14px] font-semibold text-[#f8f8f7] mb-1.5">Full Campaign Draft will appear here</div>
+                <p className="text-[12px] text-[#6b7a99] max-w-xs leading-relaxed">
                   Fill in all fields and click Build with Veronica. Veronica will produce a complete campaign brief across 8 sections.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-sm">
                   {sectionTabs.slice(0, 8).map((s) => (
-                    <span key={s.id} className="flex items-center gap-1 px-2.5 py-1 bg-[#131720] border border-[#1c2438] text-[10px] text-[#3d4460] rounded-full">
+                    <span key={s.id} className="flex items-center gap-1 px-2.5 py-1 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[10px] text-[#3d4f6e] rounded-full">
                       <s.icon size={9} style={{ color: s.color }} />{s.label}
                     </span>
                   ))}
@@ -1190,12 +1210,12 @@ function AICampaignBuilderContent() {
             )}
 
             {isGenerating && (
-              <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-16 flex flex-col items-center justify-center text-center">
-                <div className="w-14 h-14 rounded-xl bg-[#18b8f0]/10 border border-[#18b8f0]/25 flex items-center justify-center mb-4">
-                  <Loader2 size={22} className="text-[#18b8f0] animate-spin" />
+              <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-xl bg-[#0081f2]/10 border border-[#0081f2]/25 flex items-center justify-center mb-4">
+                  <Loader2 size={22} className="text-[#0081f2] animate-spin" />
                 </div>
-                <div className="text-[14px] font-semibold text-[#eef1f8] mb-1.5">Veronica is building the campaign draft…</div>
-                <p className="text-[12px] text-[#5a6278]">
+                <div className="text-[14px] font-semibold text-[#f8f8f7] mb-1.5">Veronica is building the campaign draft…</div>
+                <p className="text-[12px] text-[#6b7a99]">
                   Building copy, lead form, GHL workflow, creative direction &amp; compliance check
                 </p>
               </div>
@@ -1204,7 +1224,7 @@ function AICampaignBuilderContent() {
             {!isGenerating && displayPlan && (
               <div className="space-y-3">
                 {/* Plan header */}
-                <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-4">
+                <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-4">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1212,11 +1232,11 @@ function AICampaignBuilderContent() {
                           label={draftStatusLabel[displayPlan.status]}
                           variant={draftStatusVariant[displayPlan.status]}
                         />
-                        <span className="text-[10px] text-[#3d4460]">Generated {displayPlan.createdAt}</span>
+                        <span className="text-[10px] text-[#3d4f6e]">Generated {displayPlan.createdAt}</span>
                       </div>
-                      <h3 className="text-[15px] font-bold text-[#eef1f8] leading-snug">{displayPlan.campaignName}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#5a6278] flex-wrap">
-                        <span className="font-mono text-[#3d4460]">{displayPlan.clientId}</span>
+                      <h3 className="text-[15px] font-bold text-[#f8f8f7] leading-snug">{displayPlan.campaignName}</h3>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#6b7a99] flex-wrap">
+                        <span className="font-mono text-[#3d4f6e]">{displayPlan.clientId}</span>
                         <span>·</span><span>{displayPlan.clientName}</span>
                         <span>·</span><span>{displayPlan.market}</span>
                         <span>·</span><span>{displayPlan.budget}</span>
@@ -1225,7 +1245,7 @@ function AICampaignBuilderContent() {
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                       <button
                         onClick={() => { setCurrentPlan(null); setPlanResetByUser(true); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] hover:border-[#263050] transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors"
                       >
                         <RotateCcw size={11} />Reset
                       </button>
@@ -1239,19 +1259,19 @@ function AICampaignBuilderContent() {
                     </div>
                   </div>
                   {displayPlan.status === "needs_review" && (
-                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-[#18b8f0]/5 border border-[#18b8f0]/15 rounded-lg">
-                      <CheckCircle2 size={11} className="text-[#18b8f0] flex-shrink-0" />
-                      <p className="text-[11px] text-[#5a6278]">
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-[#0081f2]/5 border border-[#0081f2]/15 rounded-lg">
+                      <CheckCircle2 size={11} className="text-[#0081f2] flex-shrink-0" />
+                      <p className="text-[11px] text-[#6b7a99]">
                         Submitted for review · Visible on the{" "}
-                        <a href="/approvals" className="text-[#18b8f0] hover:underline">Approvals page</a>
+                        <a href="/approvals" className="text-[#0081f2] hover:underline">Approvals page</a>
                       </p>
                     </div>
                   )}
                 </div>
 
                 {/* Section nav */}
-                <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-                  <div className="flex items-center gap-0 overflow-x-auto border-b border-[#1c2438]">
+                <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-0 overflow-x-auto border-b border-[rgba(0, 129, 242, 0.15)]">
                     {visibleSectionTabs.map(({ id, label, icon: Icon, color }) => (
                       <button
                         key={id}
@@ -1259,7 +1279,7 @@ function AICampaignBuilderContent() {
                         className={`flex items-center gap-1.5 px-4 py-3 text-[11px] font-medium whitespace-nowrap transition-colors border-b-2 -mb-px flex-shrink-0 ${
                           activeSection === id
                             ? "border-current"
-                            : "border-transparent text-[#5a6278] hover:text-[#eef1f8]"
+                            : "border-transparent text-[#6b7a99] hover:text-[#f8f8f7]"
                         }`}
                         style={activeSection === id ? { color, borderColor: color } : {}}
                       >
@@ -1291,26 +1311,26 @@ function AICampaignBuilderContent() {
                             { label: "Campaign Goal", value: displayPlan.goal },
                             { label: "Monthly Budget", value: displayPlan.budget },
                           ].map(({ label, value }) => (
-                            <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
-                              <div className="text-[10px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1">{label}</div>
-                              <p className="text-[13px] font-semibold text-[#eef1f8] leading-snug">{value}</p>
+                            <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                              <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">{label}</div>
+                              <p className="text-[13px] font-semibold text-[#f8f8f7] leading-snug">{value}</p>
                             </div>
                           ))}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
-                            <div className="text-[10px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1">Status</div>
+                          <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                            <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">Status</div>
                             <Badge label={draftStatusLabel[displayPlan.status]} variant={draftStatusVariant[displayPlan.status]} />
                           </div>
-                          <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
-                            <div className="text-[10px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1">Created By</div>
-                            <p className="text-[12px] text-[#eef1f8]">{displayPlan.createdBy}</p>
+                          <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                            <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">Created By</div>
+                            <p className="text-[12px] text-[#f8f8f7]">{displayPlan.createdBy}</p>
                           </div>
                         </div>
-                        <div className="pt-2 border-t border-[#1c2438]">
-                          <div className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider mb-3">Approval Actions</div>
+                        <div className="pt-2 border-t border-[rgba(0, 129, 242, 0.15)]">
+                          <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-3">Approval Actions</div>
                           <ApprovalBar plan={displayPlan} onSave={handleSaveDraft} onUpdate={handleUpdateStatus} hasUnapprovedCreative={!!selectedAsset && !selectedAsset.approvedForAds} size="md" />
-                          <p className="text-[11px] text-[#3d4460] mt-3 leading-snug">
+                          <p className="text-[11px] text-[#3d4f6e] mt-3 leading-snug">
                             {displayPlan.status === "draft" && "Draft not yet submitted. Save or submit for human approval."}
                             {displayPlan.status === "needs_review" && "Submitted — visible on the Approvals page."}
                             {displayPlan.status === "changes_requested" && "Changes requested. Revise and resubmit."}
@@ -1332,41 +1352,41 @@ function AICampaignBuilderContent() {
                           </div>
                           <div>
                             <SubLabel>Campaign Type</SubLabel>
-                            <p className="text-[12px] text-[#eef1f8]">{displayPlan.metaStructure.campaignType}</p>
+                            <p className="text-[12px] text-[#f8f8f7]">{displayPlan.metaStructure.campaignType}</p>
                           </div>
                           <div>
                             <SubLabel>Optimization Event</SubLabel>
-                            <p className="text-[12px] text-[#eef1f8] font-mono">{displayPlan.metaStructure.optimizationEvent}</p>
+                            <p className="text-[12px] text-[#f8f8f7] font-mono">{displayPlan.metaStructure.optimizationEvent}</p>
                           </div>
                           <div>
                             <SubLabel>Budget Split</SubLabel>
-                            <p className="text-[12px] text-[#5a6278] leading-snug">{displayPlan.metaStructure.budgetSplit}</p>
+                            <p className="text-[12px] text-[#6b7a99] leading-snug">{displayPlan.metaStructure.budgetSplit}</p>
                           </div>
                         </div>
                         <div>
                           <SubLabel>Ad Sets ({displayPlan.metaStructure.adSetNames.length})</SubLabel>
                           <div className="space-y-1.5">
                             {displayPlan.metaStructure.adSetNames.map((name, i) => (
-                              <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-[#131720] border border-[#1c2438] rounded-lg">
+                              <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                                 <span className="w-5 h-5 rounded flex-shrink-0 bg-[#a78bfa]/10 border border-[#a78bfa]/20 text-[10px] font-bold text-[#a78bfa] flex items-center justify-center">{i + 1}</span>
-                                <span className="text-[12px] text-[#eef1f8]">{name}</span>
+                                <span className="text-[12px] text-[#f8f8f7]">{name}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                         <div>
                           <SubLabel>Audience</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.metaStructure.audience}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.metaStructure.audience}</p>
                         </div>
                         <div>
                           <SubLabel>Location Targeting</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.metaStructure.locationTargeting}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.metaStructure.locationTargeting}</p>
                         </div>
                         <div>
                           <SubLabel>Placements</SubLabel>
                           <div className="flex flex-wrap gap-1.5">
                             {displayPlan.metaStructure.placements.map((p) => (
-                              <span key={p} className="px-2.5 py-1 text-[11px] font-medium bg-[#131720] border border-[#1c2438] text-[#5a6278] rounded-lg">{p}</span>
+                              <span key={p} className="px-2.5 py-1 text-[11px] font-medium bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] rounded-lg">{p}</span>
                             ))}
                           </div>
                         </div>
@@ -1386,9 +1406,9 @@ function AICampaignBuilderContent() {
                           <SubLabel>Headlines — 3 Options</SubLabel>
                           <div className="space-y-1.5">
                             {displayPlan.adCopy.headlines.map((h, i) => (
-                              <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-[#131720] border border-[#1c2438] rounded-lg">
-                                <span className="text-[11px] font-mono text-[#3d4460] flex-shrink-0">{i + 1}.</span>
-                                <span className="text-[13px] font-semibold text-[#eef1f8]">{h}</span>
+                              <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                                <span className="text-[11px] font-mono text-[#3d4f6e] flex-shrink-0">{i + 1}.</span>
+                                <span className="text-[13px] font-semibold text-[#f8f8f7]">{h}</span>
                               </div>
                             ))}
                           </div>
@@ -1397,16 +1417,16 @@ function AICampaignBuilderContent() {
                           <SubLabel>Descriptions — 3 Options</SubLabel>
                           <div className="space-y-1.5">
                             {displayPlan.adCopy.descriptions.map((d, i) => (
-                              <div key={i} className="flex items-center gap-3 px-3 py-2 bg-[#131720] border border-[#1c2438] rounded-lg">
-                                <span className="text-[11px] font-mono text-[#3d4460] flex-shrink-0">{i + 1}.</span>
-                                <span className="text-[12px] text-[#5a6278]">{d}</span>
+                              <div key={i} className="flex items-center gap-3 px-3 py-2 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                                <span className="text-[11px] font-mono text-[#3d4f6e] flex-shrink-0">{i + 1}.</span>
+                                <span className="text-[12px] text-[#6b7a99]">{d}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 pt-1">
                           <SubLabel>CTA Button</SubLabel>
-                          <span className="px-4 py-1.5 bg-[#f07820]/10 border border-[#f07820]/30 text-[#f07820] text-[13px] font-semibold rounded-lg">
+                          <span className="px-4 py-1.5 bg-[#ff8400]/10 border border-[#ff8400]/30 text-[#ff8400] text-[13px] font-semibold rounded-lg">
                             {displayPlan.adCopy.cta}
                           </span>
                         </div>
@@ -1418,19 +1438,19 @@ function AICampaignBuilderContent() {
                       <div className="space-y-5">
                         <div>
                           <SubLabel>Form Name</SubLabel>
-                          <p className="text-[13px] font-semibold text-[#eef1f8]">{displayPlan.leadForm.formName}</p>
+                          <p className="text-[13px] font-semibold text-[#f8f8f7]">{displayPlan.leadForm.formName}</p>
                         </div>
                         <div>
                           <SubLabel>Intro Copy</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.leadForm.introCopy}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.leadForm.introCopy}</p>
                         </div>
                         <div>
                           <SubLabel>Qualification Questions</SubLabel>
                           <div className="space-y-1.5">
                             {displayPlan.leadForm.qualificationQuestions.map((q, i) => (
-                              <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-[#131720] border border-[#22c55e]/15 rounded-lg">
+                              <div key={i} className="flex items-start gap-3 px-3 py-2.5 bg-[#0f1a28] border border-[#22c55e]/15 rounded-lg">
                                 <span className="w-4 h-4 rounded flex-shrink-0 bg-[#22c55e]/10 border border-[#22c55e]/20 text-[9px] font-bold text-[#22c55e] flex items-center justify-center mt-0.5">{i + 1}</span>
-                                <span className="text-[12px] text-[#eef1f8]">{q}</span>
+                                <span className="text-[12px] text-[#f8f8f7]">{q}</span>
                               </div>
                             ))}
                           </div>
@@ -1439,17 +1459,17 @@ function AICampaignBuilderContent() {
                           <SubLabel>Contact Fields</SubLabel>
                           <div className="flex flex-wrap gap-1.5">
                             {displayPlan.leadForm.contactFields.map((f) => (
-                              <span key={f} className="px-2.5 py-1 text-[11px] font-medium bg-[#131720] border border-[#22c55e]/20 text-[#22c55e] rounded-lg">{f}</span>
+                              <span key={f} className="px-2.5 py-1 text-[11px] font-medium bg-[#0f1a28] border border-[#22c55e]/20 text-[#22c55e] rounded-lg">{f}</span>
                             ))}
                           </div>
                         </div>
                         <div>
                           <SubLabel>Consent Language</SubLabel>
-                          <p className="text-[11px] text-[#5a6278] leading-relaxed italic bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.leadForm.consentLanguage}</p>
+                          <p className="text-[11px] text-[#6b7a99] leading-relaxed italic bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.leadForm.consentLanguage}</p>
                         </div>
                         <div>
                           <SubLabel>Thank You Screen</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#22c55e]/15 rounded-lg p-3">{displayPlan.leadForm.thankYouCopy}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[#22c55e]/15 rounded-lg p-3">{displayPlan.leadForm.thankYouCopy}</p>
                         </div>
                       </div>
                     )}
@@ -1462,7 +1482,7 @@ function AICampaignBuilderContent() {
                             <SubLabel>Tags to Apply</SubLabel>
                             <div className="flex flex-wrap gap-1.5">
                               {displayPlan.ghlWorkflow.tags.map((t) => (
-                                <span key={t} className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-[#131720] border border-[#1c2438] text-[#18b8f0] rounded">
+                                <span key={t} className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#0081f2] rounded">
                                   <Tag size={8} />{t}
                                 </span>
                               ))}
@@ -1470,38 +1490,38 @@ function AICampaignBuilderContent() {
                           </div>
                           <div>
                             <SubLabel>Pipeline Stage</SubLabel>
-                            <p className="text-[12px] text-[#eef1f8]">{displayPlan.ghlWorkflow.pipelineStage}</p>
+                            <p className="text-[12px] text-[#f8f8f7]">{displayPlan.ghlWorkflow.pipelineStage}</p>
                           </div>
                         </div>
                         <div>
                           <SubLabel>Immediate SMS (0 min)</SubLabel>
-                          <div className="flex gap-2.5 bg-[#131720] border border-[#18b8f0]/15 rounded-lg p-3">
-                            <Phone size={12} className="text-[#18b8f0] flex-shrink-0 mt-0.5" />
-                            <p className="text-[12px] text-[#5a6278] leading-relaxed">{displayPlan.ghlWorkflow.immediateSms}</p>
+                          <div className="flex gap-2.5 bg-[#0f1a28] border border-[#0081f2]/15 rounded-lg p-3">
+                            <Phone size={12} className="text-[#0081f2] flex-shrink-0 mt-0.5" />
+                            <p className="text-[12px] text-[#6b7a99] leading-relaxed">{displayPlan.ghlWorkflow.immediateSms}</p>
                           </div>
                         </div>
                         <div>
                           <SubLabel>Immediate Email (1 min)</SubLabel>
-                          <div className="bg-[#131720] border border-[#1c2438] rounded-lg p-3 space-y-2">
-                            <p className="text-[11px] text-[#3d4460]">Subject: <span className="text-[#eef1f8] font-medium">{displayPlan.ghlWorkflow.immediateEmail.subject}</span></p>
-                            <pre className="text-[11px] text-[#5a6278] leading-relaxed whitespace-pre-wrap font-sans">{displayPlan.ghlWorkflow.immediateEmail.body}</pre>
+                          <div className="bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3 space-y-2">
+                            <p className="text-[11px] text-[#3d4f6e]">Subject: <span className="text-[#f8f8f7] font-medium">{displayPlan.ghlWorkflow.immediateEmail.subject}</span></p>
+                            <pre className="text-[11px] text-[#6b7a99] leading-relaxed whitespace-pre-wrap font-sans">{displayPlan.ghlWorkflow.immediateEmail.body}</pre>
                           </div>
                         </div>
                         <div>
                           <SubLabel>Internal Notification</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-snug bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.ghlWorkflow.internalNotification}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-snug bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.ghlWorkflow.internalNotification}</p>
                         </div>
                         <div>
                           <SubLabel>Setter Task</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-snug">{displayPlan.ghlWorkflow.setterTask}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-snug">{displayPlan.ghlWorkflow.setterTask}</p>
                         </div>
                         <div>
                           <SubLabel>AI Voice Follow-Up (if no call within 10 min)</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#f07820]/15 rounded-lg p-3">{displayPlan.ghlWorkflow.aiVoiceTrigger}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[#ff8400]/15 rounded-lg p-3">{displayPlan.ghlWorkflow.aiVoiceTrigger}</p>
                         </div>
                         <div>
                           <SubLabel>Booked Appointment — Stop Condition</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-snug bg-[#131720] border border-[#22c55e]/15 rounded-lg p-3">{displayPlan.ghlWorkflow.bookedStopCondition}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-snug bg-[#0f1a28] border border-[#22c55e]/15 rounded-lg p-3">{displayPlan.ghlWorkflow.bookedStopCondition}</p>
                         </div>
                         <div>
                           <SubLabel>Full Workflow ({displayPlan.ghlWorkflow.steps.length} steps)</SubLabel>
@@ -1515,11 +1535,11 @@ function AICampaignBuilderContent() {
                       <div className="space-y-5">
                         <div>
                           <SubLabel>Creative Angle</SubLabel>
-                          <p className="text-[13px] font-semibold text-[#eef1f8]">{displayPlan.creativeDirection.angle}</p>
+                          <p className="text-[13px] font-semibold text-[#f8f8f7]">{displayPlan.creativeDirection.angle}</p>
                         </div>
                         <div>
                           <SubLabel>Hook</SubLabel>
-                          <p className="text-[14px] font-medium italic text-[#eef1f8] leading-snug bg-[#131720] border border-[#f07820]/20 rounded-lg p-4">{displayPlan.creativeDirection.hook}</p>
+                          <p className="text-[14px] font-medium italic text-[#f8f8f7] leading-snug bg-[#0f1a28] border border-[#ff8400]/20 rounded-lg p-4">{displayPlan.creativeDirection.hook}</p>
                         </div>
                         <div>
                           <SubLabel>Shot List</SubLabel>
@@ -1527,15 +1547,15 @@ function AICampaignBuilderContent() {
                         </div>
                         <div>
                           <SubLabel>Text Overlays</SubLabel>
-                          <BulletList items={displayPlan.creativeDirection.textOverlays} color="#f07820" />
+                          <BulletList items={displayPlan.creativeDirection.textOverlays} color="#ff8400" />
                         </div>
                         <div>
                           <SubLabel>Voiceover Script (30 sec)</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed bg-[#131720] border border-[#1c2438] rounded-lg p-3">{displayPlan.creativeDirection.voiceoverScript}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg p-3">{displayPlan.creativeDirection.voiceoverScript}</p>
                         </div>
                         <div>
                           <SubLabel>Recommended Format</SubLabel>
-                          <p className="text-[12px] text-[#5a6278]">{displayPlan.creativeDirection.recommendedFormat}</p>
+                          <p className="text-[12px] text-[#6b7a99]">{displayPlan.creativeDirection.recommendedFormat}</p>
                         </div>
                         <div>
                           <SubLabel>Recommended Placements</SubLabel>
@@ -1543,8 +1563,8 @@ function AICampaignBuilderContent() {
                             {displayPlan.creativeDirection.recommendedPlacements.map((p, i) => (
                               <span key={p} className={`px-2.5 py-1 text-[11px] font-medium rounded-lg border ${
                                 i === 0
-                                  ? "bg-[#f07820]/10 border-[#f07820]/25 text-[#f07820]"
-                                  : "bg-[#131720] border-[#1c2438] text-[#5a6278]"
+                                  ? "bg-[#ff8400]/10 border-[#ff8400]/25 text-[#ff8400]"
+                                  : "bg-[#0f1a28] border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99]"
                               }`}>
                                 {i === 0 ? "★ " : ""}{p}
                               </span>
@@ -1567,26 +1587,26 @@ function AICampaignBuilderContent() {
                             <p className={`text-[12px] font-semibold ${displayPlan.compliance.metaRisk.startsWith("MEDIUM") ? "text-[#f59e0b]" : "text-[#22c55e]"}`}>
                               {displayPlan.compliance.metaRisk.split(" —")[0]} Risk
                             </p>
-                            <p className="text-[11px] text-[#5a6278] mt-0.5">{displayPlan.compliance.metaRisk.split(" — ")[1]}</p>
+                            <p className="text-[11px] text-[#6b7a99] mt-0.5">{displayPlan.compliance.metaRisk.split(" — ")[1]}</p>
                           </div>
                         </div>
                         <div>
                           <SubLabel>SMS / TCPA Compliance</SubLabel>
-                          <p className="text-[12px] text-[#5a6278] leading-relaxed">{displayPlan.compliance.smsCompliance}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-relaxed">{displayPlan.compliance.smsCompliance}</p>
                         </div>
                         {displayPlan.compliance.insuranceRisk !== "N/A — No insurance claim language in this campaign category." && (
                           <div>
                             <SubLabel>Insurance Claim Risk</SubLabel>
-                            <p className="text-[12px] text-[#5a6278] leading-relaxed">{displayPlan.compliance.insuranceRisk}</p>
+                            <p className="text-[12px] text-[#6b7a99] leading-relaxed">{displayPlan.compliance.insuranceRisk}</p>
                           </div>
                         )}
                         <div>
                           <SubLabel>Disallowed Wording</SubLabel>
                           <div className="space-y-1.5">
                             {displayPlan.compliance.disallowedPhrases.map((phrase, i) => (
-                              <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[#131720] border border-[#ef4444]/15 rounded-lg">
+                              <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[#0f1a28] border border-[#ef4444]/15 rounded-lg">
                                 <AlertCircle size={11} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
-                                <span className="text-[12px] text-[#5a6278]">{phrase}</span>
+                                <span className="text-[12px] text-[#6b7a99]">{phrase}</span>
                               </div>
                             ))}
                           </div>
@@ -1597,7 +1617,7 @@ function AICampaignBuilderContent() {
                             {displayPlan.compliance.approvalWarnings.map((w, i) => (
                               <div key={i} className="flex items-start gap-2 px-3 py-2 bg-[#f59e0b]/5 border border-[#f59e0b]/15 rounded-lg">
                                 <AlertCircle size={11} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-                                <span className="text-[12px] text-[#5a6278] leading-snug">{w}</span>
+                                <span className="text-[12px] text-[#6b7a99] leading-snug">{w}</span>
                               </div>
                             ))}
                           </div>
@@ -1617,9 +1637,9 @@ function AICampaignBuilderContent() {
                             { label: "Budget Scaling Rule", value: displayPlan.optimization.budgetScalingRule, color: "#22c55e" },
                             { label: "Pause Rule", value: displayPlan.optimization.pauseRule, color: "#ef4444" },
                           ].map(({ label, value, color }) => (
-                            <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                            <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                               <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color }}>{label}</div>
-                              <p className="text-[12px] text-[#5a6278] leading-snug">{value}</p>
+                              <p className="text-[12px] text-[#6b7a99] leading-snug">{value}</p>
                             </div>
                           ))}
                         </div>
@@ -1627,9 +1647,9 @@ function AICampaignBuilderContent() {
                           <SubLabel>Human Approval Required For</SubLabel>
                           <BulletList items={displayPlan.optimization.humanApprovalTriggers} color="#a78bfa" />
                         </div>
-                        <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
-                          <div className="text-[10px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1">Veronica Safety Rule</div>
-                          <p className="text-[11px] text-[#5a6278] leading-snug">
+                        <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                          <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">Veronica Safety Rule</div>
+                          <p className="text-[11px] text-[#6b7a99] leading-snug">
                             Veronica generates drafts and recommendations only. Veronica cannot publish campaigns, activate ads, increase budgets, send reports, or push GHL workflows without explicit human approval.
                           </p>
                         </div>
@@ -1644,12 +1664,12 @@ function AICampaignBuilderContent() {
                           { label: "Urgency Trigger", value: displayPlan.buyerPsychologyUsed.urgencyTrigger, color: "#f59e0b" },
                           { label: "Trust Trigger Used", value: displayPlan.buyerPsychologyUsed.trustTriggerUsed, color: "#22c55e" },
                           { label: "Objection Addressed", value: displayPlan.buyerPsychologyUsed.objectionAddressed, color: "#ef4444" },
-                          { label: "Hook Rationale", value: displayPlan.buyerPsychologyUsed.hookRationale, color: "#f07820" },
-                          { label: "CTA Rationale", value: displayPlan.buyerPsychologyUsed.ctaRationale, color: "#18b8f0" },
+                          { label: "Hook Rationale", value: displayPlan.buyerPsychologyUsed.hookRationale, color: "#ff8400" },
+                          { label: "CTA Rationale", value: displayPlan.buyerPsychologyUsed.ctaRationale, color: "#0081f2" },
                         ].map(({ label, value, color }) => (
-                          <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                          <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                             <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color }}>{label}</div>
-                            <p className="text-[12px] text-[#5a6278] leading-snug">{value}</p>
+                            <p className="text-[12px] text-[#6b7a99] leading-snug">{value}</p>
                           </div>
                         ))}
                       </div>
@@ -1660,14 +1680,14 @@ function AICampaignBuilderContent() {
                       <div className="space-y-4">
                         {[
                           { label: "Market Summary", value: displayPlan.marketResearchUsed.marketSummary, color: "#22c55e" },
-                          { label: "Competitor Angle", value: displayPlan.marketResearchUsed.competitorAngle, color: "#f07820" },
-                          { label: "Audience Rationale", value: displayPlan.marketResearchUsed.audienceRationale, color: "#18b8f0" },
+                          { label: "Competitor Angle", value: displayPlan.marketResearchUsed.competitorAngle, color: "#ff8400" },
+                          { label: "Audience Rationale", value: displayPlan.marketResearchUsed.audienceRationale, color: "#0081f2" },
                           { label: "Location Rationale", value: displayPlan.marketResearchUsed.locationRationale, color: "#a78bfa" },
                           { label: "Seasonality Note", value: displayPlan.marketResearchUsed.seasonalityNote, color: "#f59e0b" },
                         ].map(({ label, value, color }) => (
-                          <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                          <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                             <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color }}>{label}</div>
-                            <p className="text-[12px] text-[#5a6278] leading-snug">{value}</p>
+                            <p className="text-[12px] text-[#6b7a99] leading-snug">{value}</p>
                           </div>
                         ))}
                       </div>
@@ -1676,25 +1696,25 @@ function AICampaignBuilderContent() {
                     {/* 11 — Strategic Rationale */}
                     {activeSection === "rationale" && displayPlan?.strategicRationale && (
                       <div className="space-y-4">
-                        <div className="p-4 bg-[#c9a84c]/5 border border-[#c9a84c]/20 rounded-lg">
-                          <div className="text-[10px] font-semibold text-[#c9a84c] uppercase tracking-wider mb-1.5">Why This Campaign Was Built This Way</div>
-                          <p className="text-[12px] text-[#eef1f8] leading-relaxed">{displayPlan.strategicRationale.whyThisCampaign}</p>
+                        <div className="p-4 bg-[#ff8400]/5 border border-[#ff8400]/20 rounded-lg">
+                          <div className="text-[10px] font-semibold text-[#ff8400] uppercase tracking-wider mb-1.5">Why This Campaign Was Built This Way</div>
+                          <p className="text-[12px] text-[#f8f8f7] leading-relaxed">{displayPlan.strategicRationale.whyThisCampaign}</p>
                         </div>
                         <div className="grid grid-cols-1 gap-3">
                           {[
                             { label: "Buyer Insight Used", value: displayPlan.strategicRationale.buyerInsightUsed, color: "#a78bfa" },
                             { label: "Market Insight Used", value: displayPlan.strategicRationale.marketInsightUsed, color: "#22c55e" },
-                            { label: "Offer Angle Used", value: displayPlan.strategicRationale.offerAngleUsed, color: "#f07820" },
-                            { label: "Creative Angle Used", value: displayPlan.strategicRationale.creativeAngleUsed, color: "#18b8f0" },
+                            { label: "Offer Angle Used", value: displayPlan.strategicRationale.offerAngleUsed, color: "#ff8400" },
+                            { label: "Creative Angle Used", value: displayPlan.strategicRationale.creativeAngleUsed, color: "#0081f2" },
                             { label: "Trust Trigger Used", value: displayPlan.strategicRationale.trustTriggerUsed, color: "#22c55e" },
                             { label: "Objection Addressed", value: displayPlan.strategicRationale.objectionAddressed, color: "#ef4444" },
                             { label: "Audience Rationale", value: displayPlan.strategicRationale.audienceRationale, color: "#a78bfa" },
                             { label: "Lead Form Rationale", value: displayPlan.strategicRationale.leadFormRationale, color: "#f59e0b" },
-                            { label: "Follow-Up Rationale", value: displayPlan.strategicRationale.followUpRationale, color: "#18b8f0" },
+                            { label: "Follow-Up Rationale", value: displayPlan.strategicRationale.followUpRationale, color: "#0081f2" },
                           ].map(({ label, value, color }) => (
-                            <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                            <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                               <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color }}>{label}</div>
-                              <p className="text-[12px] text-[#5a6278] leading-snug">{value}</p>
+                              <p className="text-[12px] text-[#6b7a99] leading-snug">{value}</p>
                             </div>
                           ))}
                         </div>
@@ -1722,20 +1742,20 @@ function AICampaignBuilderContent() {
                           </div>
                           <div className="flex items-center gap-3">
                             <div>
-                              <div className="text-[13px] font-bold text-[#eef1f8]">{displayPlan.creativeIntelligenceUsed.assetType}</div>
+                              <div className="text-[13px] font-bold text-[#f8f8f7]">{displayPlan.creativeIntelligenceUsed.assetType}</div>
                               <div className="text-[11px] text-[#a78bfa]">{displayPlan.creativeIntelligenceUsed.creativeStrength}</div>
                             </div>
                           </div>
                         </div>
 
                         {/* Why this creative */}
-                        <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                        <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                           <div className="text-[10px] font-semibold text-[#a78bfa] uppercase tracking-wider mb-1.5">Why This Creative</div>
-                          <p className="text-[12px] text-[#5a6278] leading-snug">{displayPlan.creativeIntelligenceUsed.whyThisCreative}</p>
+                          <p className="text-[12px] text-[#6b7a99] leading-snug">{displayPlan.creativeIntelligenceUsed.whyThisCreative}</p>
                         </div>
 
                         {/* Trust signals */}
-                        <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                        <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                           <div className="text-[10px] font-semibold text-[#22c55e] uppercase tracking-wider mb-2">Trust Signals</div>
                           <div className="flex flex-wrap gap-1.5">
                             {displayPlan.creativeIntelligenceUsed.trustSignals.map((s) => (
@@ -1748,28 +1768,28 @@ function AICampaignBuilderContent() {
                         <div className="grid grid-cols-1 gap-3">
                           {[
                             { label: "Buyer Intent Level", value: displayPlan.creativeIntelligenceUsed.buyerIntent, color: "#f59e0b" },
-                            { label: "Recommended Angle", value: displayPlan.creativeIntelligenceUsed.recommendedAngle, color: "#18b8f0" },
-                            { label: "Recommended Hook", value: displayPlan.creativeIntelligenceUsed.recommendedHook, color: "#f07820" },
-                            { label: "Recommended CTA", value: displayPlan.creativeIntelligenceUsed.recommendedCTA, color: "#c9a84c" },
+                            { label: "Recommended Angle", value: displayPlan.creativeIntelligenceUsed.recommendedAngle, color: "#0081f2" },
+                            { label: "Recommended Hook", value: displayPlan.creativeIntelligenceUsed.recommendedHook, color: "#ff8400" },
+                            { label: "Recommended CTA", value: displayPlan.creativeIntelligenceUsed.recommendedCTA, color: "#ff8400" },
                             { label: "Compliance Note", value: displayPlan.creativeIntelligenceUsed.complianceNote, color: "#ef4444" },
                             { label: "Retargeting Use", value: displayPlan.creativeIntelligenceUsed.retargetingUse, color: "#a78bfa" },
                           ].map(({ label, value, color }) => (
-                            <div key={label} className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
+                            <div key={label} className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
                               <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color }}>{label}</div>
-                              <p className="text-[12px] text-[#5a6278] leading-snug">{value}</p>
+                              <p className="text-[12px] text-[#6b7a99] leading-snug">{value}</p>
                             </div>
                           ))}
                         </div>
 
                         {/* Placement recommendations */}
-                        <div className="p-3 bg-[#131720] border border-[#1c2438] rounded-lg">
-                          <div className="text-[10px] font-semibold text-[#18b8f0] uppercase tracking-wider mb-2">Placement Recommendations</div>
+                        <div className="p-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
+                          <div className="text-[10px] font-semibold text-[#0081f2] uppercase tracking-wider mb-2">Placement Recommendations</div>
                           <div className="space-y-1">
                             {displayPlan.creativeIntelligenceUsed.placementRecommendation.map((p, i) => (
                               <div key={p} className="flex items-center gap-2 text-[12px]">
-                                <span className="text-[10px] font-bold text-[#3d4460] w-4">{i + 1}.</span>
-                                <span className={i === 0 ? "text-[#eef1f8] font-medium" : "text-[#5a6278]"}>{p}</span>
-                                {i === 0 && <span className="text-[9px] px-1.5 py-0.5 bg-[#18b8f0]/15 text-[#18b8f0] border border-[#18b8f0]/20 rounded-full">Primary</span>}
+                                <span className="text-[10px] font-bold text-[#3d4f6e] w-4">{i + 1}.</span>
+                                <span className={i === 0 ? "text-[#f8f8f7] font-medium" : "text-[#6b7a99]"}>{p}</span>
+                                {i === 0 && <span className="text-[9px] px-1.5 py-0.5 bg-[#0081f2]/15 text-[#0081f2] border border-[#0081f2]/20 rounded-full">Primary</span>}
                               </div>
                             ))}
                           </div>
@@ -1787,11 +1807,11 @@ function AICampaignBuilderContent() {
                       if (idx > 0) setActiveSection(visibleSectionTabs[idx - 1].id);
                     }}
                     disabled={activeSection === visibleSectionTabs[0]?.id}
-                    className="text-[11px] text-[#5a6278] hover:text-[#eef1f8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="text-[11px] text-[#6b7a99] hover:text-[#f8f8f7] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     ← Previous section
                   </button>
-                  <span className="text-[10px] text-[#3d4460]">
+                  <span className="text-[10px] text-[#3d4f6e]">
                     {visibleSectionTabs.findIndex((s) => s.id === activeSection) + 1} / {visibleSectionTabs.length}
                   </span>
                   <button
@@ -1800,7 +1820,7 @@ function AICampaignBuilderContent() {
                       if (idx < visibleSectionTabs.length - 1) setActiveSection(visibleSectionTabs[idx + 1].id);
                     }}
                     disabled={activeSection === visibleSectionTabs[visibleSectionTabs.length - 1]?.id}
-                    className="text-[11px] text-[#5a6278] hover:text-[#eef1f8] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="text-[11px] text-[#6b7a99] hover:text-[#f8f8f7] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
                     Next section →
                   </button>
@@ -1815,24 +1835,24 @@ function AICampaignBuilderContent() {
       {activeTab === "plans" && (
         <div>
           {plans.length === 0 ? (
-            <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-16 flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mb-3">
-                <FileText size={18} className="text-[#3d4460]" />
+            <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mb-3">
+                <FileText size={18} className="text-[#3d4f6e]" />
               </div>
-              <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">No plans saved yet</div>
-              <p className="text-[12px] text-[#5a6278]">
+              <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No plans saved yet</div>
+              <p className="text-[12px] text-[#6b7a99]">
                 Generate and save a campaign plan from the Build Campaign tab.
               </p>
             </div>
           ) : (
-            <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
+            <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="border-b border-[#1c2438]">
+                  <tr className="border-b border-[rgba(0, 129, 242, 0.15)]">
                     {["Client", "Campaign", "Goal", "Budget", "Saved", "Status", ""].map((h, i) => (
                       <th
                         key={`${h}-${i}`}
-                        className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4460] uppercase tracking-widest ${
+                        className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${
                           ["Client", "Campaign"].includes(h) ? "text-left" : h === "" ? "" : "text-right"
                         }`}
                       >
@@ -1845,18 +1865,18 @@ function AICampaignBuilderContent() {
                   {plans.map((p, i) => (
                     <tr
                       key={p.id}
-                      className={`border-b border-[#1c2438]/60 hover:bg-[#131720]/60 transition-colors ${
+                      className={`border-b border-[rgba(0, 129, 242, 0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors ${
                         i === plans.length - 1 ? "border-b-0" : ""
                       }`}
                     >
                       <td className="px-4 py-3.5">
-                        <div className="font-semibold text-[#eef1f8]">{p.clientName}</div>
-                        <div className="text-[10px] font-mono text-[#3d4460]">{p.clientId}</div>
+                        <div className="font-semibold text-[#f8f8f7]">{p.clientName}</div>
+                        <div className="text-[10px] font-mono text-[#3d4f6e]">{p.clientId}</div>
                       </td>
-                      <td className="px-4 py-3.5 text-[#5a6278] max-w-[200px] truncate">{p.campaignName}</td>
-                      <td className="px-4 py-3.5 text-right text-[#eef1f8]">{p.goal}</td>
-                      <td className="px-4 py-3.5 text-right text-[#eef1f8]">{p.budget}</td>
-                      <td className="px-4 py-3.5 text-right text-[#5a6278]">{p.updatedAt}</td>
+                      <td className="px-4 py-3.5 text-[#6b7a99] max-w-[200px] truncate">{p.campaignName}</td>
+                      <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{p.goal}</td>
+                      <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{p.budget}</td>
+                      <td className="px-4 py-3.5 text-right text-[#6b7a99]">{p.updatedAt}</td>
                       <td className="px-4 py-3.5 text-right">
                         <Badge label={draftStatusLabel[p.status]} variant={draftStatusVariant[p.status]} />
                       </td>
@@ -1867,7 +1887,7 @@ function AICampaignBuilderContent() {
                             setActiveSection("overview");
                             setActiveTab("builder");
                           }}
-                          className="text-[11px] text-[#18b8f0] hover:underline"
+                          className="text-[11px] text-[#0081f2] hover:underline"
                         >
                           View
                         </button>
@@ -1885,23 +1905,23 @@ function AICampaignBuilderContent() {
       {activeTab === "console" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div
-            className="lg:col-span-2 flex flex-col bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden"
+            className="lg:col-span-2 flex flex-col bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden"
             style={{ minHeight: "520px" }}
           >
-            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[#1c2438]">
-              <Bot size={14} className="text-[#18b8f0]" />
-              <span className="text-[13px] font-semibold text-[#eef1f8]">Veronica Console</span>
-              <span className="ml-auto text-[10px] text-[#3d4460]">Veronica by Vault Co · 4 clients · Meta + GHL connected</span>
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0, 129, 242, 0.15)]">
+              <Bot size={14} className="text-[#0081f2]" />
+              <span className="text-[13px] font-semibold text-[#f8f8f7]">Veronica Console</span>
+              <span className="ml-auto text-[10px] text-[#3d4f6e]">Veronica by Vault Co · 4 clients · Meta + GHL connected</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chat.map((msg, i) => (
                 <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${msg.role === "agent" ? "bg-[#0c0f15] border border-[#18b8f0]/30" : "bg-[#f07820]/15 border border-[#f07820]/25"}`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${msg.role === "agent" ? "bg-[#0D1520] border border-[#0081f2]/30" : "bg-[#ff8400]/15 border border-[#ff8400]/25"}`}>
                     {msg.role === "agent"
                       ? <Image src="/vaultco-logo.png" alt="Agent" width={28} height={28} className="object-cover scale-[1.8] translate-y-[-2px]" />
-                      : <span className="text-[10px] font-bold text-[#f07820]">VC</span>}
+                      : <span className="text-[10px] font-bold text-[#ff8400]">VC</span>}
                   </div>
-                  <div className={`max-w-md px-4 py-3 rounded-xl text-[13px] leading-relaxed ${msg.role === "agent" ? "bg-[#131720] border border-[#1c2438] text-[#eef1f8]" : "bg-[#f07820]/10 border border-[#f07820]/15 text-[#eef1f8]"}`}>
+                  <div className={`max-w-md px-4 py-3 rounded-xl text-[13px] leading-relaxed ${msg.role === "agent" ? "bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#f8f8f7]" : "bg-[#ff8400]/10 border border-[#ff8400]/15 text-[#f8f8f7]"}`}>
                     {msg.text}
                   </div>
                 </div>
@@ -1909,7 +1929,7 @@ function AICampaignBuilderContent() {
             </div>
             <div className="px-4 pt-3 flex flex-wrap gap-2">
               {agentSuggestions.map((s) => (
-                <button key={s} onClick={() => setConsoleMessage(s)} className="text-[11px] px-3 py-1.5 bg-[#131720] border border-[#1c2438] text-[#5a6278] hover:text-[#18b8f0] hover:border-[#18b8f0]/25 rounded-full transition-colors">{s}</button>
+                <button key={s} onClick={() => setConsoleMessage(s)} className="text-[11px] px-3 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#0081f2] hover:border-[#0081f2]/25 rounded-full transition-colors">{s}</button>
               ))}
             </div>
             <div className="p-4 flex gap-3">
@@ -1919,31 +1939,31 @@ function AICampaignBuilderContent() {
                 onChange={(e) => setConsoleMessage(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendConsoleMessage()}
                 placeholder="Build a campaign, write copy, analyze a client..."
-                className="flex-1 px-4 py-2.5 bg-[#131720] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
+                className="flex-1 px-4 py-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[13px] text-[#f8f8f7] placeholder-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
               />
               <button onClick={sendConsoleMessage} className="w-10 h-10 flex items-center justify-center vc-orange-gradient text-white rounded-lg transition-opacity hover:opacity-90 flex-shrink-0">
                 <Send size={14} />
               </button>
             </div>
           </div>
-          <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[#1c2438]">
-              <Zap size={13} className="text-[#f07820]" />
-              <span className="text-[13px] font-semibold text-[#eef1f8]">Recent Actions</span>
+          <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[rgba(0, 129, 242, 0.15)]">
+              <Zap size={13} className="text-[#ff8400]" />
+              <span className="text-[13px] font-semibold text-[#f8f8f7]">Recent Actions</span>
             </div>
             <div className="p-3 space-y-2">
               {agentActions.map((a, i) => (
-                <div key={i} className="flex gap-2.5 p-2.5 rounded-lg bg-[#131720] border border-[#1c2438]/60">
+                <div key={i} className="flex gap-2.5 p-2.5 rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)]/60">
                   <div className="mt-0.5 flex-shrink-0">
                     {a.type === "success" && <Zap size={11} className="text-[#22c55e]" />}
                     {a.type === "warning" && <AlertCircle size={11} className="text-[#f59e0b]" />}
-                    {a.type === "blue" && <Sparkles size={11} className="text-[#18b8f0]" />}
-                    {a.type === "orange" && <AlertCircle size={11} className="text-[#f07820]" />}
+                    {a.type === "blue" && <Sparkles size={11} className="text-[#0081f2]" />}
+                    {a.type === "orange" && <AlertCircle size={11} className="text-[#ff8400]" />}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] text-[#eef1f8] font-medium leading-snug">{a.action}</p>
-                    <p className="text-[10px] text-[#5a6278] mt-0.5 leading-snug">{a.reason}</p>
-                    <p className="text-[10px] text-[#3d4460] mt-0.5">{a.time}</p>
+                    <p className="text-[11px] text-[#f8f8f7] font-medium leading-snug">{a.action}</p>
+                    <p className="text-[10px] text-[#6b7a99] mt-0.5 leading-snug">{a.reason}</p>
+                    <p className="text-[10px] text-[#3d4f6e] mt-0.5">{a.time}</p>
                   </div>
                 </div>
               ))}
@@ -1955,23 +1975,23 @@ function AICampaignBuilderContent() {
       {/* ── Automation Rules ── */}
       {activeTab === "automation" && (
         <div className="max-w-2xl">
-          <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#1c2438]">
+          <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
               <div className="flex items-center gap-2">
-                <Sparkles size={13} className="text-[#18b8f0]" />
-                <span className="text-[13px] font-semibold text-[#eef1f8]">Automation Rules</span>
+                <Sparkles size={13} className="text-[#0081f2]" />
+                <span className="text-[13px] font-semibold text-[#f8f8f7]">Automation Rules</span>
               </div>
-              <span className="text-[11px] text-[#5a6278]">Applied to all active clients</span>
+              <span className="text-[11px] text-[#6b7a99]">Applied to all active clients</span>
             </div>
             <div className="p-4 space-y-1">
               {automationRules.map((rule) => (
-                <div key={rule.label} className="flex items-start gap-4 p-3.5 rounded-lg hover:bg-[#131720] transition-colors">
-                  <div className={`mt-0.5 w-9 h-5 rounded-full flex-shrink-0 relative cursor-pointer transition-colors ${rule.enabled ? "bg-[#18b8f0]/65" : "bg-[#1c2438]"}`}>
+                <div key={rule.label} className="flex items-start gap-4 p-3.5 rounded-lg hover:bg-[#0f1a28] transition-colors">
+                  <div className={`mt-0.5 w-9 h-5 rounded-full flex-shrink-0 relative cursor-pointer transition-colors ${rule.enabled ? "bg-[#0081f2]/65" : "bg-[rgba(0, 129, 242, 0.15)]"}`}>
                     <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-transform shadow-sm ${rule.enabled ? "translate-x-5" : "translate-x-1"}`} />
                   </div>
                   <div>
-                    <div className="text-[12px] font-medium text-[#eef1f8]">{rule.label}</div>
-                    <div className="text-[11px] text-[#5a6278] mt-0.5 leading-snug">{rule.description}</div>
+                    <div className="text-[12px] font-medium text-[#f8f8f7]">{rule.label}</div>
+                    <div className="text-[11px] text-[#6b7a99] mt-0.5 leading-snug">{rule.description}</div>
                   </div>
                 </div>
               ))}

@@ -86,18 +86,18 @@ function IntelCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
+    <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#131720] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#0f1a28] transition-colors"
       >
         <div className="flex items-center gap-2">
           <Icon size={13} style={{ color }} />
-          <span className="text-[12px] font-semibold text-[#eef1f8]">{title}</span>
+          <span className="text-[12px] font-semibold text-[#f8f8f7]">{title}</span>
         </div>
-        {open ? <ChevronUp size={13} className="text-[#5a6278]" /> : <ChevronDown size={13} className="text-[#5a6278]" />}
+        {open ? <ChevronUp size={13} className="text-[#6b7a99]" /> : <ChevronDown size={13} className="text-[#6b7a99]" />}
       </button>
-      {open && <div className="px-4 pb-4 pt-1 border-t border-[#1c2438]">{children}</div>}
+      {open && <div className="px-4 pb-4 pt-1 border-t border-[rgba(0, 129, 242, 0.15)]">{children}</div>}
     </div>
   );
 }
@@ -105,23 +105,23 @@ function IntelCard({
 function FieldRow({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-3 py-1.5 border-b border-[#1c2438]/40 last:border-0">
-      <span className="text-[11px] text-[#3d4460] w-36 flex-shrink-0 pt-0.5">{label}</span>
-      <span className="text-[12px] text-[#eef1f8] leading-snug flex-1">{value}</span>
+    <div className="flex items-start gap-3 py-1.5 border-b border-[rgba(0, 129, 242, 0.15)]/40 last:border-0">
+      <span className="text-[11px] text-[#3d4f6e] w-36 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-[12px] text-[#f8f8f7] leading-snug flex-1">{value}</span>
     </div>
   );
 }
 
-function BulletField({ label, items, color = "#5a6278" }: { label: string; items: string[]; color?: string }) {
+function BulletField({ label, items, color = "#6b7a99" }: { label: string; items: string[]; color?: string }) {
   if (!items || items.length === 0) return null;
   return (
-    <div className="py-1.5 border-b border-[#1c2438]/40 last:border-0">
-      <div className="text-[11px] text-[#3d4460] mb-1.5">{label}</div>
+    <div className="py-1.5 border-b border-[rgba(0, 129, 242, 0.15)]/40 last:border-0">
+      <div className="text-[11px] text-[#3d4f6e] mb-1.5">{label}</div>
       <ul className="space-y-1">
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <span className="mt-2 w-1 h-1 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-            <span className="text-[12px] text-[#eef1f8] leading-snug">{item}</span>
+            <span className="text-[12px] text-[#f8f8f7] leading-snug">{item}</span>
           </li>
         ))}
       </ul>
@@ -189,29 +189,29 @@ function FileUploadModal({
     onClose();
   }
 
-  const labelCls = "text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider mb-1 block";
-  const inputCls = "w-full bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2 text-[12px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/50 transition-colors";
+  const labelCls = "text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1 block";
+  const inputCls = "w-full bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2 text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-[#0c0f15] border border-[#1c2438] rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1c2438]">
+      <div className="relative w-full max-w-md bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
           <div className="flex items-center gap-2">
-            <Upload size={14} className="text-[#c9a84c]" />
-            <span className="text-[13px] font-semibold text-[#eef1f8]">Upload File</span>
+            <Upload size={14} className="text-[#ff8400]" />
+            <span className="text-[13px] font-semibold text-[#f8f8f7]">Upload File</span>
           </div>
-          <button onClick={onClose} className="text-[#5a6278] hover:text-[#eef1f8] transition-colors">
+          <button onClick={onClose} className="text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
             <X size={15} />
           </button>
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           {/* Mock storage notice */}
-          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4460]/15 border border-[#3d4460]/30 rounded-lg">
-            <AlertCircle size={12} className="text-[#5a6278] flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-[#5a6278] leading-snug">
-              <span className="text-[#eef1f8] font-semibold">Mock storage mode. </span>
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
+            <AlertCircle size={12} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-[#6b7a99] leading-snug">
+              <span className="text-[#f8f8f7] font-semibold">Mock storage mode. </span>
               File metadata is saved locally. Connect Supabase Storage to persist actual file bytes.
             </p>
           </div>
@@ -219,7 +219,7 @@ function FileUploadModal({
           {/* Drop zone / file input */}
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[#1c2438] rounded-xl p-8 text-center hover:border-[#263050] transition-colors cursor-pointer"
+            className="border-2 border-dashed border-[rgba(0, 129, 242, 0.15)] rounded-xl p-8 text-center hover:border-[rgba(0, 129, 242, 0.25)] transition-colors cursor-pointer"
           >
             <input
               ref={fileInputRef}
@@ -230,19 +230,19 @@ function FileUploadModal({
             />
             {fileName ? (
               <div className="space-y-1">
-                <FileIcon size={20} className="text-[#c9a84c] mx-auto" />
-                <div className="text-[12px] font-semibold text-[#eef1f8]">{fileName}</div>
-                <div className="text-[10px] text-[#5a6278]">{formatFileSize(fileSize)}</div>
+                <FileIcon size={20} className="text-[#ff8400] mx-auto" />
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">{fileName}</div>
+                <div className="text-[10px] text-[#6b7a99]">{formatFileSize(fileSize)}</div>
               </div>
             ) : (
               <>
-                <div className="w-10 h-10 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mx-auto mb-3">
-                  <Upload size={16} className="text-[#3d4460]" />
+                <div className="w-10 h-10 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
+                  <Upload size={16} className="text-[#3d4f6e]" />
                 </div>
-                <div className="text-[12px] text-[#5a6278]">
+                <div className="text-[12px] text-[#6b7a99]">
                   Click to browse or drop file here
                 </div>
-                <div className="text-[10px] text-[#3d4460] mt-1">PDF, JPG, PNG, MP4, MOV, DOC · Max 100MB</div>
+                <div className="text-[10px] text-[#3d4f6e] mt-1">PDF, JPG, PNG, MP4, MOV, DOC · Max 100MB</div>
               </>
             )}
           </div>
@@ -270,8 +270,8 @@ function FileUploadModal({
                     onClick={() => setCategory(cat)}
                     className={`px-3 py-2 rounded-lg text-[11px] font-medium text-left transition-colors border ${
                       category === cat
-                        ? "text-[#eef1f8] border-[#263050] bg-[#131720]"
-                        : "border-[#1c2438] text-[#5a6278] hover:text-[#eef1f8] hover:border-[#263050]"
+                        ? "text-[#f8f8f7] border-[rgba(0, 129, 242, 0.25)] bg-[#0f1a28]"
+                        : "border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)]"
                     }`}
                     style={category === cat ? { borderColor: `${color}50`, backgroundColor: `${color}10`, color } : {}}
                   >
@@ -295,8 +295,8 @@ function FileUploadModal({
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-[#1c2438] flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-[12px] text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] transition-colors">
+        <div className="px-5 py-4 border-t border-[rgba(0, 129, 242, 0.15)] flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 text-[12px] text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] transition-colors">
             Cancel
           </button>
           <button
@@ -347,9 +347,9 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
 
   function FileTypeIcon({ file }: { file: ClientFile }) {
     if (file.fileType === "pdf") return <FileText size={14} className="text-[#ef4444]" />;
-    if (file.fileType === "video") return <Video size={14} className="text-[#18b8f0]" />;
+    if (file.fileType === "video") return <Video size={14} className="text-[#0081f2]" />;
     if (file.fileType === "image") return <ImageIcon size={14} className="text-[#22c55e]" />;
-    return <FileIcon size={14} className="text-[#5a6278]" />;
+    return <FileIcon size={14} className="text-[#6b7a99]" />;
   }
 
   return (
@@ -357,13 +357,13 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-[14px] font-bold text-[#eef1f8]">Client Files</h3>
-          <p className="text-[12px] text-[#5a6278] mt-0.5">
+          <h3 className="text-[14px] font-bold text-[#f8f8f7]">Client Files</h3>
+          <p className="text-[12px] text-[#6b7a99] mt-0.5">
             Onboarding documents, contracts, creative assets, and reports
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#3d4460] px-2 py-1 bg-[#131720] border border-[#1c2438] rounded-lg">
+          <span className="text-[10px] text-[#3d4f6e] px-2 py-1 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
             Mock storage
           </span>
           {can("canUploadFiles") && (
@@ -388,13 +388,13 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
               onClick={() => setFilterCategory(filterCategory === cat ? "all" : cat)}
               className={`p-3 rounded-xl border text-left transition-all ${
                 filterCategory === cat
-                  ? "border-[#263050] bg-[#131720]"
-                  : "border-[#1c2438] bg-[#0c0f15] hover:border-[#263050]"
+                  ? "border-[rgba(0, 129, 242, 0.25)] bg-[#0f1a28]"
+                  : "border-[rgba(0, 129, 242, 0.15)] bg-[#0D1520] hover:border-[rgba(0, 129, 242, 0.25)]"
               }`}
               style={filterCategory === cat ? { borderColor: `${color}50` } : {}}
             >
               <div className="text-[18px] font-bold" style={{ color }}>{counts[cat] ?? 0}</div>
-              <div className="text-[9px] font-semibold text-[#3d4460] leading-tight mt-0.5">{FILE_CATEGORY_LABELS[cat]}</div>
+              <div className="text-[9px] font-semibold text-[#3d4f6e] leading-tight mt-0.5">{FILE_CATEGORY_LABELS[cat]}</div>
             </button>
           );
         })}
@@ -403,34 +403,34 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
       {/* File list */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 size={18} className="animate-spin text-[#5a6278]" />
+          <Loader2 size={18} className="animate-spin text-[#6b7a99]" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-10 text-center">
-          <Folder size={20} className="text-[#3d4460] mx-auto mb-3" />
-          <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">No files yet</div>
-          <p className="text-[12px] text-[#5a6278]">
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
+          <Folder size={20} className="text-[#3d4f6e] mx-auto mb-3" />
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No files yet</div>
+          <p className="text-[12px] text-[#6b7a99]">
             {can("canUploadFiles")
               ? "Upload onboarding documents, contracts, creative assets, and reports."
               : "No files have been uploaded for this client yet."}
           </p>
         </div>
       ) : (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-          <div className="divide-y divide-[#1c2438]">
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+          <div className="divide-y divide-[rgba(0, 129, 242, 0.15)]">
             {filtered.map((file) => {
               const catColor = FILE_CATEGORY_COLORS[file.category];
               return (
-                <div key={file.id} className="flex items-start gap-3 px-4 py-3.5 hover:bg-[#131720]/60 transition-colors group">
+                <div key={file.id} className="flex items-start gap-3 px-4 py-3.5 hover:bg-[#0f1a28]/60 transition-colors group">
                   {/* Icon */}
-                  <div className="w-9 h-9 rounded-lg bg-[#131720] border border-[#1c2438] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-9 h-9 rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center flex-shrink-0 mt-0.5">
                     <FileTypeIcon file={file} />
                   </div>
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2">
-                      <span className="text-[12px] font-semibold text-[#eef1f8] truncate">{file.fileName}</span>
+                      <span className="text-[12px] font-semibold text-[#f8f8f7] truncate">{file.fileName}</span>
                       <span
                         className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
                         style={{ color: catColor, backgroundColor: `${catColor}12`, borderColor: `${catColor}30` }}
@@ -444,9 +444,9 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
                       )}
                     </div>
                     {file.notes && (
-                      <p className="text-[11px] text-[#5a6278] mt-0.5 leading-snug line-clamp-1">{file.notes}</p>
+                      <p className="text-[11px] text-[#6b7a99] mt-0.5 leading-snug line-clamp-1">{file.notes}</p>
                     )}
-                    <div className="flex items-center gap-3 mt-1 text-[10px] text-[#3d4460]">
+                    <div className="flex items-center gap-3 mt-1 text-[10px] text-[#3d4f6e]">
                       <span>{formatFileSize(file.fileSize)}</span>
                       <span>·</span>
                       <span>Uploaded by {file.uploadedBy}</span>
@@ -460,7 +460,7 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
                     {can("canDeleteFiles") && (
                       <button
                         onClick={() => handleDelete(file.id)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg text-[#3d4460] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-[#3d4f6e] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors"
                         title="Delete file"
                       >
                         <Trash2 size={12} />
@@ -587,13 +587,13 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-[14px] font-bold text-[#eef1f8]">Client Intelligence</h3>
-          <p className="text-[12px] text-[#5a6278] mt-0.5">
+          <h3 className="text-[14px] font-bold text-[#f8f8f7]">Client Intelligence</h3>
+          <p className="text-[12px] text-[#6b7a99] mt-0.5">
             Onboarding summary, buyer psychology, market research, and campaign implications
           </p>
         </div>
         {intel?.extractedAt && (
-          <span className="text-[10px] text-[#3d4460]">Last extracted: {intel.extractedAt}</span>
+          <span className="text-[10px] text-[#3d4f6e]">Last extracted: {intel.extractedAt}</span>
         )}
       </div>
 
@@ -613,14 +613,14 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       )}
 
       {mockMode && (
-        <div className="flex items-start gap-2 px-4 py-3 bg-[#3d4460]/20 border border-[#3d4460]/40 rounded-xl">
-          <AlertCircle size={13} className="text-[#5a6278] flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 px-4 py-3 bg-[#3d4f6e]/20 border border-[#3d4f6e]/40 rounded-xl">
+          <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
           <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
-            <p className="text-[12px] text-[#5a6278]">
-              <span className="font-semibold text-[#eef1f8]">Mock extraction mode — </span>
+            <p className="text-[12px] text-[#6b7a99]">
+              <span className="font-semibold text-[#f8f8f7]">Mock extraction mode — </span>
               Showing Kaczmar Builders default intelligence as example. Set AI_PROVIDER=anthropic with a real key for live extraction.
             </p>
-            <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3d4460]/40 text-[#5a6278] border border-[#3d4460]/60 uppercase tracking-wider">Mock</span>
+            <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3d4f6e]/40 text-[#6b7a99] border border-[#3d4f6e]/60 uppercase tracking-wider">Mock</span>
           </div>
         </div>
       )}
@@ -628,17 +628,17 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       {extractError && !extractSuccess && (
         <div className="flex items-start gap-2 px-4 py-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
-          <p className="text-[12px] text-[#5a6278]">{extractError}</p>
+          <p className="text-[12px] text-[#6b7a99]">{extractError}</p>
         </div>
       )}
 
       {/* Onboarding Summary */}
-      <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-5 space-y-3">
+      <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] font-semibold text-[#3d4460] uppercase tracking-wider">
+          <label className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider">
             Onboarding Summary
           </label>
-          <span className="text-[10px] text-[#3d4460]">{summaryText.length} chars</span>
+          <span className="text-[10px] text-[#3d4f6e]">{summaryText.length} chars</span>
         </div>
 
         {/* PDF Upload */}
@@ -652,7 +652,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
           />
           <button
             onClick={() => pdfInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#131720] border border-[#1c2438] rounded-lg text-[11px] text-[#5a6278] hover:text-[#eef1f8] hover:border-[#263050] transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[11px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors"
           >
             <Paperclip size={11} />
             Upload PDF
@@ -669,7 +669,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
         {pdfNotice && (
           <div className="flex items-start gap-2 px-3 py-2.5 bg-[#a78bfa]/8 border border-[#a78bfa]/20 rounded-lg">
             <AlertCircle size={12} className="text-[#a78bfa] flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-[#5a6278] leading-snug">
+            <p className="text-[11px] text-[#6b7a99] leading-snug">
               <span className="text-[#a78bfa] font-semibold">PDF uploaded. </span>
               Text extraction will be added in the next phase. Paste summary text manually for now.
             </p>
@@ -681,13 +681,13 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
           onChange={(e) => setSummaryText(e.target.value)}
           placeholder="Paste the client's onboarding summary here. Include company profile, service area, target market, buyer psychology, competitors, KPIs, and campaign goals..."
           rows={10}
-          className="w-full bg-[#131720] border border-[#1c2438] rounded-lg px-3 py-2.5 text-[12px] text-[#eef1f8] placeholder-[#3d4460] focus:outline-none focus:border-[#18b8f0]/40 transition-colors leading-relaxed resize-y"
+          className="w-full bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg px-3 py-2.5 text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/40 transition-colors leading-relaxed resize-y"
         />
         <div className="flex items-center gap-2">
           <button
             onClick={handleSaveSummary}
             disabled={!intel || summaryText === intel.onboardingSummary}
-            className="px-3 py-1.5 text-[12px] font-medium text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] hover:border-[#263050] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Save Summary
           </button>
@@ -702,7 +702,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
               <><Brain size={12} />Extract Intelligence</>
             )}
           </button>
-          <span className="text-[11px] text-[#3d4460]">
+          <span className="text-[11px] text-[#3d4f6e]">
             {intel ? "Updates all sections below" : "Creates intelligence from summary"}
           </span>
         </div>
@@ -710,12 +710,12 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
 
       {/* No intelligence yet */}
       {!intel && (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-10 text-center">
-          <div className="w-10 h-10 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mx-auto mb-3">
-            <Brain size={16} className="text-[#3d4460]" />
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
+          <div className="w-10 h-10 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
+            <Brain size={16} className="text-[#3d4f6e]" />
           </div>
-          <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">No intelligence extracted yet</div>
-          <p className="text-[12px] text-[#5a6278]">
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No intelligence extracted yet</div>
+          <p className="text-[12px] text-[#6b7a99]">
             Paste an onboarding summary above and click Extract Intelligence to populate all sections.
           </p>
         </div>
@@ -724,34 +724,34 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       {/* Extracted sections */}
       {intel && (
         <div className="space-y-3">
-          <div className="text-[10px] font-bold text-[#3d4460] uppercase tracking-widest px-1">
+          <div className="text-[10px] font-bold text-[#3d4f6e] uppercase tracking-widest px-1">
             Extracted Intelligence Sections
           </div>
 
-          <IntelCard title="Campaign Implications" icon={Lightbulb} color="#f07820" defaultOpen>
+          <IntelCard title="Campaign Implications" icon={Lightbulb} color="#ff8400" defaultOpen>
             <div className="space-y-1 mt-2">
-              <BulletField label="Best Campaign Angles" items={intel.campaignImplications.bestCampaignAngles} color="#f07820" />
+              <BulletField label="Best Campaign Angles" items={intel.campaignImplications.bestCampaignAngles} color="#ff8400" />
               <BulletField label="Services to Prioritize" items={intel.campaignImplications.servicesToPrioritize} color="#22c55e" />
-              <BulletField label="Offers to Test" items={intel.campaignImplications.offersToTest} color="#18b8f0" />
+              <BulletField label="Offers to Test" items={intel.campaignImplications.offersToTest} color="#0081f2" />
               <BulletField label="Creative Formats" items={intel.campaignImplications.creativeFormats} color="#a78bfa" />
-              <BulletField label="Lead Form Questions" items={intel.campaignImplications.leadFormQuestions} color="#5a6278" />
+              <BulletField label="Lead Form Questions" items={intel.campaignImplications.leadFormQuestions} color="#6b7a99" />
               <BulletField label="Follow-Up Strategy" items={intel.campaignImplications.followUpStrategy} color="#22c55e" />
               <BulletField label="What NOT to Say" items={intel.campaignImplications.whatNotToSay} color="#ef4444" />
             </div>
           </IntelCard>
 
-          <IntelCard title="Buyer Profile & Psychology" icon={Users} color="#18b8f0" defaultOpen>
+          <IntelCard title="Buyer Profile & Psychology" icon={Users} color="#0081f2" defaultOpen>
             <div className="space-y-1 mt-2">
               <FieldRow label="Primary buyer" value={intel.buyerProfile.primaryBuyerType} />
               <FieldRow label="Homeowner profile" value={intel.buyerProfile.homeownerProfile} />
               <FieldRow label="Decision maker" value={intel.buyerProfile.decisionMaker} />
               <FieldRow label="Income notes" value={intel.buyerProfile.incomeNotes} />
               <BulletField label="Trust Triggers" items={intel.buyerProfile.trustTriggers} color="#22c55e" />
-              <BulletField label="Urgency Triggers" items={intel.buyerProfile.urgencyTriggers} color="#f07820" />
+              <BulletField label="Urgency Triggers" items={intel.buyerProfile.urgencyTriggers} color="#ff8400" />
               <BulletField label="Common Objections" items={intel.buyerProfile.commonObjections} color="#ef4444" />
               <BulletField label="Common Fears" items={intel.buyerProfile.commonFears} color="#f59e0b" />
-              <BulletField label="Buying Motivations" items={intel.buyerProfile.buyingMotivations} color="#18b8f0" />
-              <BulletField label="Why They Delay" items={intel.buyerProfile.reasonsTheyDelay} color="#5a6278" />
+              <BulletField label="Buying Motivations" items={intel.buyerProfile.buyingMotivations} color="#0081f2" />
+              <BulletField label="Why They Delay" items={intel.buyerProfile.reasonsTheyDelay} color="#6b7a99" />
               <BulletField label="Why They Choose You" items={intel.buyerProfile.whyTheyChoose} color="#22c55e" />
             </div>
           </IntelCard>
@@ -782,27 +782,27 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
                 <FieldRow label="Cost per lead" value={intel.kpiBaseline.costPerLead} />
                 <FieldRow label="Show rate" value={intel.kpiBaseline.showRate} />
                 <FieldRow label="Ad spend" value={intel.kpiBaseline.currentAdSpend} />
-                <BulletField label="Lead Sources" items={intel.kpiBaseline.currentLeadSources} color="#18b8f0" />
+                <BulletField label="Lead Sources" items={intel.kpiBaseline.currentLeadSources} color="#0081f2" />
               </div>
             </IntelCard>
 
-            <IntelCard title="Service Area" icon={MapPin} color="#18b8f0">
+            <IntelCard title="Service Area" icon={MapPin} color="#0081f2">
               <div className="mt-2 space-y-0">
                 <FieldRow label="Region" value={intel.serviceArea.radius} />
                 <FieldRow label="State" value={intel.serviceArea.state} />
-                <BulletField label="Cities" items={intel.serviceArea.cities} color="#18b8f0" />
+                <BulletField label="Cities" items={intel.serviceArea.cities} color="#0081f2" />
                 <BulletField label="Best Neighborhoods" items={intel.serviceArea.bestNeighborhoods} color="#22c55e" />
               </div>
             </IntelCard>
 
-            <IntelCard title="Target Market" icon={Users} color="#f07820">
+            <IntelCard title="Target Market" icon={Users} color="#ff8400">
               <div className="mt-2 space-y-0">
                 <FieldRow label="Age range" value={intel.targetMarket.idealAgeRange} />
                 <FieldRow label="HHI" value={intel.targetMarket.householdIncome} />
                 <FieldRow label="Home ownership" value={intel.targetMarket.homeownership} />
                 <FieldRow label="Location type" value={intel.targetMarket.locationType} />
                 <FieldRow label="Top service" value={intel.targetMarket.highestMarginService} />
-                <BulletField label="Occupations" items={intel.targetMarket.occupations} color="#f07820" />
+                <BulletField label="Occupations" items={intel.targetMarket.occupations} color="#ff8400" />
                 <BulletField label="Preferred jobs" items={intel.targetMarket.preferredJobTypes} color="#22c55e" />
               </div>
             </IntelCard>
@@ -816,7 +816,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
               <FieldRow label="Storm relevance" value={intel.marketResearch.stormRelevance} />
               <BulletField label="Main Competitors" items={intel.marketResearch.mainCompetitors} color="#ef4444" />
               <BulletField label="Competitor Weaknesses" items={intel.marketResearch.competitorWeaknesses} color="#22c55e" />
-              <BulletField label="Opportunities" items={intel.marketResearch.opportunities} color="#18b8f0" />
+              <BulletField label="Opportunities" items={intel.marketResearch.opportunities} color="#0081f2" />
               <BulletField label="Risks" items={intel.marketResearch.risks} color="#f59e0b" />
             </div>
           </IntelCard>
@@ -829,8 +829,8 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
                 <FieldRow label="Financing" value={intel.offerIntelligence.financingAvailable} />
                 <FieldRow label="Insurance notes" value={intel.offerIntelligence.insuranceNotes} />
                 <BulletField label="Guarantees" items={intel.offerIntelligence.guarantees} color="#22c55e" />
-                <BulletField label="Proof Points" items={intel.offerIntelligence.proofPoints} color="#18b8f0" />
-                <BulletField label="Prioritize" items={intel.offerIntelligence.jobsTheyWantMore} color="#f07820" />
+                <BulletField label="Proof Points" items={intel.offerIntelligence.proofPoints} color="#0081f2" />
+                <BulletField label="Prioritize" items={intel.offerIntelligence.jobsTheyWantMore} color="#ff8400" />
               </div>
             </IntelCard>
 
@@ -847,7 +847,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
             </IntelCard>
           </div>
 
-          <IntelCard title="Brand Intelligence" icon={ShieldCheck} color="#18b8f0">
+          <IntelCard title="Brand Intelligence" icon={ShieldCheck} color="#0081f2">
             <div className="mt-2 space-y-1">
               <FieldRow label="Tone" value={intel.brandIntelligence.brandTone} />
               <FieldRow label="Positioning" value={intel.brandIntelligence.brandPositioning} />
@@ -859,12 +859,12 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
             </div>
           </IntelCard>
 
-          <IntelCard title="Sales Intelligence" icon={Target} color="#f07820">
+          <IntelCard title="Sales Intelligence" icon={Target} color="#ff8400">
             <div className="mt-2 space-y-1">
-              <BulletField label="Best Sales Angles" items={intel.salesIntelligence.bestSalesAngles} color="#f07820" />
+              <BulletField label="Best Sales Angles" items={intel.salesIntelligence.bestSalesAngles} color="#ff8400" />
               <BulletField label="Worst-Fit Leads" items={intel.salesIntelligence.worstFitLeads} color="#ef4444" />
               <BulletField label="Objection Responses" items={intel.salesIntelligence.objectionResponses} color="#22c55e" />
-              <BulletField label="Testimonials" items={intel.salesIntelligence.testimonials} color="#18b8f0" />
+              <BulletField label="Testimonials" items={intel.salesIntelligence.testimonials} color="#0081f2" />
               <BulletField label="Review Highlights" items={intel.salesIntelligence.reviewHighlights} color="#a78bfa" />
             </div>
           </IntelCard>
@@ -876,7 +876,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
               <FieldRow label="Content tone" value={intel.contentPlanning.contentTone} />
               <FieldRow label="Testimonials" value={intel.contentPlanning.testimonialsAvailable ? "Available" : "Not yet"} />
               <FieldRow label="Crew filming" value={intel.contentPlanning.crewWillingToFilm ? "Willing to film" : "Not yet confirmed"} />
-              <BulletField label="Best Selling Points" items={intel.contentPlanning.biggestSellingPoints} color="#f07820" />
+              <BulletField label="Best Selling Points" items={intel.contentPlanning.biggestSellingPoints} color="#ff8400" />
               <BulletField label="Content Themes" items={intel.contentPlanning.recommendedContentThemes} color="#a78bfa" />
             </div>
           </IntelCard>
@@ -905,7 +905,7 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
 
   if (clientLoading) {
     return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center py-20 gap-2 text-[#5a6278]">
+      <div className="max-w-4xl mx-auto flex items-center justify-center py-20 gap-2 text-[#6b7a99]">
         <Loader2 size={16} className="animate-spin" />
         Loading client…
       </div>
@@ -915,8 +915,8 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
   if (!client) {
     return (
       <div className="max-w-4xl mx-auto text-center py-20">
-        <p className="text-[#5a6278]">Client not found.</p>
-        <Link href="/clients" className="text-[#18b8f0] text-sm mt-2 inline-block hover:underline">
+        <p className="text-[#6b7a99]">Client not found.</p>
+        <Link href="/clients" className="text-[#0081f2] text-sm mt-2 inline-block hover:underline">
           ← Back to clients
         </Link>
       </div>
@@ -929,7 +929,7 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
       <div>
         <Link
           href="/clients"
-          className="flex items-center gap-1 text-[11px] text-[#5a6278] hover:text-[#18b8f0] transition-colors mb-3"
+          className="flex items-center gap-1 text-[11px] text-[#6b7a99] hover:text-[#0081f2] transition-colors mb-3"
         >
           <ChevronLeft size={12} />
           Back to Clients
@@ -937,10 +937,10 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-[18px] font-bold text-[#eef1f8] tracking-tight">{client.name}</h2>
+              <h2 className="text-[18px] font-bold text-[#f8f8f7] tracking-tight">{client.name}</h2>
               <Badge label={client.status} variant={clientStatusVariant[client.status]} />
             </div>
-            <div className="flex items-center gap-4 mt-1 text-[12px] text-[#5a6278]">
+            <div className="flex items-center gap-4 mt-1 text-[12px] text-[#6b7a99]">
               <span className="flex items-center gap-1">
                 <MapPin size={11} />
                 {client.market}
@@ -956,7 +956,7 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-3 py-1.5 text-[12px] font-medium text-[#5a6278] border border-[#1c2438] rounded-lg hover:text-[#eef1f8] hover:border-[#263050] transition-colors">
+            <button className="px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors">
               Edit Client
             </button>
             <button className="flex items-center gap-1.5 px-3 py-1.5 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
@@ -968,15 +968,15 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-0 border-b border-[#1c2438] overflow-x-auto">
+      <div className="flex items-center gap-0 border-b border-[rgba(0, 129, 242, 0.15)] overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 -mb-px ${
               activeTab === id
-                ? "text-[#18b8f0] border-[#18b8f0]"
-                : "text-[#5a6278] border-transparent hover:text-[#eef1f8]"
+                ? "text-[#0081f2] border-[#0081f2]"
+                : "text-[#6b7a99] border-transparent hover:text-[#f8f8f7]"
             }`}
           >
             <Icon size={13} />
@@ -995,26 +995,26 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
         <div className="space-y-5">
           <div className="grid grid-cols-4 lg:grid-cols-7 gap-3">
             {[
-              { label: "Leads", value: client.stats.leads > 0 ? client.stats.leads : "—", color: "#18b8f0" },
+              { label: "Leads", value: client.stats.leads > 0 ? client.stats.leads : "—", color: "#0081f2" },
               { label: "Booked", value: client.stats.booked > 0 ? client.stats.booked : "—", color: "#22c55e" },
-              { label: "CPL", value: client.stats.cpl, color: "#eef1f8" },
-              { label: "CPBA", value: client.stats.cpba, color: "#eef1f8" },
-              { label: "Show Rate", value: client.stats.showRate, color: "#f07820" },
+              { label: "CPL", value: client.stats.cpl, color: "#f8f8f7" },
+              { label: "CPBA", value: client.stats.cpba, color: "#f8f8f7" },
+              { label: "Show Rate", value: client.stats.showRate, color: "#ff8400" },
               { label: "Pipeline", value: client.stats.pipeline, color: "#a78bfa" },
               { label: "Revenue", value: client.stats.revenue, color: "#22c55e" },
             ].map((s) => (
-              <div key={s.label} className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-3 text-center">
+              <div key={s.label} className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-3 text-center">
                 <div className="text-[15px] font-bold tracking-tight" style={{ color: s.color }}>
                   {s.value}
                 </div>
-                <div className="text-[10px] text-[#5a6278] mt-0.5">{s.label}</div>
+                <div className="text-[10px] text-[#6b7a99] mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-5 space-y-4">
-              <h3 className="text-[13px] font-semibold text-[#eef1f8]">Client Profile</h3>
+            <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-5 space-y-4">
+              <h3 className="text-[13px] font-semibold text-[#f8f8f7]">Client Profile</h3>
               <div className="space-y-3 text-[12px]">
                 {[
                   { label: "Owner", value: client.owner },
@@ -1027,41 +1027,41 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
                   { label: "Monthly Budget", value: client.monthlyBudget },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex items-start gap-3">
-                    <span className="text-[#3d4460] w-28 flex-shrink-0">{label}</span>
-                    <span className="text-[#eef1f8]">{value}</span>
+                    <span className="text-[#3d4f6e] w-28 flex-shrink-0">{label}</span>
+                    <span className="text-[#f8f8f7]">{value}</span>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-[#1c2438] pt-4">
-                <div className="text-[11px] text-[#3d4460] mb-1.5 font-semibold uppercase tracking-wider">Offer</div>
-                <p className="text-[12px] text-[#eef1f8]">{client.offer}</p>
+              <div className="border-t border-[rgba(0, 129, 242, 0.15)] pt-4">
+                <div className="text-[11px] text-[#3d4f6e] mb-1.5 font-semibold uppercase tracking-wider">Offer</div>
+                <p className="text-[12px] text-[#f8f8f7]">{client.offer}</p>
               </div>
               <div>
-                <div className="text-[11px] text-[#3d4460] mb-1.5 font-semibold uppercase tracking-wider">Brand Tone</div>
-                <p className="text-[12px] text-[#5a6278] leading-relaxed">{client.brandTone}</p>
+                <div className="text-[11px] text-[#3d4f6e] mb-1.5 font-semibold uppercase tracking-wider">Brand Tone</div>
+                <p className="text-[12px] text-[#6b7a99] leading-relaxed">{client.brandTone}</p>
               </div>
               <div>
-                <div className="text-[11px] text-[#3d4460] mb-1.5 font-semibold uppercase tracking-wider">Notes</div>
-                <p className="text-[12px] text-[#5a6278] leading-relaxed">{client.notes}</p>
+                <div className="text-[11px] text-[#3d4f6e] mb-1.5 font-semibold uppercase tracking-wider">Notes</div>
+                <p className="text-[12px] text-[#6b7a99] leading-relaxed">{client.notes}</p>
               </div>
             </div>
 
-            <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-5">
-              <h3 className="text-[13px] font-semibold text-[#eef1f8] mb-4">Platform Connections</h3>
+            <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-5">
+              <h3 className="text-[13px] font-semibold text-[#f8f8f7] mb-4">Platform Connections</h3>
               <div className="space-y-2.5 text-[12px]">
                 {[
-                  { label: "Meta Ad Account", value: client.metaAccountId, color: "#18b8f0" },
-                  { label: "Meta Pixel", value: client.pixelId, color: "#18b8f0" },
-                  { label: "Facebook Page", value: client.fbPageId, color: "#18b8f0" },
-                  { label: "Instagram", value: client.instagramId, color: "#18b8f0" },
+                  { label: "Meta Ad Account", value: client.metaAccountId, color: "#0081f2" },
+                  { label: "Meta Pixel", value: client.pixelId, color: "#0081f2" },
+                  { label: "Facebook Page", value: client.fbPageId, color: "#0081f2" },
+                  { label: "Instagram", value: client.instagramId, color: "#0081f2" },
                   { label: "GHL Location ID", value: client.ghlLocationId, color: "#22c55e" },
                   { label: "GHL Pipeline ID", value: client.ghlPipelineId, color: "#22c55e" },
                 ].map(({ label, value, color }) => {
                   const isPending = value.toLowerCase().startsWith("pending");
                   return (
-                    <div key={label} className="flex items-center justify-between p-2.5 bg-[#131720] border border-[#1c2438]/60 rounded-lg">
-                      <span className="text-[#5a6278]">{label}</span>
-                      <span className="font-mono text-[11px]" style={{ color: isPending ? "#5a6278" : color }}>
+                    <div key={label} className="flex items-center justify-between p-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)]/60 rounded-lg">
+                      <span className="text-[#6b7a99]">{label}</span>
+                      <span className="font-mono text-[11px]" style={{ color: isPending ? "#6b7a99" : color }}>
                         {value}
                       </span>
                     </div>
@@ -1075,11 +1075,11 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
 
       {/* Campaigns tab */}
       {activeTab === "campaigns" && (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#1c2438]">
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
             <div className="flex items-center gap-2">
-              <Megaphone size={13} className="text-[#18b8f0]" />
-              <span className="text-[13px] font-semibold text-[#eef1f8]">Meta Campaigns — {client.name}</span>
+              <Megaphone size={13} className="text-[#0081f2]" />
+              <span className="text-[13px] font-semibold text-[#f8f8f7]">Meta Campaigns — {client.name}</span>
             </div>
             <button className="flex items-center gap-1.5 px-3 py-1.5 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
               <Bot size={12} />Build New Campaign
@@ -1087,14 +1087,14 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
           </div>
           {client.campaigns.length === 0 ? (
             <div className="p-10 text-center">
-              <p className="text-[12px] text-[#5a6278]">No campaigns yet — use Build with Veronica to get started.</p>
+              <p className="text-[12px] text-[#6b7a99]">No campaigns yet — use Build with Veronica to get started.</p>
             </div>
           ) : (
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-[#1c2438]">
+                <tr className="border-b border-[rgba(0, 129, 242, 0.15)]">
                   {["Campaign", "Type", "Status", "Budget", "Spend", "Leads", "CPL", "Booked"].map((h) => (
-                    <th key={h} className={`px-5 py-3.5 text-[9px] font-bold text-[#3d4460] uppercase tracking-widest ${h === "Campaign" || h === "Type" ? "text-left" : "text-right"}`}>
+                    <th key={h} className={`px-5 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${h === "Campaign" || h === "Type" ? "text-left" : "text-right"}`}>
                       {h}
                     </th>
                   ))}
@@ -1102,14 +1102,14 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
               </thead>
               <tbody>
                 {client.campaigns.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-[#1c2438]/60 hover:bg-[#131720]/60 transition-colors ${i === client.campaigns.length - 1 ? "border-b-0" : ""}`}>
-                    <td className="px-5 py-3.5 text-[#eef1f8] font-medium">{c.name}</td>
-                    <td className="px-5 py-3.5 text-[#5a6278]">{c.type}</td>
+                  <tr key={c.id} className={`border-b border-[rgba(0, 129, 242, 0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors ${i === client.campaigns.length - 1 ? "border-b-0" : ""}`}>
+                    <td className="px-5 py-3.5 text-[#f8f8f7] font-medium">{c.name}</td>
+                    <td className="px-5 py-3.5 text-[#6b7a99]">{c.type}</td>
                     <td className="px-5 py-3.5 text-right"><Badge label={c.status} variant={campaignStatusVariant[c.status]} /></td>
-                    <td className="px-5 py-3.5 text-right text-[#eef1f8]">{c.budget}</td>
-                    <td className="px-5 py-3.5 text-right text-[#eef1f8]">{c.spend}</td>
-                    <td className="px-5 py-3.5 text-right text-[#18b8f0] font-semibold">{c.leads > 0 ? c.leads : "—"}</td>
-                    <td className="px-5 py-3.5 text-right text-[#eef1f8]">{c.cpl}</td>
+                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.budget}</td>
+                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.spend}</td>
+                    <td className="px-5 py-3.5 text-right text-[#0081f2] font-semibold">{c.leads > 0 ? c.leads : "—"}</td>
+                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.cpl}</td>
                     <td className="px-5 py-3.5 text-right text-[#22c55e] font-semibold">{c.booked > 0 ? c.booked : "—"}</td>
                   </tr>
                 ))}
@@ -1127,14 +1127,14 @@ export default function ClientProfilePage({ params }: { params: { id: string } }
 
       {/* Placeholder for other tabs */}
       {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && (
-        <div className="bg-[#0c0f15] border border-[#1c2438] rounded-xl p-10 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center justify-center mx-auto mb-3">
-            <Zap size={20} className="text-[#18b8f0]" />
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
+          <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
+            <Zap size={20} className="text-[#0081f2]" />
           </div>
-          <div className="text-[13px] font-semibold text-[#eef1f8] mb-1">
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">
             {tabs.find((t) => t.id === activeTab)?.label} — Coming Soon
           </div>
-          <p className="text-[12px] text-[#5a6278]">This section is being built for {client.name}.</p>
+          <p className="text-[12px] text-[#6b7a99]">This section is being built for {client.name}.</p>
         </div>
       )}
     </div>

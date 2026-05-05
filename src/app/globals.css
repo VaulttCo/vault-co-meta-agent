@@ -1,70 +1,83 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Vault Co brand blue — electric neon from vault icon glow */
-  --color-vc-blue: #18b8f0;
-  --color-vc-blue-dim: #0e8abf;
-  --color-vc-blue-glow: #18b8f030;
+  /* ── Vault Co Brand Colors — matched to portal-vaulttco.manus.space ── */
 
-  /* Vault Co brand orange — the arrow icon inside the vault */
-  --color-vc-orange: #f07820;
-  --color-vc-orange-light: #f9902e;
-  --color-vc-orange-dim: #b85a10;
+  /* Primary blue */
+  --color-vc-blue: #0081f2;
+  --color-vc-blue-bright: #0070d4;
+  --color-vc-blue-glow: rgba(0, 129, 242, 0.18);
+  --color-vc-blue-muted: rgba(0, 129, 242, 0.10);
+  --color-vc-blue-border: rgba(0, 129, 242, 0.15);
+  --color-vc-blue-border-nav: rgba(0, 129, 242, 0.12);
 
-  /* Backgrounds — near-black with subtle blue tint */
-  --color-vc-bg: #06080d;
-  --color-vc-surface: #0c0f15;
-  --color-vc-surface-2: #131720;
-  --color-vc-surface-3: #1a1e2c;
+  /* Primary orange/gold */
+  --color-vc-orange: #ff8400;
+  --color-vc-orange-bright: #e07600;
+  --color-vc-orange-glow: rgba(255, 132, 0, 0.16);
+  --color-vc-orange-muted: rgba(255, 132, 0, 0.10);
+  --color-vc-orange-border: rgba(255, 132, 0, 0.20);
 
-  /* Borders — blue-tinted dark */
-  --color-vc-border: #1c2438;
-  --color-vc-border-2: #263050;
+  /* Backgrounds */
+  --color-vc-bg: #05070B;
+  --color-vc-surface: #0D1520;
+  --color-vc-surface-2: #0f1a28;
+  --color-vc-surface-3: #152030;
+
+  /* Borders */
+  --color-vc-border: rgba(0, 129, 242, 0.15);
+  --color-vc-border-subtle: rgba(0, 129, 242, 0.08);
+  --color-vc-border-strong: rgba(0, 129, 242, 0.25);
 
   /* Text */
-  --color-vc-text: #eef1f8;
-  --color-vc-muted: #5a6278;
-  --color-vc-muted-2: #3d4460;
+  --color-vc-text: #f8f8f7;
+  --color-vc-text-body: #e2e8f0;
+  --color-vc-muted: #6b7a99;
+  --color-vc-dim: #3d4f6e;
 
   /* Semantic */
   --color-vc-success: #22c55e;
   --color-vc-warning: #f59e0b;
   --color-vc-danger: #ef4444;
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Fonts */
+  --font-heading: var(--font-rajdhani);
+  --font-sans: var(--font-manrope);
+  --font-mono: ui-monospace, monospace;
 }
 
 /* ─── Theme CSS custom properties ─── */
 :root,
 [data-theme="dark"] {
-  --t-bg: #06080d;
-  --t-bg-page: #0d0e12;
-  --t-surface: #0c0f15;
-  --t-surface-2: #131720;
-  --t-surface-3: #1a1e2c;
-  --t-border: #1c2438;
-  --t-border-2: #263050;
-  --t-text: #eef1f8;
-  --t-text-body: #e8eaf0;
-  --t-muted: #5a6278;
-  --t-dim: #3d4460;
-  --t-sidebar-bg: #0c0f15;
-  --t-header-bg: #0c0f15;
-  --t-input-bg: #131720;
-  --t-scrollbar-track: #0c0f15;
-  --t-scrollbar-thumb: #1c2438;
-  --t-scrollbar-hover: #263050;
+  --t-bg: #05070B;
+  --t-bg-page: #05070B;
+  --t-surface: #0D1520;
+  --t-surface-2: #0f1a28;
+  --t-surface-3: #152030;
+  --t-border: rgba(0, 129, 242, 0.15);
+  --t-border-2: rgba(0, 129, 242, 0.25);
+  --t-border-nav: rgba(0, 129, 242, 0.12);
+  --t-text: #f8f8f7;
+  --t-text-body: #e2e8f0;
+  --t-muted: #6b7a99;
+  --t-dim: #3d4f6e;
+  --t-sidebar-bg: #060a10;
+  --t-header-bg: rgba(5, 7, 11, 0.95);
+  --t-input-bg: #0f1a28;
+  --t-scrollbar-track: #0D1520;
+  --t-scrollbar-thumb: rgba(0, 129, 242, 0.20);
+  --t-scrollbar-hover: rgba(0, 129, 242, 0.35);
 }
 
 [data-theme="light"] {
-  --t-bg: #f0f2f7;
+  --t-bg: #f0f4f8;
   --t-bg-page: #eef1f8;
   --t-surface: #ffffff;
   --t-surface-2: #f8fafc;
   --t-surface-3: #eef1f8;
   --t-border: #e2e8f0;
   --t-border-2: #cbd5e1;
+  --t-border-nav: #e2e8f0;
   --t-text: #0f172a;
   --t-text-body: #1e293b;
   --t-muted: #64748b;
@@ -88,10 +101,22 @@ body {
 
 body {
   background-color: var(--t-bg-page);
+  /* Dual radial gradient matching the onboarding portal */
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(0, 129, 242, 0.08), transparent 34%),
+    radial-gradient(circle at 85% 18%, rgba(255, 132, 0, 0.08), transparent 26%),
+    radial-gradient(circle at 50% 65%, rgba(18, 46, 94, 0.14), transparent 42%);
+  background-attachment: fixed;
   color: var(--t-text-body);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-manrope), Manrope, ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings use Rajdhani */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-rajdhani), Rajdhani, sans-serif;
+  letter-spacing: 0.01em;
 }
 
 ::-webkit-scrollbar {
@@ -109,91 +134,128 @@ body {
   background: var(--t-scrollbar-hover);
 }
 
-/* Orange CTA gradient */
-.vc-orange-gradient {
-  background: linear-gradient(135deg, #f07820 0%, #f9902e 100%);
+/* ─── Vault Co Utility Classes ─── */
+
+/* Orange CTA — matches onboarding portal primary button */
+.vc-btn-orange {
+  background-color: #ff8400;
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.vc-btn-orange:hover {
+  background-color: #e07600;
+  box-shadow: 0 0 16px rgba(255, 132, 0, 0.30);
 }
 
-/* Electric blue gradient */
-.vc-blue-gradient {
-  background: linear-gradient(135deg, #0e8abf 0%, #18b8f0 100%);
+/* Blue secondary button */
+.vc-btn-blue {
+  background-color: #0081f2;
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.vc-btn-blue:hover {
+  background-color: #0070d4;
+  box-shadow: 0 0 16px rgba(0, 129, 242, 0.30);
+}
+
+/* Card — matches onboarding portal feature cards */
+.vc-card {
+  background-color: #0D1520;
+  border: 1px solid rgba(0, 129, 242, 0.15);
+  border-radius: 10px;
 }
 
 /* Blue glow border */
 .vc-glow {
-  box-shadow: 0 0 0 1px #18b8f030, 0 0 16px #18b8f018;
+  box-shadow: 0 0 0 1px rgba(0, 129, 242, 0.15), 0 0 20px rgba(0, 129, 242, 0.08);
+}
+
+/* Orange glow */
+.vc-glow-orange {
+  box-shadow: 0 0 0 1px rgba(255, 132, 0, 0.20), 0 0 20px rgba(255, 132, 0, 0.08);
 }
 
 /* Text gradients */
 .vc-text-blue {
-  background: linear-gradient(135deg, #18b8f0 0%, #5cd8ff 100%);
+  background: linear-gradient(135deg, #0081f2 0%, #40a8ff 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .vc-text-orange {
-  background: linear-gradient(135deg, #f07820 0%, #f9902e 100%);
+  background: linear-gradient(135deg, #ff8400 0%, #ffb347 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ─── Light mode: override common hardcoded dark hex patterns ─── */
-/* This allows existing components to respond to theme without full rewrites */
+/* Section label — matches "CLIENT ONBOARDING PORTAL" badge style */
+.vc-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t-dim);
+}
 
+/* Orange gradient for hero backgrounds */
+.vc-orange-gradient {
+  background: linear-gradient(135deg, #ff8400 0%, #e07600 100%);
+}
+
+/* Blue gradient */
+.vc-blue-gradient {
+  background: linear-gradient(135deg, #0070d4 0%, #0081f2 100%);
+}
+
+/* ─── Light mode overrides for hardcoded dark values ─── */
+[data-theme="light"] .bg-\[\#05070B\],
 [data-theme="light"] .bg-\[\#06080d\],
 [data-theme="light"] .bg-\[\#0d0e12\],
-[data-theme="light"] .bg-\[\#0c0f15\] {
+[data-theme="light"] .bg-\[\#0c0f15\],
+[data-theme="light"] .bg-\[\#060a10\] {
   background-color: #ffffff;
 }
 
+[data-theme="light"] .bg-\[\#0D1520\],
+[data-theme="light"] .bg-\[\#0f1a28\],
 [data-theme="light"] .bg-\[\#131720\] {
   background-color: #f8fafc;
 }
 
+[data-theme="light"] .bg-\[\#152030\],
 [data-theme="light"] .bg-\[\#1a1e2c\],
 [data-theme="light"] .bg-\[\#1c2438\] {
   background-color: #eef1f8;
+}
+
+[data-theme="light"] .text-\[\#f8f8f7\],
+[data-theme="light"] .text-\[\#eef1f8\],
+[data-theme="light"] .text-\[\#e8eaf0\],
+[data-theme="light"] .text-\[\#e2e8f0\] {
+  color: #0f172a;
+}
+
+[data-theme="light"] .text-\[\#6b7a99\],
+[data-theme="light"] .text-\[\#5a6278\] {
+  color: #64748b;
+}
+
+[data-theme="light"] .text-\[\#3d4f6e\],
+[data-theme="light"] .text-\[\#3d4460\] {
+  color: #94a3b8;
 }
 
 [data-theme="light"] .border-\[\#1c2438\] {
   border-color: #e2e8f0;
 }
 
-[data-theme="light"] .border-\[\#263050\] {
-  border-color: #cbd5e1;
-}
-
-[data-theme="light"] .text-\[\#eef1f8\],
-[data-theme="light"] .text-\[\#e8eaf0\] {
-  color: #0f172a;
-}
-
-[data-theme="light"] .text-\[\#5a6278\] {
-  color: #64748b;
-}
-
-[data-theme="light"] .text-\[\#3d4460\] {
-  color: #94a3b8;
-}
-
+[data-theme="light"] .hover\:bg-\[\#0f1a28\]:hover,
 [data-theme="light"] .hover\:bg-\[\#131720\]:hover {
   background-color: #f0f2f7;
-}
-
-[data-theme="light"] .hover\:border-\[\#263050\]:hover {
-  border-color: #cbd5e1;
-}
-
-[data-theme="light"] .hover\:text-\[\#eef1f8\]:hover {
-  color: #0f172a;
-}
-
-[data-theme="light"] .focus\:border-\[\#18b8f0\]\/40:focus {
-  border-color: #18b8f040;
-}
-
-[data-theme="light"] .placeholder-\[\#5a6278\]::placeholder {
-  color: #94a3b8;
 }

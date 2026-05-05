@@ -64,28 +64,55 @@ export function Sidebar() {
   );
   const showSettings = permissions?.canViewSettings ?? false;
 
-  const roleColor = user ? ROLE_COLORS[user.role] : "#5a6278";
+  const roleColor = user ? ROLE_COLORS[user.role] : "#6b7a99";
   const roleLabel = user ? ROLE_LABELS[user.role] : "";
 
   return (
-    <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-[#1c2438] bg-[#0c0f15]">
-      {/* Logo */}
-      <div className="h-[68px] flex items-center px-4 border-b border-[#1c2438]">
-        <div className="w-[88px] h-[24px] relative flex-shrink-0">
-          <Image
-            src="/vaultco-logo.png"
-            alt="Vault Co"
-            fill
-            className="object-contain object-left"
-            priority
-          />
+    <aside
+      className="w-[228px] flex-shrink-0 flex flex-col border-r"
+      style={{
+        backgroundColor: "var(--t-sidebar-bg)",
+        borderColor: "rgba(0, 129, 242, 0.12)",
+      }}
+    >
+      {/* Logo area — matches onboarding portal header */}
+      <div
+        className="h-[68px] flex items-center px-5 border-b"
+        style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-[88px] h-[24px] relative flex-shrink-0">
+            <Image
+              src="/vaultco-logo.png"
+              alt="Vault Co"
+              fill
+              className="object-contain object-left"
+              priority
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Internal portal label */}
+      <div
+        className="px-5 py-2.5 border-b"
+        style={{ borderColor: "rgba(0, 129, 242, 0.08)", backgroundColor: "rgba(0, 129, 242, 0.04)" }}
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse flex-shrink-0" />
+          <span className="text-[9px] font-bold uppercase tracking-widest text-[#0081f2]">
+            Internal Growth Portal
+          </span>
         </div>
       </div>
 
       {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
-        <div className="text-[9px] font-bold text-[#3d4460] uppercase tracking-widest px-2 mb-2 mt-1">
-          Portal
+      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+        <div
+          className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-1"
+          style={{ color: "var(--t-dim)" }}
+        >
+          Command Center
         </div>
 
         {visibleNavItems.map(({ label, href, icon: Icon }) => {
@@ -94,27 +121,51 @@ export function Sidebar() {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group ${
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group ${
                 active
-                  ? "bg-[#131720] text-[#18b8f0] border border-[#1c2438]"
-                  : "text-[#5a6278] hover:text-[#eef1f8] hover:bg-[#131720]"
+                  ? "text-[#f8f8f7]"
+                  : "hover:text-[#f8f8f7]"
               }`}
+              style={
+                active
+                  ? {
+                      backgroundColor: "rgba(0, 129, 242, 0.12)",
+                      border: "1px solid rgba(0, 129, 242, 0.20)",
+                      color: "#f8f8f7",
+                    }
+                  : {
+                      color: "var(--t-muted)",
+                    }
+              }
             >
               <Icon
                 size={15}
-                className={`flex-shrink-0 transition-colors ${
-                  active ? "text-[#18b8f0]" : "group-hover:text-[#eef1f8]"
-                }`}
+                className="flex-shrink-0 transition-colors"
+                style={{ color: active ? "#0081f2" : undefined }}
               />
               <span className="truncate">{label}</span>
               {label === "AI Campaign Builder" && (
-                <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold text-[#18b8f0] bg-[#18b8f0]/10 border border-[#18b8f0]/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                <span
+                  className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                  style={{
+                    color: "#ff8400",
+                    backgroundColor: "rgba(255, 132, 0, 0.10)",
+                    border: "1px solid rgba(255, 132, 0, 0.20)",
+                  }}
+                >
                   <Sparkles size={7} />
                   AI
                 </span>
               )}
               {label === "Approvals" && (
-                <span className="ml-auto flex items-center text-[9px] font-bold text-[#f07820] bg-[#f07820]/10 border border-[#f07820]/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                <span
+                  className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                  style={{
+                    color: "#ff8400",
+                    backgroundColor: "rgba(255, 132, 0, 0.10)",
+                    border: "1px solid rgba(255, 132, 0, 0.20)",
+                  }}
+                >
                   {3 + pendingDrafts}
                 </span>
               )}
@@ -123,62 +174,93 @@ export function Sidebar() {
         })}
 
         {/* Client Onboarding — external link to Manus onboarding dashboard */}
-        <div className="text-[9px] font-bold text-[#3d4460] uppercase tracking-widest px-2 mb-2 mt-4">
+        <div
+          className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
+          style={{ color: "var(--t-dim)" }}
+        >
           Onboarding
         </div>
         <a
           href={CLIENT_ONBOARDING_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group text-[#5a6278] hover:text-[#eef1f8] hover:bg-[#131720]"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group"
+          style={{ color: "var(--t-muted)" }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#f8f8f7";
+            (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0, 129, 242, 0.06)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "var(--t-muted)";
+            (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+          }}
         >
           <ClipboardList
             size={15}
-            className="flex-shrink-0 transition-colors group-hover:text-[#eef1f8]"
+            className="flex-shrink-0 transition-colors"
           />
           <span className="truncate">Client Onboarding</span>
           <ExternalLink
             size={10}
-            className="ml-auto flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+            className="ml-auto flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
           />
         </a>
       </nav>
 
       {/* Bottom */}
-      <div className="border-t border-[#1c2438] py-2.5 px-2.5 space-y-0.5">
+      <div
+        className="border-t py-2.5 px-3 space-y-0.5"
+        style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+      >
         {showSettings && (
           <Link
             href="/settings"
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group ${
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+            style={
               isActive("/settings")
-                ? "bg-[#131720] text-[#18b8f0] border border-[#1c2438]"
-                : "text-[#5a6278] hover:text-[#eef1f8] hover:bg-[#131720]"
-            }`}
+                ? {
+                    backgroundColor: "rgba(0, 129, 242, 0.12)",
+                    border: "1px solid rgba(0, 129, 242, 0.20)",
+                    color: "#f8f8f7",
+                  }
+                : { color: "var(--t-muted)" }
+            }
           >
-            <Settings size={15} className="flex-shrink-0" />
+            <Settings
+              size={15}
+              className="flex-shrink-0"
+              style={{ color: isActive("/settings") ? "#0081f2" : undefined }}
+            />
             {settingsItem.label}
           </Link>
         )}
 
         {/* User card */}
         {user && (
-          <div className="mt-1.5 px-2.5 py-2.5 rounded-lg bg-[#131720] border border-[#1c2438] space-y-2">
+          <div
+            className="mt-1.5 px-3 py-2.5 rounded-lg space-y-2"
+            style={{
+              backgroundColor: "rgba(0, 129, 242, 0.06)",
+              border: "1px solid rgba(0, 129, 242, 0.12)",
+            }}
+          >
             <div className="flex items-center gap-2.5">
-              {/* Avatar */}
               <div
-                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-[#0d0e12]"
-                style={{ backgroundColor: roleColor }}
+                className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
+                style={{ backgroundColor: roleColor, color: "#05070B" }}
               >
                 {user.initials}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold text-[#eef1f8] truncate leading-tight">{user.name}</div>
+                <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: "var(--t-text)" }}>
+                  {user.name}
+                </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <span
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border leading-tight"
                     style={{
                       color: roleColor,
-                      backgroundColor: `${roleColor}15`,
+                      backgroundColor: `${roleColor}18`,
                       borderColor: `${roleColor}30`,
                     }}
                   >
@@ -186,11 +268,19 @@ export function Sidebar() {
                   </span>
                 </div>
               </div>
-              {/* Sign out */}
               <button
                 onClick={signOut}
                 title="Sign out"
-                className="w-6 h-6 flex items-center justify-center rounded-md text-[#3d4460] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors flex-shrink-0"
+                className="w-6 h-6 flex items-center justify-center rounded-md transition-colors flex-shrink-0"
+                style={{ color: "var(--t-dim)" }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = "#ef4444";
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239, 68, 68, 0.08)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.color = "var(--t-dim)";
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                }}
               >
                 <LogOut size={11} />
               </button>

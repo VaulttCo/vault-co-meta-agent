@@ -66,6 +66,7 @@ function rowToAsset(row: CreativeAssetRow): CreativeAsset {
     fileName: row.file_name,
     fileType: cast<CreativeAsset["fileType"]>(row.file_type),
     assetType: cast<CreativeAsset["assetType"]>(row.asset_type),
+    category: cast<CreativeAsset["category"]>((row as unknown as Record<string, unknown>)["category"] ?? "Creative Asset"),
     thumbnailUrl: row.thumbnail_url ?? "",
     uploadDate: row.upload_date,
     service: row.service ?? "",

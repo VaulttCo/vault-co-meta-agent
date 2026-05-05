@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useMemo, useRef } from "react";
 import {
   Plus,
@@ -15,39 +14,46 @@ import {
   Filter,
   Upload,
   ShieldCheck,
+  Database,
+  HardDrive,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
-  MOCK_CREATIVE_ASSETS,
   ALL_ASSET_TYPES,
+  ALL_ASSET_CATEGORIES,
   ALL_ASSET_STATUSES,
   assetTypeColors,
   assetStatusVariant,
   type CreativeAsset,
   type AssetType,
   type AssetStatus,
+  type AssetCategory,
 } from "@/lib/creativeAssets";
+import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
 import { clients } from "@/lib/data";
 import { useAuth } from "@/components/AuthProvider";
 
 // ─────────────────────────────────────────────────────────────
 // Upload modal
 // ─────────────────────────────────────────────────────────────
-
 function UploadModal({
   onClose,
   onAdd,
+  usingSupabase,
 }: {
   onClose: () => void;
-  onAdd: (asset: CreativeAsset) => void;
+  onAdd: (asset: CreativeAsset) => Promise<void>;
+  usingSupabase: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pickedFileName, setPickedFileName] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     fileName: "",
     fileType: "video" as "image" | "video",
     assetType: "Before/After" as AssetType,
+    category: "Creative Asset" as AssetCategory,
     clientId: "",
     service: "",
     market: "",
@@ -56,7 +62,6 @@ function UploadModal({
     status: "Uploaded" as AssetStatus,
     approvedForAds: false,
   });
-
   const selectedClient = clients.find((c) => c.id === form.clientId);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -71,16 +76,18 @@ function UploadModal({
     }
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!form.fileName || !form.clientId) return;
     const client = clients.find((c) => c.id === form.clientId);
-    onAdd({
+    setSaving(true);
+    await onAdd({
       id: `ca-new-${Date.now()}`,
       clientId: form.clientId,
       clientName: client?.name ?? form.clientId,
       fileName: form.fileName,
       fileType: form.fileType,
       assetType: form.assetType,
+      category: form.category,
       thumbnailUrl: null,
       uploadDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       service: form.service || selectedClient?.services[0] || "",
@@ -91,6 +98,7 @@ function UploadModal({
       tags: [],
       approvedForAds: form.approvedForAds,
     });
+    setSaving(false);
     onClose();
   }
 
@@ -111,16 +119,22 @@ function UploadModal({
           </button>
         </div>
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Mock storage notice */}
+          {/* Storage mode notice */}
           <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
-            <AlertCircle size={11} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+            {usingSupabase ? (
+              <Database size={11} className="text-[#22c55e] flex-shrink-0 mt-0.5" />
+            ) : (
+              <HardDrive size={11} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+            )}
             <p className="text-[11px] text-[#6b7a99]">
-              <span className="text-[#f8f8f7] font-semibold">Mock storage mode. </span>
-              Asset metadata is saved locally. Connect Supabase Storage to persist file bytes.
+              {usingSupabase ? (
+                <><span className="text-[#22c55e] font-semibold">Supabase connected. </span>Asset metadata will be saved to the database.</>
+              ) : (
+                <><span className="text-[#f8f8f7] font-semibold">Local storage mode. </span>Asset metadata is saved in your browser and persists across refreshes. Connect Supabase to share across devices.</>
+              )}
             </p>
           </div>
-
-          {/* Drop zone with real file input */}
+          {/* Drop zone */}
           <input
             ref={fileInputRef}
             type="file"
@@ -150,7 +164,6 @@ function UploadModal({
               </>
             )}
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>File Name *</label>
@@ -180,7 +193,6 @@ function UploadModal({
               </div>
             </div>
           </div>
-
           <div>
             <label className={labelCls}>Client *</label>
             <div className="relative">
@@ -197,7 +209,23 @@ function UploadModal({
               <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
             </div>
           </div>
-
+          {/* Category — high-level file classification */}
+          <div>
+            <label className={labelCls}>Category</label>
+            <div className="relative">
+              <select
+                className={`${inputCls} appearance-none pr-8`}
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value as AssetCategory })}
+              >
+                {ALL_ASSET_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
+            </div>
+          </div>
+          {/* Asset Type — creative format */}
           <div>
             <label className={labelCls}>Asset Type</label>
             <div className="relative">
@@ -213,7 +241,6 @@ function UploadModal({
               <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
             </div>
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Service</label>
@@ -234,7 +261,6 @@ function UploadModal({
               />
             </div>
           </div>
-
           <div>
             <label className={labelCls}>Campaign Use Case</label>
             <input
@@ -244,7 +270,6 @@ function UploadModal({
               onChange={(e) => setForm({ ...form, campaignUseCase: e.target.value })}
             />
           </div>
-
           <div>
             <label className={labelCls}>Notes</label>
             <textarea
@@ -255,7 +280,6 @@ function UploadModal({
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
-
           <div className="flex items-center justify-between px-3 py-3 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
             <div>
               <div className="text-[12px] text-[#f8f8f7] font-medium">Approved for Ads</div>
@@ -276,10 +300,10 @@ function UploadModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!form.fileName || !form.clientId}
+            disabled={!form.fileName || !form.clientId || saving}
             className="px-4 py-2 text-[12px] font-semibold vc-orange-gradient text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Add Asset
+            {saving ? "Saving…" : "Add Asset"}
           </button>
         </div>
       </div>
@@ -290,11 +314,9 @@ function UploadModal({
 // ─────────────────────────────────────────────────────────────
 // Asset card
 // ─────────────────────────────────────────────────────────────
-
 function AssetCard({ asset }: { asset: CreativeAsset }) {
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
   const Icon = asset.fileType === "video" ? Video : ImageIcon;
-
   return (
     <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden hover:border-[rgba(0, 129, 242, 0.25)] transition-colors group">
       {/* Thumbnail */}
@@ -320,7 +342,6 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
           )}
         </div>
       </div>
-
       {/* Info */}
       <div className="p-4 space-y-2.5">
         <div>
@@ -328,6 +349,11 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
           <div className="text-[11px] text-[#6b7a99] mt-0.5">{asset.clientName}</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Category badge */}
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md border text-[#a78bfa] border-[#a78bfa30] bg-[#a78bfa10]">
+            {asset.category ?? "Creative Asset"}
+          </span>
+          {/* Asset type badge */}
           <span
             className="text-[10px] font-medium px-2 py-0.5 rounded-md border"
             style={{ color, borderColor: `${color}30`, backgroundColor: `${color}10` }}
@@ -363,17 +389,14 @@ function AssetCard({ asset }: { asset: CreativeAsset }) {
 // ─────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────
-
 export default function CreativesPage() {
   const { can } = useAuth();
-  const [localAssets, setLocalAssets] = useState<CreativeAsset[]>([]);
+  const { allAssets, addAsset, usingSupabase, loading } = usePersistedCreativeAssets();
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
-
-  const allAssets = useMemo(() => [...MOCK_CREATIVE_ASSETS, ...localAssets], [localAssets]);
 
   const filtered = useMemo(() => {
     return allAssets.filter((a) => {
@@ -387,7 +410,8 @@ export default function CreativesPage() {
           !a.assetType.toLowerCase().includes(q) &&
           !a.clientName.toLowerCase().includes(q) &&
           !a.service.toLowerCase().includes(q) &&
-          !a.campaignUseCase.toLowerCase().includes(q)
+          !a.campaignUseCase.toLowerCase().includes(q) &&
+          !(a.category ?? "").toLowerCase().includes(q)
         )
           return false;
       }
@@ -409,6 +433,14 @@ export default function CreativesPage() {
         description={`${stats.total} assets · ${stats.approved} approved for ads`}
         action={
           <div className="flex items-center gap-2">
+            {/* Storage mode indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[10px]">
+              {usingSupabase ? (
+                <><Database size={10} className="text-[#22c55e]" /><span className="text-[#22c55e]">Supabase</span></>
+              ) : (
+                <><HardDrive size={10} className="text-[#6b7a99]" /><span className="text-[#6b7a99]">Local storage</span></>
+              )}
+            </div>
             <button className="flex items-center gap-2 px-3 py-2 bg-[#0D1520] border border-[#0081f2]/30 rounded-lg text-[12px] text-[#0081f2] hover:border-[#0081f2]/50 transition-colors font-medium">
               <Film size={13} />
               Analyze with AI
@@ -430,14 +462,13 @@ export default function CreativesPage() {
           </div>
         }
       />
-
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total Assets", value: stats.total, color: "#0081f2" },
-          { label: "Approved for Ads", value: stats.approved, color: "#22c55e" },
-          { label: "Needs Review", value: stats.needsReview, color: "#f59e0b" },
-          { label: "Used in Campaigns", value: stats.inCampaign, color: "#a78bfa" },
+          { label: "Total Assets", value: loading ? "…" : stats.total, color: "#0081f2" },
+          { label: "Approved for Ads", value: loading ? "…" : stats.approved, color: "#22c55e" },
+          { label: "Needs Review", value: loading ? "…" : stats.needsReview, color: "#f59e0b" },
+          { label: "Used in Campaigns", value: loading ? "…" : stats.inCampaign, color: "#a78bfa" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-4">
             <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1">{label}</div>
@@ -445,7 +476,6 @@ export default function CreativesPage() {
           </div>
         ))}
       </div>
-
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Search */}
@@ -459,7 +489,6 @@ export default function CreativesPage() {
             className="w-48 pl-8 pr-3 py-1.5 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[12px] text-[#f8f8f7] placeholder-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
           />
         </div>
-
         {/* Client filter */}
         <div className="relative">
           <select
@@ -474,7 +503,6 @@ export default function CreativesPage() {
           </select>
           <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
         </div>
-
         {/* Type filter */}
         <div className="relative">
           <select
@@ -489,7 +517,6 @@ export default function CreativesPage() {
           </select>
           <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6b7a99] pointer-events-none" />
         </div>
-
         {/* Status filter */}
         <div className="flex items-center gap-1">
           <Filter size={11} className="text-[#3d4f6e]" />
@@ -508,9 +535,13 @@ export default function CreativesPage() {
           ))}
         </div>
       </div>
-
       {/* Grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center text-center">
+          <Film size={24} className="text-[#3d4f6e] mb-3 animate-pulse" />
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">Loading assets…</div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-16 flex flex-col items-center text-center">
           <Film size={24} className="text-[#3d4f6e] mb-3" />
           <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No assets match your filters</div>
@@ -523,12 +554,12 @@ export default function CreativesPage() {
           ))}
         </div>
       )}
-
       {/* Upload modal */}
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onAdd={(asset) => setLocalAssets((prev) => [asset, ...prev])}
+          onAdd={addAsset}
+          usingSupabase={usingSupabase}
         />
       )}
     </div>

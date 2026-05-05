@@ -45,6 +45,7 @@ import {
   type CreativeAsset,
   type AssetType,
 } from "@/lib/creativeAssets";
+import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
 import {
   draftStatusLabel,
   draftStatusVariant,
@@ -644,7 +645,8 @@ function AICampaignBuilderContent() {
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
   const clientIntelligence = selectedClientId ? (getIntelligence(selectedClientId) ?? null) : null;
-  const clientAssets = selectedClientId ? getAssetsForClient(selectedClientId) : [];
+  const { allAssets: allPersistedAssets } = usePersistedCreativeAssets();
+  const clientAssets = selectedClientId ? getAssetsForClient(selectedClientId, allPersistedAssets) : [];
 
   function handleClientChange(id: string) {
     setSelectedClientId(id);

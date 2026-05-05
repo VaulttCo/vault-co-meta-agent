@@ -1,5 +1,20 @@
 // Creative asset types, statuses, mock library, and helpers.
 
+export type AssetCategory =
+  | "Creative Asset"
+  | "Client Asset"
+  | "Onboarding Summary"
+  | "Report"
+  | "Other";
+
+export const ALL_ASSET_CATEGORIES: AssetCategory[] = [
+  "Creative Asset",
+  "Client Asset",
+  "Onboarding Summary",
+  "Report",
+  "Other",
+];
+
 export type AssetType =
   | "Before/After"
   | "Testimonial"
@@ -28,6 +43,8 @@ export interface CreativeAsset {
   fileName: string;
   fileType: "image" | "video";
   assetType: AssetType;
+  /** High-level file category, separate from creative format type */
+  category: AssetCategory;
   thumbnailUrl: string | null;
   uploadDate: string;
   service: string;
@@ -47,6 +64,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "stanley_trust_intro.mp4",
     fileType: "video",
     assetType: "Owner On Camera",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "May 1, 2026",
     service: "Roof Replacement",
@@ -64,6 +82,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "kaczmar_before_after_march.jpg",
     fileType: "image",
     assetType: "Before/After",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "Apr 22, 2026",
     service: "Roof Replacement",
@@ -81,6 +100,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "warranty_explainer_v1.mp4",
     fileType: "video",
     assetType: "Warranty Explanation",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "May 3, 2026",
     service: "Roof Replacement",
@@ -98,6 +118,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "phoenix_storm_reel.mp4",
     fileType: "video",
     assetType: "Storm Damage",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "Apr 18, 2026",
     service: "Storm Damage Inspection",
@@ -115,6 +136,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "homeowner_testimonial_az.mp4",
     fileType: "video",
     assetType: "Testimonial",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "Apr 10, 2026",
     service: "Roof Replacement",
@@ -132,6 +154,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "tempe_neighborhood_drone.mp4",
     fileType: "video",
     assetType: "Drone Footage",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "May 2, 2026",
     service: "Roof Replacement",
@@ -149,6 +172,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "inspector_onsite_walk.mp4",
     fileType: "video",
     assetType: "Inspection Day",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "Apr 28, 2026",
     service: "Storm Damage Inspection",
@@ -166,6 +190,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "atlanta_reroof_reveal.mp4",
     fileType: "video",
     assetType: "Project Reveal",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "May 4, 2026",
     service: "Roof Replacement",
@@ -183,6 +208,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "kitchen_remodel_before_after.jpg",
     fileType: "image",
     assetType: "Before/After",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "Apr 15, 2026",
     service: "Kitchen Remodel",
@@ -200,12 +226,13 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
     fileName: "owner_qa_clip_process.mp4",
     fileType: "video",
     assetType: "Q&A Clip",
+    category: "Creative Asset",
     thumbnailUrl: null,
     uploadDate: "May 1, 2026",
     service: "Home Remodeling",
     market: "Columbus, OH",
     campaignUseCase: "Objection handling — price, timeline, warranty questions answered on camera",
-    notes: "Owner answers 3 common questions: 'How long does it take?', 'Do you have hidden fees?', 'What's your warranty?' Short, direct, confident. Good for warm retargeting.",
+    notes: "Owner answers 3 common questions: 'How long does it take?', 'Do you have hidden fees?', 'What\\'s your warranty?' Short, direct, confident. Good for warm retargeting.",
     status: "Uploaded",
     tags: ["qa", "objection-handling", "process", "warm", "retargeting"],
     approvedForAds: false,

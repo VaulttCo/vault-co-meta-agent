@@ -49,21 +49,25 @@ export class SupabaseStorageProvider implements StorageProvider {
       return [];
     }
 
-    return (data ?? []).map((row: any): ClientFile => ({
-      id: row.id,
-      clientId: row.client_id,
-      fileName: row.file_name,
-      fileType: mimeToFileType(row.mime_type ?? ""),
-      fileSize: row.file_size ?? 0,
-      mimeType: row.mime_type ?? "",
-      category: row.category ?? "creative_asset",
-      storageUrl: row.storage_url ?? "",
-      thumbnailUrl: row.thumbnail_url ?? null,
-      uploadedBy: row.uploaded_by ?? "Veronica",
-      uploadedAt: row.upload_date ?? new Date().toISOString(),
-      notes: row.notes ?? "",
-      status: row.status ?? "active",
-    }));
+    return (data ?? []).map((row: any): ClientFile => {
+      // Extra fields may be stored in tags JSONB for schema-cache compatibility
+      const meta = typeof row.tags === 'object' && !Array.isArray(row.tags) ? row.tags : {};
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        fileName: row.file_name,
+        fileType: mimeToFileType(row.mime_type ?? meta.mime_type ?? ""),
+        fileSize: row.file_size ?? meta.file_size ?? 0,
+        mimeType: row.mime_type ?? meta.mime_type ?? "",
+        category: row.category ?? meta.category ?? "creative_asset",
+        storageUrl: row.storage_url ?? meta.storage_url ?? "",
+        thumbnailUrl: row.thumbnail_url ?? meta.thumbnail_url ?? null,
+        uploadedBy: row.uploaded_by ?? meta.uploaded_by ?? "Veronica",
+        uploadedAt: row.upload_date ?? new Date().toISOString(),
+        notes: row.notes ?? "",
+        status: row.status ?? "active",
+      };
+    });
   }
 
   // ── Get single file ───────────────────────────────────────
@@ -80,17 +84,18 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     if (error || !data) return null;
 
+    const meta2 = typeof data.tags === 'object' && !Array.isArray(data.tags) ? data.tags : {};
     return {
       id: data.id,
       clientId: data.client_id,
       fileName: data.file_name,
-      fileType: mimeToFileType(data.mime_type ?? ""),
-      fileSize: data.file_size ?? 0,
-      mimeType: data.mime_type ?? "",
-      category: data.category ?? "creative_asset",
-      storageUrl: data.storage_url ?? "",
-      thumbnailUrl: data.thumbnail_url ?? null,
-      uploadedBy: data.uploaded_by ?? "Veronica",
+      fileType: mimeToFileType(data.mime_type ?? meta2.mime_type ?? ""),
+      fileSize: data.file_size ?? meta2.file_size ?? 0,
+      mimeType: data.mime_type ?? meta2.mime_type ?? "",
+      category: data.category ?? meta2.category ?? "creative_asset",
+      storageUrl: data.storage_url ?? meta2.storage_url ?? "",
+      thumbnailUrl: data.thumbnail_url ?? meta2.thumbnail_url ?? null,
+      uploadedBy: data.uploaded_by ?? meta2.uploaded_by ?? "Veronica",
       uploadedAt: data.upload_date ?? new Date().toISOString(),
       notes: data.notes ?? "",
       status: data.status ?? "active",
@@ -150,7 +155,18 @@ export class SupabaseStorageProvider implements StorageProvider {
       }
     }
 
-    // Persist metadata to creative_assets table
+    // Persist metadata to creative_assets table.
+    // Extra fields (mime_type, file_size, category, storage_url, thumbnail_url,
+    // uploaded_by) are stored in the tags JSONB column for schema-cache
+    // compatibility — the original table schema only has the base columns.
+    const metaTags = {
+      mime_type: fileRecord.mimeType,
+      file_size: fileRecord.fileSize,
+      category: fileRecord.category,
+      storage_url: storageUrl,
+      thumbnail_url: thumbnailUrl,
+      uploaded_by: fileRecord.uploadedBy,
+    };
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")
       .upsert({
@@ -158,17 +174,11 @@ export class SupabaseStorageProvider implements StorageProvider {
         client_id: fileRecord.clientId,
         file_name: fileRecord.fileName,
         file_type: fileRecord.fileType,
-        asset_type: "image", // default; UI can override
-        mime_type: fileRecord.mimeType,
-        file_size: fileRecord.fileSize,
-        category: fileRecord.category,
-        storage_url: storageUrl,
-        thumbnail_url: thumbnailUrl,
-        uploaded_by: fileRecord.uploadedBy,
+        asset_type: "image",
         upload_date: fileRecord.uploadedAt,
         notes: fileRecord.notes,
         status: fileRecord.status,
-        tags: [],
+        tags: metaTags,
         approved_for_ads: false,
       });
 

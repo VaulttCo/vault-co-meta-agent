@@ -179,18 +179,11 @@ IMPORTANT — Use this creative to shape the campaign:
 - Unique mechanism: ${intel.brandIntelligence.uniqueMechanism}
 - Do NOT say: ${intel.brandIntelligence.whatNotToSay.slice(0, 4).join("; ")}
 
-### Sales Intelligence
-- Best angles: ${intel.salesIntelligence.bestSalesAngles.slice(0, 3).join("; ")}
-- Lost lead recovery: ${intel.salesAudit.lostLeadRecovery}
-
 ### Campaign Implications
 - Best angles: ${intel.campaignImplications.bestCampaignAngles.slice(0, 3).join("; ")}
 - Lead form questions to use: ${intel.campaignImplications.leadFormQuestions.slice(0, 5).join("; ")}
 - Follow-up strategy: ${intel.campaignImplications.followUpStrategy.slice(0, 4).join("; ")}
 
-### Content
-- Owner on camera: ${intel.contentPlanning.ownerOnCamera ? "Yes — " + intel.companyProfile.ownerName + " is outgoing and confident on camera" : "No"}
-- Recommended themes: ${intel.contentPlanning.recommendedContentThemes.slice(0, 3).join("; ")}
 ` : "";
 
   return `Generate a complete Meta advertising campaign draft for this client.

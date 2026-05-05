@@ -7,6 +7,15 @@
 //
 // File metadata is persisted to the `creative_assets` table via the data
 // provider so that all file records survive page refreshes.
+//
+// Schema note: The original creative_assets table only has these columns:
+//   id, client_id, file_name, file_type, asset_type, upload_date, notes,
+//   status, tags (text[]), approved_for_ads, created_at, updated_at
+//
+// Extra fields (mime_type, file_size, category, storage_url, thumbnail_url,
+// uploaded_by) are encoded as a JSON suffix appended to the notes column:
+//   "User notes here\n__META__:{...json...}"
+// This avoids schema-cache issues with newly added columns.
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { StorageProvider } from "./storage-provider";
@@ -15,10 +24,30 @@ import { mimeToFileType } from "./types";
 
 const ASSETS_BUCKET = "creative-assets";
 const THUMBS_BUCKET = "creative-thumbnails";
+const META_SEPARATOR = "\n__META__:";
 
 // Build a deterministic storage path: {clientId}/{timestamp}-{fileName}
 function storagePath(clientId: string, fileName: string): string {
   return `${clientId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+}
+
+// Encode extra metadata into the notes field
+function encodeNotes(userNotes: string, meta: Record<string, unknown>): string {
+  return `${userNotes}${META_SEPARATOR}${JSON.stringify(meta)}`;
+}
+
+// Decode notes field — returns { notes, meta }
+function decodeNotes(raw: string | null): { notes: string; meta: Record<string, unknown> } {
+  if (!raw) return { notes: "", meta: {} };
+  const idx = raw.indexOf(META_SEPARATOR);
+  if (idx === -1) return { notes: raw, meta: {} };
+  const userNotes = raw.substring(0, idx);
+  try {
+    const meta = JSON.parse(raw.substring(idx + META_SEPARATOR.length));
+    return { notes: userNotes, meta: typeof meta === "object" && meta !== null ? meta : {} };
+  } catch {
+    return { notes: userNotes, meta: {} };
+  }
 }
 
 export class SupabaseStorageProvider implements StorageProvider {
@@ -34,8 +63,6 @@ export class SupabaseStorageProvider implements StorageProvider {
     const supabase = this.db;
     if (!supabase) return [];
 
-    // We store file metadata in the creative_assets table.
-    // Filter by client if requested.
     let query = (supabase as any)
       .from("creative_assets")
       .select("*")
@@ -50,21 +77,20 @@ export class SupabaseStorageProvider implements StorageProvider {
     }
 
     return (data ?? []).map((row: any): ClientFile => {
-      // Extra fields may be stored in tags JSONB for schema-cache compatibility
-      const meta = typeof row.tags === 'object' && !Array.isArray(row.tags) ? row.tags : {};
+      const { notes, meta } = decodeNotes(row.notes);
       return {
         id: row.id,
         clientId: row.client_id,
         fileName: row.file_name,
-        fileType: mimeToFileType(row.mime_type ?? meta.mime_type ?? ""),
-        fileSize: row.file_size ?? meta.file_size ?? 0,
-        mimeType: row.mime_type ?? meta.mime_type ?? "",
-        category: row.category ?? meta.category ?? "creative_asset",
-        storageUrl: row.storage_url ?? meta.storage_url ?? "",
-        thumbnailUrl: row.thumbnail_url ?? meta.thumbnail_url ?? null,
-        uploadedBy: row.uploaded_by ?? meta.uploaded_by ?? "Veronica",
+        fileType: mimeToFileType((meta.mime_type as string) ?? ""),
+        fileSize: (meta.file_size as number) ?? 0,
+        mimeType: (meta.mime_type as string) ?? "",
+        category: (meta.category as string) ?? "creative_asset",
+        storageUrl: (meta.storage_url as string) ?? "",
+        thumbnailUrl: (meta.thumbnail_url as string) ?? null,
+        uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
         uploadedAt: row.upload_date ?? new Date().toISOString(),
-        notes: row.notes ?? "",
+        notes,
         status: row.status ?? "active",
       };
     });
@@ -84,26 +110,26 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     if (error || !data) return null;
 
-    const meta2 = typeof data.tags === 'object' && !Array.isArray(data.tags) ? data.tags : {};
+    const { notes, meta } = decodeNotes(data.notes);
     return {
       id: data.id,
       clientId: data.client_id,
       fileName: data.file_name,
-      fileType: mimeToFileType(data.mime_type ?? meta2.mime_type ?? ""),
-      fileSize: data.file_size ?? meta2.file_size ?? 0,
-      mimeType: data.mime_type ?? meta2.mime_type ?? "",
-      category: data.category ?? meta2.category ?? "creative_asset",
-      storageUrl: data.storage_url ?? meta2.storage_url ?? "",
-      thumbnailUrl: data.thumbnail_url ?? meta2.thumbnail_url ?? null,
-      uploadedBy: data.uploaded_by ?? meta2.uploaded_by ?? "Veronica",
+      fileType: mimeToFileType((meta.mime_type as string) ?? ""),
+      fileSize: (meta.file_size as number) ?? 0,
+      mimeType: (meta.mime_type as string) ?? "",
+      category: (meta.category as string) ?? "creative_asset",
+      storageUrl: (meta.storage_url as string) ?? "",
+      thumbnailUrl: (meta.thumbnail_url as string) ?? null,
+      uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
       uploadedAt: data.upload_date ?? new Date().toISOString(),
-      notes: data.notes ?? "",
+      notes,
       status: data.status ?? "active",
     };
   }
 
   // ── Upload + save file ────────────────────────────────────
-  // The `file` property on ClientFile is a transient browser File object
+  // The `_blob` property on ClientFile is a transient browser File object
   // attached by the upload modal before calling saveFile.
 
   async saveFile(fileRecord: ClientFile & { _blob?: File }): Promise<ClientFile> {
@@ -155,18 +181,17 @@ export class SupabaseStorageProvider implements StorageProvider {
       }
     }
 
-    // Persist metadata to creative_assets table.
-    // Extra fields (mime_type, file_size, category, storage_url, thumbnail_url,
-    // uploaded_by) are stored in the tags JSONB column for schema-cache
-    // compatibility — the original table schema only has the base columns.
-    const metaTags = {
+    // Encode extra metadata into the notes column to avoid schema-cache issues
+    const encodedNotes = encodeNotes(fileRecord.notes ?? "", {
       mime_type: fileRecord.mimeType,
       file_size: fileRecord.fileSize,
       category: fileRecord.category,
       storage_url: storageUrl,
       thumbnail_url: thumbnailUrl,
       uploaded_by: fileRecord.uploadedBy,
-    };
+    });
+
+    // Persist metadata — only write columns that exist in the original schema
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")
       .upsert({
@@ -176,9 +201,9 @@ export class SupabaseStorageProvider implements StorageProvider {
         file_type: fileRecord.fileType,
         asset_type: "image",
         upload_date: fileRecord.uploadedAt,
-        notes: fileRecord.notes,
+        notes: encodedNotes,
         status: fileRecord.status,
-        tags: metaTags,
+        tags: [],
         approved_for_ads: false,
       });
 
@@ -197,7 +222,6 @@ export class SupabaseStorageProvider implements StorageProvider {
     const file = await this.getFile(id);
 
     if (file?.storageUrl) {
-      // Extract path from signed URL or direct path
       try {
         const url = new URL(file.storageUrl);
         const pathParts = url.pathname.split(`/${ASSETS_BUCKET}/`);

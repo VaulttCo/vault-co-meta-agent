@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import {
   ChevronLeft,
   Phone,
@@ -903,20 +903,21 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
 
 // ─── Page ─────────────────────────────────────────────────────
 
-export default function ClientProfilePage({ params }: { params: { id: string } }) {
+export default function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: clientId } = use(params);
   const [activeTab, setActiveTab] = useState("overview");
   // Start with mock data (fast); fall back to data provider for Supabase-added clients
-  const [client, setClient] = useState<Client | null>(getClient(params.id) ?? null);
-  const [clientLoading, setClientLoading] = useState(!getClient(params.id));
+  const [client, setClient] = useState<Client | null>(getClient(clientId) ?? null);
+  const [clientLoading, setClientLoading] = useState(!getClient(clientId));
 
   useEffect(() => {
     if (client) return; // already found in mock data
     getDataProvider()
-      .getClient(params.id)
+      .getClient(clientId)
       .then((c) => { setClient(c); setClientLoading(false); })
       .catch(() => setClientLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id]);
+  }, [clientId]);
 
   if (clientLoading) {
     return (

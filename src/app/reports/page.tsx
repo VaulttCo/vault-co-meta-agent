@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FileText,
   Download,
@@ -14,6 +14,11 @@ import {
   CheckCircle,
   AlertCircle,
   ChevronRight,
+  Copy,
+  FileJson,
+  Printer,
+  ClipboardList,
+  ChevronDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -22,6 +27,16 @@ import type { Client } from "@/lib/data";
 import type { PersistedReport } from "@/lib/data/data-provider";
 import { usePersistedReports } from "@/lib/usePersistedReports";
 import type { WeeklyReportInput } from "@/lib/ai/service";
+import {
+  buildClientNarrative,
+  buildFullReport,
+  buildMarkdown,
+  buildJSON,
+  triggerPDFPrint,
+  downloadFile,
+  copyToClipboard,
+  reportFilename,
+} from "@/lib/reportExport";
 
 // ── Helpers ───────────────────────────────────────────────────
 function generateId(): string {
@@ -57,6 +72,222 @@ function buildReportInput(client: Client): WeeklyReportInput {
   };
 }
 
+// ── Export Action Bar ─────────────────────────────────────────
+function ExportBar({ report }: { report: PersistedReport }) {
+  const [copied, setCopied] = useState<"narrative" | "full" | null>(null);
+
+  async function handleCopyNarrative() {
+    const text = buildClientNarrative(report);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied("narrative");
+      setTimeout(() => setCopied(null), 2000);
+    }
+  }
+
+  async function handleCopyFull() {
+    const text = buildFullReport(report);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied("full");
+      setTimeout(() => setCopied(null), 2000);
+    }
+  }
+
+  function handleDownloadMarkdown() {
+    const md = buildMarkdown(report);
+    downloadFile(md, reportFilename(report, "md"), "text/markdown;charset=utf-8");
+  }
+
+  function handleDownloadJSON() {
+    const json = buildJSON(report);
+    downloadFile(json, reportFilename(report, "json"), "application/json;charset=utf-8");
+  }
+
+  function handleDownloadPDF() {
+    triggerPDFPrint(report);
+  }
+
+  const btnBase =
+    "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-colors";
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 p-4 bg-[#0a1220] border-t border-[rgba(0,129,242,0.15)] rounded-b-2xl">
+      {/* Copy client narrative */}
+      <button
+        onClick={handleCopyNarrative}
+        className={`${btnBase} ${
+          copied === "narrative"
+            ? "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/25"
+            : "text-[#c8d4e8] bg-[#0f1a28] border-[rgba(0,129,242,0.2)] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.35)]"
+        }`}
+        title="Copy client-ready narrative (Executive Summary, Wins, Issues, Next Actions, Client Update)"
+      >
+        {copied === "narrative" ? (
+          <CheckCircle size={11} />
+        ) : (
+          <ClipboardList size={11} />
+        )}
+        {copied === "narrative" ? "Copied!" : "Copy Client Narrative"}
+      </button>
+
+      {/* Copy full internal report */}
+      <button
+        onClick={handleCopyFull}
+        className={`${btnBase} ${
+          copied === "full"
+            ? "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/25"
+            : "text-[#c8d4e8] bg-[#0f1a28] border-[rgba(0,129,242,0.2)] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.35)]"
+        }`}
+        title="Copy full internal report including KPIs, Veronica recommendations, and approval note"
+      >
+        {copied === "full" ? (
+          <CheckCircle size={11} />
+        ) : (
+          <Copy size={11} />
+        )}
+        {copied === "full" ? "Copied!" : "Copy Full Report"}
+      </button>
+
+      {/* Download Markdown */}
+      <button
+        onClick={handleDownloadMarkdown}
+        className={`${btnBase} text-[#a78bfa] bg-[#a78bfa]/8 border-[#a78bfa]/20 hover:bg-[#a78bfa]/15 hover:border-[#a78bfa]/35`}
+        title="Download as Markdown file (.md)"
+      >
+        <Download size={11} />
+        Download .md
+      </button>
+
+      {/* Download JSON */}
+      <button
+        onClick={handleDownloadJSON}
+        className={`${btnBase} text-[#0081f2] bg-[#0081f2]/8 border-[#0081f2]/20 hover:bg-[#0081f2]/15 hover:border-[#0081f2]/35`}
+        title="Download as JSON file (.json)"
+      >
+        <FileJson size={11} />
+        Download .json
+      </button>
+
+      {/* Download PDF */}
+      <button
+        onClick={handleDownloadPDF}
+        className={`${btnBase} text-[#ff8400] bg-[#ff8400]/8 border-[#ff8400]/20 hover:bg-[#ff8400]/15 hover:border-[#ff8400]/35`}
+        title="Open browser print dialog to save as PDF"
+      >
+        <Printer size={11} />
+        Download PDF
+      </button>
+    </div>
+  );
+}
+
+// ── Quick Export Dropdown (table row) ─────────────────────────
+function QuickExportDropdown({ report }: { report: PersistedReport }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  async function handleCopyNarrative() {
+    const text = buildClientNarrative(report);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+    setOpen(false);
+  }
+
+  function handleDownloadMarkdown() {
+    const md = buildMarkdown(report);
+    downloadFile(md, reportFilename(report, "md"), "text/markdown;charset=utf-8");
+    setOpen(false);
+  }
+
+  function handleDownloadJSON() {
+    const json = buildJSON(report);
+    downloadFile(json, reportFilename(report, "json"), "application/json;charset=utf-8");
+    setOpen(false);
+  }
+
+  function handleDownloadPDF() {
+    triggerPDFPrint(report);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`w-7 h-7 flex items-center justify-center rounded-lg border transition-colors ${
+          copied
+            ? "bg-[#22c55e]/10 border-[#22c55e]/25 text-[#22c55e]"
+            : "bg-[#0f1a28] border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7]"
+        }`}
+        title="Export options"
+      >
+        {copied ? <CheckCircle size={12} /> : <Download size={12} />}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-xl shadow-2xl overflow-hidden">
+          <div className="px-3 py-2 border-b border-[rgba(0,129,242,0.12)]">
+            <span className="text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+              Export Report
+            </span>
+          </div>
+          {[
+            {
+              label: "Copy Client Narrative",
+              icon: ClipboardList,
+              action: handleCopyNarrative,
+              color: "#c8d4e8",
+            },
+            {
+              label: "Download Markdown",
+              icon: Download,
+              action: handleDownloadMarkdown,
+              color: "#a78bfa",
+            },
+            {
+              label: "Download JSON",
+              icon: FileJson,
+              action: handleDownloadJSON,
+              color: "#0081f2",
+            },
+            {
+              label: "Download PDF",
+              icon: Printer,
+              action: handleDownloadPDF,
+              color: "#ff8400",
+            },
+          ].map(({ label, icon: Icon, action, color }) => (
+            <button
+              key={label}
+              onClick={action}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-[#c8d4e8] hover:bg-[#0f1a28] transition-colors text-left"
+            >
+              <Icon size={12} style={{ color }} />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── View Report Modal ─────────────────────────────────────────
 function ViewReportModal({
   report,
@@ -68,7 +299,7 @@ function ViewReportModal({
   const gc = report.generatedContent;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-[rgba(0,129,242,0.15)] sticky top-0 bg-[#0D1520] z-10">
           <div>
@@ -97,7 +328,7 @@ function ViewReportModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 flex-1">
           {/* KPI Snapshot */}
           <div className="grid grid-cols-4 gap-3">
             {[
@@ -196,6 +427,11 @@ function ViewReportModal({
               <p className="text-[11px] text-[#ff8400]/80">{gc.approvalNote}</p>
             </div>
           )}
+        </div>
+
+        {/* Export Action Bar — sticky at bottom of modal */}
+        <div className="sticky bottom-0">
+          <ExportBar report={report} />
         </div>
       </div>
     </div>
@@ -496,9 +732,7 @@ export default function ReportsPage() {
                             >
                               View
                             </button>
-                            <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
-                              <Download size={12} />
-                            </button>
+                            <QuickExportDropdown report={persisted!} />
                           </>
                         ) : (
                           <button

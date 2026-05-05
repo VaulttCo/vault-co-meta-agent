@@ -89,7 +89,15 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
                 market: row.market ?? "",
                 campaignUseCase: row.campaign_use_case ?? "",
                 notes: row.notes ?? "",
-                status: row.status,
+                // Map Supabase lowercase status back to TypeScript display status
+                status: (() => {
+                  const s = row.status as string;
+                  if (s === "uploaded") return "Uploaded" as const;
+                  if (s === "active") return (row.approved_for_ads ? "Approved" as const : "Uploaded" as const);
+                  if (s === "pending") return "Needs Review" as const;
+                  if (s === "draft") return "Uploaded" as const;
+                  return "Uploaded" as const;
+                })(),
                 tags: Array.isArray(row.tags) ? row.tags : [],
                 approvedForAds: row.approved_for_ads,
               }));
@@ -117,14 +125,14 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     if (usingSupabase) {
       const supabase = getSupabaseBrowserClient();
       if (supabase) {
-        const { error } = await supabase.from("creative_assets").insert({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase.from("creative_assets") as any).insert({
           id: asset.id,
           client_id: asset.clientId,
           file_name: asset.fileName,
           file_type: asset.fileType,
           asset_type: asset.assetType,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...(({ category: asset.category }) as any),
+          category: asset.category,
           thumbnail_url: asset.thumbnailUrl,
           storage_url: null,
           upload_date: asset.uploadDate,
@@ -132,7 +140,16 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
           market: asset.market,
           campaign_use_case: asset.campaignUseCase,
           notes: asset.notes,
-          status: asset.status,
+          // Map TypeScript display status to Supabase-compatible lowercase status
+          status: (() => {
+            const s = asset.status as string;
+            if (s === "Uploaded") return "uploaded";
+            if (s === "Needs Review") return "pending";
+            if (s === "Approved") return "active";
+            if (s === "Used in Campaign") return "active";
+            if (s === "Archived") return "draft";
+            return "uploaded";
+          })(),
           tags: asset.tags,
           approved_for_ads: asset.approvedForAds,
         });

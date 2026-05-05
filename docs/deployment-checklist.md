@@ -11,20 +11,23 @@ Complete this checklist before giving anyone outside the team access to the port
 
 ## Environment Variables
 
-- [ ] `AI_PROVIDER` set to `anthropic` (or `openai`) — not `mock`
-- [ ] `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) added to Vercel env vars
-- [ ] `NEXT_PUBLIC_SUPABASE_URL` added
-- [ ] `NEXT_PUBLIC_SUPABASE_ANON_KEY` added
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` added (Production + Preview only — never Development if sharing the codebase)
+- [x] `AI_PROVIDER` set to `anthropic`
+- [x] `ANTHROPIC_API_KEY` added to Vercel env vars
+- [x] `NEXT_PUBLIC_SUPABASE_URL` added
+- [x] `NEXT_PUBLIC_SUPABASE_ANON_KEY` added
+- [x] `SUPABASE_SERVICE_ROLE_KEY` added
 - [ ] No API keys committed to git (check `git log --all --full-history -- .env*`)
 
 ## Database (Supabase)
 
-- [ ] Schema applied: all tables from `docs/database-schema.md` exist
-- [ ] Seed data loaded for demo clients (see `docs/database-schema.md` seed block)
+- [x] Schema applied: all 8 tables exist (clients, approvals, campaign_drafts, reports, client_intelligence, creative_assets, files, integration_connections)
+- [x] Seed data loaded for demo clients
 - [ ] Row Level Security policies reviewed (default: service role bypasses RLS — fine for server routes, check client-side queries)
-- [ ] Storage bucket `client-files` created in Supabase Storage
-- [ ] Storage bucket `creative-assets` created in Supabase Storage
+- [x] Storage bucket `client-files` created in Supabase Storage
+- [x] Storage bucket `creative-assets` created in Supabase Storage
+- [x] Storage bucket `creative-thumbnails` created in Supabase Storage
+- [x] Storage bucket `onboarding-summaries` created in Supabase Storage
+- [x] Storage bucket `reports` created in Supabase Storage
 - [ ] Settings page shows "Supabase" as active provider (not "Mock")
 
 ## Auth (CRITICAL — do before client access)

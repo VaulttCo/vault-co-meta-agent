@@ -149,10 +149,13 @@ function FileUploadModal({
   const [category, setCategory] = useState<FileCategory>("client_asset");
   const [notes, setNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
+  const [selectedBlob, setSelectedBlob] = useState<File | null>(null);
+  const storageProvider = getStorageProvider();
+  const isRealStorage = storageProvider.name === "supabase";
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (f) {
+      setSelectedBlob(f);
       setFileName(f.name);
       setFileSize(f.size);
       setMimeType(f.type || "application/octet-stream");
@@ -164,11 +167,10 @@ function FileUploadModal({
       }
     }
   }
-
   async function handleSubmit() {
     if (!fileName) return;
     setIsSaving(true);
-    const newFile: ClientFile = {
+    const newFile: ClientFile & { _blob?: File } = {
       id: `file-${Date.now()}`,
       clientId,
       fileName,
@@ -176,14 +178,15 @@ function FileUploadModal({
       fileSize,
       mimeType,
       category,
-      storageUrl: `/mock/files/${fileName}`,
+      storageUrl: isRealStorage ? "" : `/mock/files/${fileName}`,
       thumbnailUrl: null,
       uploadedBy,
       uploadedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       notes,
       status: "active",
+      _blob: selectedBlob ?? undefined,
     };
-    const saved = await getStorageProvider().saveFile(newFile);
+    const saved = await storageProvider.saveFile(newFile);
     onAdd(saved);
     setIsSaving(false);
     onClose();
@@ -207,14 +210,24 @@ function FileUploadModal({
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Mock storage notice */}
-          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
-            <AlertCircle size={12} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-[#6b7a99] leading-snug">
-              <span className="text-[#f8f8f7] font-semibold">Mock storage mode. </span>
-              File metadata is saved locally. Connect Supabase Storage to persist actual file bytes.
-            </p>
-          </div>
+          {/* Storage mode notice */}
+          {isRealStorage ? (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#0081f2]/10 border border-[#0081f2]/30 rounded-lg">
+              <CheckCircle2 size={12} className="text-[#0081f2] flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Supabase Storage active. </span>
+                Files will be uploaded to your Vault Co storage bucket and persisted to the database.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#3d4f6e]/15 border border-[#3d4f6e]/30 rounded-lg">
+              <AlertCircle size={12} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Mock storage mode. </span>
+                File metadata is saved locally. Connect Supabase Storage to persist actual file bytes.
+              </p>
+            </div>
+          )}
 
           {/* Drop zone / file input */}
           <div
@@ -364,7 +377,7 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[#3d4f6e] px-2 py-1 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg">
-            Mock storage
+            {getStorageProvider().name === "supabase" ? "Supabase Storage" : "Mock storage"}
           </span>
           {can("canUploadFiles") && (
             <button
@@ -526,9 +539,10 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
     if (!file) return;
     setPdfFileName(file.name);
     setPdfNotice(true);
-    // Save to mock storage
+    // Save to storage provider (real Supabase or mock fallback)
     if (user) {
-      const newFile = {
+      const sp = getStorageProvider();
+      const newFile: ClientFile & { _blob?: File } = {
         id: `file-pdf-${Date.now()}`,
         clientId,
         fileName: file.name,
@@ -536,14 +550,15 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
         fileSize: file.size,
         mimeType: "application/pdf",
         category: "onboarding_summary" as const,
-        storageUrl: `/mock/files/${file.name}`,
+        storageUrl: sp.name === "supabase" ? "" : `/mock/files/${file.name}`,
         thumbnailUrl: null,
         uploadedBy: user.name,
         uploadedAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         notes: "Onboarding summary PDF — uploaded from Intelligence tab",
         status: "active" as const,
+        _blob: file,
       };
-      getStorageProvider().saveFile(newFile);
+      sp.saveFile(newFile);
     }
   }
 

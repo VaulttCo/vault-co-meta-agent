@@ -4,7 +4,7 @@ export interface StorageProvider {
   readonly name: "mock" | "supabase";
   getFiles(clientId?: string): Promise<ClientFile[]>;
   getFile(id: string): Promise<ClientFile | null>;
-  saveFile(file: ClientFile): Promise<ClientFile>;
+  saveFile(file: ClientFile & { _blob?: File }): Promise<ClientFile>;
   deleteFile(id: string): Promise<void>;
   updateFileStatus(id: string, status: ClientFile["status"]): Promise<void>;
 }
@@ -17,13 +17,13 @@ export function getStorageProvider(): StorageProvider {
   const hasSupabase =
     typeof process !== "undefined" &&
     !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://placeholder.supabase.co" &&
+    !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== "placeholder-anon-key";
 
   if (hasSupabase) {
-    // Placeholder — Supabase Storage integration is documented in /docs/storage-setup.md
-    // Falls through to mock until the real provider is implemented
-    const { MockStorageProvider } = require("./mock-storage-provider");
-    _provider = new MockStorageProvider();
+    const { SupabaseStorageProvider } = require("./supabase-storage-provider");
+    _provider = new SupabaseStorageProvider();
   } else {
     const { MockStorageProvider } = require("./mock-storage-provider");
     _provider = new MockStorageProvider();

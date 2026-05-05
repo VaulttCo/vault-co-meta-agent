@@ -240,7 +240,31 @@ export class SupabaseDataProvider implements DataProvider {
   // ── Approvals ────────────────────────────────────────────
 
   async getApprovals(): Promise<Approval[]> {
-    return this.mock.getApprovals();
+    const supabase = this.db;
+    if (!supabase) return this.mock.getApprovals();
+
+    const { data, error } = await supabase
+      .from("approvals")
+      .select("*")
+      .order("submitted_at", { ascending: false });
+
+    if (error || !data?.length) {
+      if (error) console.warn("[SupabaseProvider] getApprovals:", error.message);
+      return this.mock.getApprovals();
+    }
+
+    return (data as any[]).map((row, i): Approval => ({
+      id: i + 1,
+      clientId: row.client_id ?? "",
+      clientName: row.client_id ?? "",
+      type: row.approval_type ?? "campaign",
+      item: row.title ?? "Untitled",
+      detail: row.description ?? "",
+      priority: (row.risk_level === "high" ? "high" : row.risk_level === "medium" ? "medium" : "low") as Approval["priority"],
+      submittedBy: row.requested_by ?? "Veronica",
+      submittedAt: row.submitted_at ?? row.created_at ?? new Date().toISOString(),
+      iconType: row.approval_type === "campaign" ? "campaign" : row.approval_type === "budget" ? "budget" : "report",
+    }));
   }
 
   // ── Client Intelligence ───────────────────────────────────

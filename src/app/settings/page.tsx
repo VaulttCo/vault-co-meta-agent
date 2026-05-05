@@ -92,6 +92,9 @@ export default function SettingsPage() {
   const { user, permissions, signOut, can } = useAuth();
   const [providerName, setProviderName] = useState<"mock" | "supabase">("mock");
   const supabaseConfigured = isSupabaseConfigured();
+  // NEXT_PUBLIC_ vars are baked in at build time — read directly
+  const aiProvider = (process.env.NEXT_PUBLIC_AI_PROVIDER ?? "mock") as "mock" | "anthropic" | "openai";
+  const aiLive = aiProvider === "anthropic" || aiProvider === "openai";
 
   useEffect(() => {
     setProviderName(getDataProvider().name);
@@ -244,40 +247,56 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
           <Bot size={14} className="text-[#0081f2]" />
           <span className="text-sm font-semibold text-[#f8f8f7]">Veronica AI Provider Status</span>
-          <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-[#6b7a99] bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-full px-2.5 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e]" />
-            Mock Mode Active
-          </span>
+          {aiLive ? (
+            <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-[#22c55e] bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-full px-2.5 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+              Live — {aiProvider === "anthropic" ? "Anthropic" : "OpenAI"}
+            </span>
+          ) : (
+            <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-[#6b7a99] bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-full px-2.5 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e]" />
+              Mock Mode Active
+            </span>
+          )}
         </div>
         <div className="p-5 space-y-4">
-          <div className="flex items-start gap-2.5 px-4 py-3 bg-[#3d4f6e]/10 border border-[#3d4f6e]/20 rounded-lg">
-            <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
-            <p className="text-[12px] text-[#6b7a99] leading-snug">
-              <span className="text-[#f8f8f7] font-semibold">Veronica is running in mock mode.</span>{" "}
-              Set{" "}
-              <span className="font-mono text-[#f8f8f7]">AI_PROVIDER=anthropic</span> or{" "}
-              <span className="font-mono text-[#f8f8f7]">AI_PROVIDER=openai</span> in{" "}
-              <span className="font-mono text-[#0081f2]">.env.local</span> and restart to enable
-              live generation.
-            </p>
-          </div>
+          {aiLive ? (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-[#22c55e]/5 border border-[#22c55e]/15 rounded-lg">
+              <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#22c55e] font-semibold">Veronica is live.</span>{" "}
+                Using{" "}
+                <span className="font-mono text-[#f8f8f7]">{aiProvider === "anthropic" ? "claude-sonnet-4-5" : "gpt-4o"}</span>{" "}
+                for campaign generation, intelligence extraction, creative analysis, and report drafting.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-[#3d4f6e]/10 border border-[#3d4f6e]/20 rounded-lg">
+              <AlertCircle size={13} className="text-[#6b7a99] flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Veronica is running in mock mode.</span>{" "}
+                Set{" "}
+                <span className="font-mono text-[#f8f8f7]">NEXT_PUBLIC_AI_PROVIDER=anthropic</span> in Vercel env vars and redeploy to enable live generation.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             {[
               {
                 label: "AI_PROVIDER=mock",
                 desc: "Deterministic templates — no API key needed",
-                active: true,
+                active: aiProvider === "mock",
               },
               {
                 label: "AI_PROVIDER=anthropic",
-                desc: "claude-sonnet-4-6 via Anthropic API — requires ANTHROPIC_API_KEY",
-                active: false,
+                desc: "claude-sonnet-4-5 via Anthropic API — requires ANTHROPIC_API_KEY",
+                active: aiProvider === "anthropic",
               },
               {
                 label: "AI_PROVIDER=openai",
                 desc: "gpt-4o via OpenAI API with JSON mode — requires OPENAI_API_KEY",
-                active: false,
+                active: aiProvider === "openai",
               },
             ].map((opt) => (
               <div
@@ -335,12 +354,17 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
           <Database size={14} className="text-[#a78bfa]" />
           <span className="text-sm font-semibold text-[#f8f8f7]">Data Provider</span>
-          <span
-            className={`ml-auto flex items-center gap-1.5 text-[11px] font-semibold rounded-full px-2.5 py-1 border text-[#6b7a99] bg-[#0f1a28] border-[rgba(0, 129, 242, 0.15)]`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e]" />
-            Mock Mode Active
-          </span>
+          {providerName === "supabase" ? (
+            <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-[#22c55e] bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-full px-2.5 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
+              Supabase Active
+            </span>
+          ) : (
+            <span className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-[#6b7a99] bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-full px-2.5 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e]" />
+              Mock Mode Active
+            </span>
+          )}
         </div>
         <div className="p-5 space-y-4">
           {/* Status rows */}

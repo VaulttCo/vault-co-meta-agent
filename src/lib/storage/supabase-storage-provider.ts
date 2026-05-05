@@ -19,7 +19,7 @@
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { StorageProvider } from "./storage-provider";
-import type { ClientFile } from "./types";
+import type { ClientFile, FileCategory } from "./types";
 import { mimeToFileType } from "./types";
 
 const ASSETS_BUCKET = "creative-assets";
@@ -48,6 +48,21 @@ function decodeNotes(raw: string | null): { notes: string; meta: Record<string, 
   } catch {
     return { notes: userNotes, meta: {} };
   }
+}
+
+function toFileCategory(val: unknown): FileCategory {
+  const valid: FileCategory[] = [
+    "onboarding_summary",
+    "creative_asset",
+    "contract",
+    "report",
+    "client_asset",
+    "other",
+  ];
+  if (typeof val === "string" && valid.includes(val as FileCategory)) {
+    return val as FileCategory;
+  }
+  return "creative_asset";
 }
 
 export class SupabaseStorageProvider implements StorageProvider {
@@ -85,7 +100,7 @@ export class SupabaseStorageProvider implements StorageProvider {
         fileType: mimeToFileType((meta.mime_type as string) ?? ""),
         fileSize: (meta.file_size as number) ?? 0,
         mimeType: (meta.mime_type as string) ?? "",
-        category: (meta.category as string) ?? "creative_asset",
+        category: toFileCategory(meta.category),
         storageUrl: (meta.storage_url as string) ?? "",
         thumbnailUrl: (meta.thumbnail_url as string) ?? null,
         uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
@@ -118,7 +133,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       fileType: mimeToFileType((meta.mime_type as string) ?? ""),
       fileSize: (meta.file_size as number) ?? 0,
       mimeType: (meta.mime_type as string) ?? "",
-      category: (meta.category as string) ?? "creative_asset",
+      category: toFileCategory(meta.category),
       storageUrl: (meta.storage_url as string) ?? "",
       thumbnailUrl: (meta.thumbnail_url as string) ?? null,
       uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
@@ -181,7 +196,9 @@ export class SupabaseStorageProvider implements StorageProvider {
       }
     }
 
-    // Encode extra metadata into the notes column to avoid schema-cache issues
+    // Encode extra metadata into the notes column to avoid schema-cache issues.
+    // The original creative_assets table does not have mime_type, file_size,
+    // category, storage_url, thumbnail_url, or uploaded_by columns.
     const encodedNotes = encodeNotes(fileRecord.notes ?? "", {
       mime_type: fileRecord.mimeType,
       file_size: fileRecord.fileSize,

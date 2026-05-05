@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateCampaignDraft } from "@/lib/ai/service";
 import type { CampaignGenerationInput } from "@/lib/ai/service";
 
+// Extend Vercel function timeout to 60s (max for hobby plan, well within pro plan limit)
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: CampaignGenerationInput;
 

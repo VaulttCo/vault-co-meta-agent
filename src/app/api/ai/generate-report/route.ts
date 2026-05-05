@@ -3,6 +3,8 @@ import { generateWeeklyReport } from "@/lib/ai/service";
 import type { WeeklyReportInput } from "@/lib/ai/service";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   let body: WeeklyReportInput;
 

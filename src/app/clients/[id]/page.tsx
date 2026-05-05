@@ -501,6 +501,16 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
 
 // ─── Intelligence tab ─────────────────────────────────────────
 
+// ── PDF upload progress stages ───────────────────────────────
+type PdfStage =
+  | "idle"
+  | "uploading"
+  | "extracting"
+  | "analyzing"
+  | "saved"
+  | "error"
+  | "scanned";
+
 function IntelligenceTab({ clientId }: { clientId: string }) {
   const { user } = useAuth();
   const { getIntelligence, saveIntelligence, fetchAndCacheIntelligence } = useIntelligence();
@@ -514,7 +524,8 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
   // PDF upload state
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
-  const [pdfNotice, setPdfNotice] = useState(false);
+  const [pdfStage, setPdfStage] = useState<PdfStage>("idle");
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     // Load from context (localStorage) immediately
@@ -534,12 +545,25 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  function handlePdfSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  /**
+   * Full PDF extraction pipeline:
+   * 1. Upload file to Supabase Storage (or mock)
+   * 2. Send file to /api/extract-pdf-text for server-side text extraction
+   * 3. Populate the summary textarea with extracted text
+   * 4. Automatically trigger Veronica intelligence extraction
+   * 5. Save extracted intelligence to Supabase
+   */
+  async function handlePdfSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+
     setPdfFileName(file.name);
-    setPdfNotice(true);
-    // Save to storage provider (real Supabase or mock fallback)
+    setPdfStage("uploading");
+    setPdfError(null);
+    setExtractError(null);
+    setExtractSuccess(false);
+
+    // ── Step 1: Upload to Supabase Storage (fire-and-forget, non-blocking) ──
     if (user) {
       const sp = getStorageProvider();
       const newFile: ClientFile & { _blob?: File } = {
@@ -558,7 +582,94 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
         status: "active" as const,
         _blob: file,
       };
-      sp.saveFile(newFile);
+      sp.saveFile(newFile).catch((err) =>
+        console.warn("[IntelligenceTab] Storage upload warning:", err)
+      );
+    }
+
+    // ── Step 2: Server-side PDF text extraction ──────────────────────────────
+    setPdfStage("extracting");
+    let extractedText = "";
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const extractRes = await fetch("/api/extract-pdf-text", {
+        method: "POST",
+        body: formData,
+      });
+
+      const extractJson = await extractRes.json();
+
+      if (!extractRes.ok) {
+        // Server returned an error (corrupted, password-protected, etc.)
+        setPdfStage("error");
+        setPdfError(
+          extractJson.error ??
+            "PDF text extraction failed. Paste the onboarding summary manually."
+        );
+        return;
+      }
+
+      if (extractJson.scanned) {
+        // PDF has no embedded text — likely a scanned image
+        setPdfStage("scanned");
+        setPdfError(
+          "PDF text extraction failed — this appears to be a scanned image PDF with no embedded text. Paste the onboarding summary manually."
+        );
+        return;
+      }
+
+      extractedText = extractJson.text ?? "";
+      if (!extractedText.trim()) {
+        setPdfStage("scanned");
+        setPdfError(
+          "No text could be extracted from this PDF. Paste the onboarding summary manually."
+        );
+        return;
+      }
+
+      // Populate the textarea with extracted text
+      setSummaryText(extractedText);
+    } catch (err) {
+      setPdfStage("error");
+      setPdfError(
+        `PDF extraction failed: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }. Paste the onboarding summary manually.`
+      );
+      return;
+    }
+
+    // ── Step 3: Automatically run Veronica intelligence extraction ───────────
+    setPdfStage("analyzing");
+    setIsExtracting(true);
+    try {
+      const res = await fetch("/api/ai/extract-intelligence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, onboardingSummary: extractedText }),
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const { intelligence, mockMode: isMock, provider, notice } = await res.json();
+      const extracted: ClientIntelligence = { ...intelligence, onboardingSummary: extractedText };
+      setIntel(extracted);
+      saveIntelligence(extracted);
+      setExtractSuccess(true);
+      setMockMode(isMock);
+      setAiProvider(provider ?? "mock");
+      if (notice) setExtractError(notice);
+      // ── Step 4: Mark as saved ──────────────────────────────────────────────
+      setPdfStage("saved");
+    } catch (err) {
+      setExtractError(
+        `Veronica analysis failed: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
+      );
+      setPdfStage("error");
+    } finally {
+      setIsExtracting(false);
     }
   }
 
@@ -657,7 +768,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
         </div>
 
         {/* PDF Upload */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             ref={pdfInputRef}
             type="file"
@@ -666,13 +777,28 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
             className="hidden"
           />
           <button
-            onClick={() => pdfInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[11px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors"
+            onClick={() => {
+              setPdfStage("idle");
+              setPdfError(null);
+              pdfInputRef.current?.click();
+            }}
+            disabled={pdfStage === "uploading" || pdfStage === "extracting" || pdfStage === "analyzing"}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] rounded-lg text-[11px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.25)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Paperclip size={11} />
-            Upload PDF
+            {pdfStage === "uploading" || pdfStage === "extracting" || pdfStage === "analyzing" ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Paperclip size={11} />
+            )}
+            {pdfStage === "uploading"
+              ? "Uploading PDF…"
+              : pdfStage === "extracting"
+              ? "Extracting text…"
+              : pdfStage === "analyzing"
+              ? "Veronica is analyzing…"
+              : "Upload PDF"}
           </button>
-          {pdfFileName && (
+          {pdfFileName && pdfStage !== "idle" && (
             <span className="flex items-center gap-1 text-[11px] text-[#a78bfa]">
               <FileText size={10} />
               {pdfFileName}
@@ -680,13 +806,35 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
           )}
         </div>
 
-        {/* PDF notice */}
-        {pdfNotice && (
-          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#a78bfa]/8 border border-[#a78bfa]/20 rounded-lg">
-            <AlertCircle size={12} className="text-[#a78bfa] flex-shrink-0 mt-0.5" />
+        {/* PDF stage banners */}
+        {pdfStage === "saved" && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-[#22c55e]/8 border border-[#22c55e]/25 rounded-lg">
+            <CheckCircle2 size={12} className="text-[#22c55e] flex-shrink-0" />
+            <p className="text-[11px] text-[#22c55e] font-semibold leading-snug">
+              Saved to Client Intelligence — text extracted from {pdfFileName} and analyzed by Veronica.
+            </p>
+          </div>
+        )}
+
+        {(pdfStage === "error" || pdfStage === "scanned") && pdfError && (
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ef4444]/8 border border-[#ef4444]/25 rounded-lg">
+            <AlertCircle size={12} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
             <p className="text-[11px] text-[#6b7a99] leading-snug">
-              <span className="text-[#a78bfa] font-semibold">PDF uploaded. </span>
-              Text extraction will be added in the next phase. Paste summary text manually for now.
+              <span className="text-[#ef4444] font-semibold">PDF extraction failed. </span>
+              {pdfError}
+            </p>
+          </div>
+        )}
+
+        {(pdfStage === "uploading" || pdfStage === "extracting" || pdfStage === "analyzing") && (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-[#0081f2]/8 border border-[#0081f2]/20 rounded-lg">
+            <Loader2 size={12} className="text-[#0081f2] animate-spin flex-shrink-0" />
+            <p className="text-[11px] text-[#0081f2] font-semibold leading-snug">
+              {pdfStage === "uploading"
+                ? "Uploading PDF to Supabase Storage…"
+                : pdfStage === "extracting"
+                ? "Extracting text from PDF…"
+                : "Veronica is analyzing the onboarding summary…"}
             </p>
           </div>
         )}

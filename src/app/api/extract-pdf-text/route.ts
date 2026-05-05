@@ -2,7 +2,8 @@
  * /api/extract-pdf-text
  *
  * Accepts a multipart/form-data POST with a single "file" field containing
- * a PDF. Extracts embedded text using pdfjs-dist (Mozilla PDF.js) — no OCR.
+ * a PDF. Extracts embedded text using a zero-dependency Node.js extractor
+ * that uses only the built-in zlib module.
  *
  * Scanned PDFs (image-only, no embedded text layer) will return an empty
  * string and { scanned: true } so the UI can show the manual-paste fallback.
@@ -13,9 +14,11 @@
  * - Scanned / image-only PDFs are NOT supported (no OCR in this phase)
  * - Password-protected PDFs will return a specific error message
  * - Maximum file size: 50 MB
+ * - PDFs with non-standard encoding may return partial or garbled text
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { extractTextFromPdf } from "@/lib/pdfTextExtractor";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -51,68 +54,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Convert browser File → Uint8Array
+    // Convert browser File → Node.js Buffer
     const arrayBuffer = await fileObj.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
-    // Use dynamic ESM import for pdfjs-dist (it ships as .mjs — must use import())
-    // The legacy build is recommended for Node.js environments
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-    let text = "";
-    let pageCount = 0;
-    let scanned = false;
-
-    try {
-      const loadingTask = pdfjsLib.getDocument({
-        data: uint8,
-        // Suppress font warnings — text extraction still works without standard fonts
-        verbosity: 0,
-        // Disable worker in Node.js serverless environment
-        useWorkerFetch: false,
-        isEvalSupported: false,
-        useSystemFonts: true,
-      });
-
-      const pdf = await loadingTask.promise;
-      pageCount = pdf.numPages;
-
-      const pageTexts: string[] = [];
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((item: any) => item.str ?? "")
-          .join(" ");
-        pageTexts.push(pageText);
-      }
-
-      text = pageTexts.join("\n").trim();
-      scanned = text.length === 0;
-    } catch (parseErr: unknown) {
-      const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-      console.error("[extract-pdf-text] pdfjs error:", msg);
-
-      // Distinguish password-protected PDFs
-      if (msg.toLowerCase().includes("password")) {
-        return NextResponse.json(
-          {
-            error:
-              "This PDF is password-protected. Remove the password and re-upload, or paste the onboarding summary manually.",
-            scanned: false,
-            text: "",
-          },
-          { status: 422 }
-        );
-      }
-
+    // Check for password-protected PDF (encrypted)
+    const rawHeader = buffer.slice(0, 1024).toString("binary");
+    if (rawHeader.includes("/Encrypt")) {
       return NextResponse.json(
         {
           error:
-            "PDF text extraction failed. The file may be corrupted or in an unsupported format. Paste the onboarding summary manually.",
+            "This PDF is password-protected. Remove the password and re-upload, or paste the onboarding summary manually.",
+          scanned: false,
+          text: "",
+        },
+        { status: 422 }
+      );
+    }
+
+    // Extract text using zero-dependency extractor
+    const { text, pageCount, scanned } = extractTextFromPdf(buffer);
+
+    if (scanned) {
+      return NextResponse.json(
+        {
+          error:
+            "PDF text extraction failed — this appears to be a scanned image PDF with no embedded text. Paste the onboarding summary manually.",
           scanned: true,
           text: "",
+          pageCount,
+          fileName: fileObj.name,
         },
         { status: 422 }
       );
@@ -121,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       text,
       pageCount,
-      scanned,
+      scanned: false,
       charCount: text.length,
       fileName: fileObj.name,
     });

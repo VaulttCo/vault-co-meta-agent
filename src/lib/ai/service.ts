@@ -290,7 +290,7 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
 
 // ─────────────────────────────────────────────────────────────
 // Anthropic — intelligence extraction
-// max_tokens reduced from 8192 to 2048 — slimmer schema used in prompts.ts
+// max_tokens 3000 — enough for slimmed schema without truncation
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropicExtract(clientId: string, summary: string, apiKey: string): Promise<ClientIntelligence> {
@@ -303,7 +303,7 @@ async function callAnthropicExtract(clientId: string, summary: string, apiKey: s
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2048,
+      max_tokens: 3000,
       system: EXTRACTION_SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildExtractionPrompt(clientId, summary) }],
     }),

@@ -25,8 +25,8 @@ const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 
 export interface MetaCredentials {
   accessToken: string;
-  appId: string;
-  appSecret: string;
+  appId?: string;
+  appSecret?: string;
 }
 
 export interface MetaCampaign {
@@ -69,10 +69,12 @@ export interface MetaSyncResult {
 
 function getMetaCredentials(): MetaCredentials | null {
   const accessToken = process.env.META_ACCESS_TOKEN;
+  // APP_ID and APP_SECRET are optional — only needed for server-to-server token validation.
+  // A user access token generated from the Marketing API Tools page works with just the token.
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
 
-  if (!accessToken || !appId || !appSecret) {
+  if (!accessToken) {
     return null;
   }
 
@@ -141,7 +143,7 @@ export async function testMetaConnection(clientId: string): Promise<{
 }> {
   const creds = getMetaCredentials();
   if (!creds) {
-    return { connected: false, error: "META_ACCESS_TOKEN, META_APP_ID, or META_APP_SECRET not configured in environment variables." };
+    return { connected: false, error: "META_ACCESS_TOKEN not configured in environment variables." };
   }
 
   const accountId = await getMetaAccountId(clientId);
@@ -288,7 +290,7 @@ export async function syncMetaPerformanceForClient(clientId: string): Promise<Me
       totalLeads: 0,
       totalImpressions: 0,
       totalClicks: 0,
-      error: "Meta credentials not configured. Add META_ACCESS_TOKEN, META_APP_ID, and META_APP_SECRET to Vercel environment variables.",
+      error: "Meta credentials not configured. Add META_ACCESS_TOKEN to Vercel environment variables.",
     };
   }
 

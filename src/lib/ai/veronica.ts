@@ -176,6 +176,7 @@ function runDiagnosticsForClient(
     intelligence: ClientIntelligence | null;
     hasActiveMetaCampaigns: boolean;
     isRoofing: boolean;
+    integrationConnections?: IntegrationConnection[];
   }
 ): DiagnosticFinding[] {
   const findings: DiagnosticFinding[] = [];
@@ -188,6 +189,7 @@ function runDiagnosticsForClient(
     intelligence,
     hasActiveMetaCampaigns,
     isRoofing,
+    integrationConnections,
   } = data;
   const { leads, booked, bookingRate, cplStatus, bookingStatus, showRateStatus, showRate, cplBenchmark } = perf;
   const cplNum = parseFloat(perf.cpl.replace(/[^0-9.]/g, "")) || 0;
@@ -364,6 +366,7 @@ function runDiagnosticsForClient(
   }
 
   // Rule 11 — Disconnected integrations (non-active clients only — active clients with missing data flag separately)
+  // Also detects integration status mismatch: integration_connections shows recent sync but client profile fields are still missing.
   const missingIntegrations: string[] = [];
   if (!client.metaAccountId || isValuePending(client.metaAccountId)) missingIntegrations.push("Meta Ad Account");
   if (!client.pixelId || isValuePending(client.pixelId)) missingIntegrations.push("Meta Pixel");
@@ -371,18 +374,71 @@ function runDiagnosticsForClient(
   if (!client.ghlLocationId || isValuePending(client.ghlLocationId)) missingIntegrations.push("GHL Location");
 
   if (missingIntegrations.length > 0 && client.status !== "active") {
-    findings.push({
-      clientId: client.id,
-      clientName: client.name,
-      signal: `Missing integrations: ${missingIntegrations.join(", ")}`,
-      severity: missingIntegrations.length >= 3 ? "critical" : "warning",
-      likelyCause:
-        "Client onboarding has not been completed. Credentials have not been entered in Settings → Integrations, or client has not yet granted account access.",
-      recommendation: `Complete integration setup for: ${missingIntegrations.join(", ")}. Go to Settings → Integrations.`,
-      blocked:
-        "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without GHL Location ID.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
-    });
+    // Check whether integration_connections shows a recent sync for this client despite missing profile fields
+    const clientConns = (integrationConnections ?? []).filter(
+      (ic) => ic.clientId === client.id && ic.lastSyncedAt
+    );
+    const hasMetaSync = clientConns.some((ic) => ic.provider === "meta");
+    const hasGhlSync = clientConns.some((ic) => ic.provider === "ghl");
+    const missingMetaFields = missingIntegrations.filter(
+      (m) => m.includes("Meta") || m.includes("Pixel") || m.includes("Facebook")
+    );
+    const missingGhlFields = missingIntegrations.filter((m) => m.includes("GHL"));
+    // Mismatch: integration_connections has recent sync but client profile still shows missing IDs
+    const mismatchedFields = [
+      ...(hasMetaSync ? missingMetaFields : []),
+      ...(hasGhlSync ? missingGhlFields : []),
+    ];
+    const genuinelyMissing = missingIntegrations.filter(
+      (m) => !mismatchedFields.includes(m)
+    );
+    const isMismatch = mismatchedFields.length > 0;
+
+    if (isMismatch) {
+      findings.push({
+        clientId: client.id,
+        clientName: client.name,
+        signal: `Integration status mismatch: ${mismatchedFields.join(", ")} — sync activity detected in integration_connections but client profile IDs are incomplete${
+          genuinelyMissing.length > 0 ? `; also genuinely missing (no sync): ${genuinelyMissing.join(", ")}` : ""
+        }`,
+        severity: "critical",
+        likelyCause:
+          "The integration_connections table shows recent Meta/GHL sync activity for this client, but the client profile still has missing or pending IDs. This is a partial setup verification issue — credentials may have been entered but the account IDs were not saved correctly, or the sync completed before the profile fields were fully populated.",
+        recommendation: `Verify and reconcile the following fields in the client profile: ${mismatchedFields.join(", ")}. Confirm the exact Meta Ad Account ID, Pixel ID, and GHL Location ID are saved correctly in Settings → Integrations. Do not assume the integration is fully operational until all profile fields are confirmed.`,
+        blocked:
+          "Cannot confirm campaign readiness until all profile IDs are verified. Do not launch ads based on sync activity alone.",
+        relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      });
+      // If there are also genuinely missing integrations (no sync at all), add a separate finding
+      if (genuinelyMissing.length > 0) {
+        findings.push({
+          clientId: client.id,
+          clientName: client.name,
+          signal: `Missing integrations (no sync activity): ${genuinelyMissing.join(", ")}`,
+          severity: genuinelyMissing.length >= 2 ? "critical" : "warning",
+          likelyCause:
+            "These integrations have no connection or sync activity recorded. Credentials have not been entered in Settings → Integrations, or the client has not yet granted account access.",
+          recommendation: `Complete integration setup for: ${genuinelyMissing.join(", ")}. Go to Settings → Integrations.`,
+          blocked:
+            "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without GHL Location ID.",
+          relatedAction: { label: "Settings & Integrations", href: "/settings" },
+        });
+      }
+    } else {
+      // No mismatch — genuinely missing integrations with no sync activity
+      findings.push({
+        clientId: client.id,
+        clientName: client.name,
+        signal: `Missing integrations: ${missingIntegrations.join(", ")}`,
+        severity: missingIntegrations.length >= 3 ? "critical" : "warning",
+        likelyCause:
+          "Client onboarding has not been completed. Credentials have not been entered in Settings → Integrations, or client has not yet granted account access.",
+        recommendation: `Complete integration setup for: ${missingIntegrations.join(", ")}. Go to Settings → Integrations.`,
+        blocked:
+          "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without GHL Location ID.",
+        relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      });
+    }
   }
 
   // Rule 12 — Poor speed-to-lead
@@ -512,6 +568,7 @@ export function buildClientBrain(
     intelligence,
     hasActiveMetaCampaigns,
     isRoofing,
+    integrationConnections: ctx.integrationConnections,
   });
 
   return {

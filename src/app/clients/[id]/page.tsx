@@ -39,6 +39,11 @@ import {
   Wifi,
   WifiOff,
   ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Save,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -1314,7 +1319,7 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
   );
 }
 
-// ─── Integrations Tab ─────────────────────────────────────────
+// ─── Integrations Tab ───────────────────────────────────────────
 
 interface IntegrationStatus {
   connected: boolean;
@@ -1343,7 +1348,15 @@ interface IntegrationStatus {
   error?: string;
 }
 
+interface CredentialSaveStatus {
+  meta: { saved: boolean; accountId: string | null; accountLabel: string | null; updatedAt: string | null };
+  ghl: { saved: boolean; accountId: string | null; accountLabel: string | null; updatedAt: string | null };
+}
+
 function IntegrationsTab({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const { can } = useAuth();
+  const isAdmin = can("canConnectIntegrations");
+
   const [metaStatus, setMetaStatus] = useState<IntegrationStatus | null>(null);
   const [ghlStatus, setGhlStatus] = useState<IntegrationStatus | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
@@ -1353,10 +1366,32 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
   const [metaMsg, setMetaMsg] = useState<string | null>(null);
   const [ghlMsg, setGhlMsg] = useState<string | null>(null);
 
+  // Credential save status (metadata only — no raw values)
+  const [credStatus, setCredStatus] = useState<CredentialSaveStatus | null>(null);
+
+  // Meta credential form
+  const [showMetaForm, setShowMetaForm] = useState(false);
+  const [metaAccessToken, setMetaAccessToken] = useState("");
+  const [metaAdAccountId, setMetaAdAccountId] = useState("");
+  const [metaAccountLabel, setMetaAccountLabel] = useState("");
+  const [showMetaToken, setShowMetaToken] = useState(false);
+  const [metaSaving, setMetaSaving] = useState(false);
+  const [metaDeleting, setMetaDeleting] = useState(false);
+
+  // GHL credential form
+  const [showGhlForm, setShowGhlForm] = useState(false);
+  const [ghlApiKey, setGhlApiKey] = useState("");
+  const [ghlLocationId, setGhlLocationId] = useState("");
+  const [ghlAccountLabel, setGhlAccountLabel] = useState("");
+  const [showGhlKey, setShowGhlKey] = useState(false);
+  const [ghlSaving, setGhlSaving] = useState(false);
+  const [ghlDeleting, setGhlDeleting] = useState(false);
+
   // Load status on mount
   useEffect(() => {
     loadMetaStatus();
     loadGhlStatus();
+    loadCredStatus();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
@@ -1383,6 +1418,18 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
       setGhlStatus({ connected: false, error: "Failed to load status" });
     } finally {
       setGhlLoading(false);
+    }
+  }
+
+  async function loadCredStatus() {
+    try {
+      const res = await fetch(`/api/integrations/credentials/status?clientId=${clientId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCredStatus(data);
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -1478,8 +1525,135 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
     }
   }
 
+  async function saveMetaCredentials() {
+    if (!metaAccessToken.trim() || !metaAdAccountId.trim()) {
+      setMetaMsg("✗ Access Token and Ad Account ID are required.");
+      return;
+    }
+    setMetaSaving(true);
+    setMetaMsg(null);
+    try {
+      const res = await fetch("/api/integrations/credentials/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          provider: "meta",
+          credentials: {
+            accessToken: metaAccessToken.trim(),
+            adAccountId: metaAdAccountId.trim(),
+          },
+          accountLabel: metaAccountLabel.trim() || `Meta · ${metaAdAccountId.trim()}`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaMsg(`✓ Meta credentials saved and encrypted for ${data.accountId}`);
+        setMetaAccessToken("");
+        setMetaAdAccountId("");
+        setMetaAccountLabel("");
+        setShowMetaForm(false);
+        await Promise.all([loadMetaStatus(), loadCredStatus()]);
+      } else {
+        setMetaMsg(`✗ ${data.error ?? "Save failed"}`);
+      }
+    } catch {
+      setMetaMsg("✗ Network error saving credentials");
+    } finally {
+      setMetaSaving(false);
+    }
+  }
+
+  async function deleteMetaCredentials() {
+    if (!confirm("Remove per-client Meta credentials? The global env var fallback will be used if configured.")) return;
+    setMetaDeleting(true);
+    setMetaMsg(null);
+    try {
+      const res = await fetch("/api/integrations/credentials/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, provider: "meta" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaMsg("✓ Per-client Meta credentials removed.");
+        await Promise.all([loadMetaStatus(), loadCredStatus()]);
+      } else {
+        setMetaMsg(`✗ ${data.error ?? "Delete failed"}`);
+      }
+    } catch {
+      setMetaMsg("✗ Network error");
+    } finally {
+      setMetaDeleting(false);
+    }
+  }
+
+  async function saveGhlCredentials() {
+    if (!ghlApiKey.trim() || !ghlLocationId.trim()) {
+      setGhlMsg("✗ API Key and Location ID are required.");
+      return;
+    }
+    setGhlSaving(true);
+    setGhlMsg(null);
+    try {
+      const res = await fetch("/api/integrations/credentials/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          provider: "ghl",
+          credentials: {
+            apiKey: ghlApiKey.trim(),
+            locationId: ghlLocationId.trim(),
+          },
+          accountLabel: ghlAccountLabel.trim() || `GHL · ${ghlLocationId.trim()}`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGhlMsg(`✓ GHL credentials saved and encrypted for ${data.accountId}`);
+        setGhlApiKey("");
+        setGhlLocationId("");
+        setGhlAccountLabel("");
+        setShowGhlForm(false);
+        await Promise.all([loadGhlStatus(), loadCredStatus()]);
+      } else {
+        setGhlMsg(`✗ ${data.error ?? "Save failed"}`);
+      }
+    } catch {
+      setGhlMsg("✗ Network error saving credentials");
+    } finally {
+      setGhlSaving(false);
+    }
+  }
+
+  async function deleteGhlCredentials() {
+    if (!confirm("Remove per-client GHL credentials? The global env var fallback will be used if configured.")) return;
+    setGhlDeleting(true);
+    setGhlMsg(null);
+    try {
+      const res = await fetch("/api/integrations/credentials/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, provider: "ghl" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGhlMsg("✓ Per-client GHL credentials removed.");
+        await Promise.all([loadGhlStatus(), loadCredStatus()]);
+      } else {
+        setGhlMsg(`✗ ${data.error ?? "Delete failed"}`);
+      }
+    } catch {
+      setGhlMsg("✗ Network error");
+    } finally {
+      setGhlDeleting(false);
+    }
+  }
+
   const cardCls = "bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden";
   const btnCls = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors";
+  const inputCls = "w-full bg-[#0f1a28] border border-[rgba(0,129,242,0.2)] rounded-lg px-3 py-2 text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2] transition-colors";
 
   function StatusBadge({ status }: { status: IntegrationStatus | null; }) {
     if (!status) return <span className="text-[10px] text-[#3d4f6e]">Loading…</span>;
@@ -1497,6 +1671,22 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
     );
   }
 
+  function CredSourceBadge({ source }: { source: "per-client" | "global-env" | null }) {
+    if (!source) return null;
+    if (source === "per-client") {
+      return (
+        <span className="flex items-center gap-1 text-[9px] font-semibold text-[#a78bfa] bg-[#a78bfa]/10 border border-[#a78bfa]/30 px-1.5 py-0.5 rounded">
+          <KeyRound size={8} /> Per-client
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 text-[9px] font-semibold text-[#3d4f6e] bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] px-1.5 py-0.5 rounded">
+        <Lock size={8} /> Global env
+      </span>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -1504,11 +1694,18 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
         <div className="flex items-center gap-2 mb-1">
           <Link2 size={14} className="text-[#0081f2]" />
           <span className="text-[13px] font-semibold text-[#f8f8f7]">Integrations — {clientName}</span>
+          {!isAdmin && (
+            <span className="flex items-center gap-1 text-[9px] font-semibold text-[#6b7a99] bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] px-1.5 py-0.5 rounded">
+              <Lock size={8} /> View only
+            </span>
+          )}
         </div>
         <p className="text-[11px] text-[#6b7a99] leading-snug">
           Connect Meta Ads and GoHighLevel to sync real performance data for this client.
           All connections are <strong className="text-[#f8f8f7]">read-only</strong> — Veronica never writes to Meta or GHL.
-          Credentials are stored in Vercel environment variables and never exposed to the browser.
+          {isAdmin
+            ? " Per-client credentials are encrypted with AES-256-GCM and stored server-side only."
+            : " Credential management requires Admin access."}
         </p>
       </div>
 
@@ -1521,19 +1718,131 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
             </div>
             <span className="text-[12px] font-semibold text-[#f8f8f7]">Meta Ads</span>
             <span className="text-[10px] text-[#3d4f6e]">Read-only · Campaigns, Insights, Spend</span>
+            {credStatus?.meta.saved && <CredSourceBadge source="per-client" />}
+            {!credStatus?.meta.saved && metaStatus?.hasCredentials && <CredSourceBadge source="global-env" />}
           </div>
           <StatusBadge status={metaStatus} />
         </div>
 
         <div className="p-4 space-y-3">
-          {/* Credentials check */}
-          {metaStatus && !metaStatus.hasCredentials && (
+          {/* Saved credential info (masked) */}
+          {credStatus?.meta.saved && (
+            <div className="flex items-center justify-between px-3 py-2.5 bg-[#a78bfa]/10 border border-[#a78bfa]/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <KeyRound size={11} className="text-[#a78bfa]" />
+                <div>
+                  <div className="text-[11px] font-semibold text-[#f8f8f7]">{credStatus.meta.accountLabel ?? credStatus.meta.accountId}</div>
+                  <div className="text-[10px] text-[#6b7a99]">Per-client credential · Token: ••••••••••••••••••••••••••••••••</div>
+                  {credStatus.meta.updatedAt && (
+                    <div className="text-[9px] text-[#3d4f6e]">Saved {new Date(credStatus.meta.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                  )}
+                </div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={deleteMetaCredentials}
+                  disabled={metaDeleting}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#ef4444] hover:bg-[#ef4444]/10 rounded transition-colors"
+                >
+                  {metaDeleting ? <Loader2 size={9} className="animate-spin" /> : <Trash2 size={9} />}
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* No credentials warning */}
+          {metaStatus && !metaStatus.hasCredentials && !credStatus?.meta.saved && (
             <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ff8400]/10 border border-[#ff8400]/30 rounded-lg">
               <AlertCircle size={12} className="text-[#ff8400] flex-shrink-0 mt-0.5" />
               <div className="text-[11px] text-[#6b7a99] leading-snug">
-                <span className="text-[#f8f8f7] font-semibold">Credentials not configured. </span>
-                Add <code className="text-[#0081f2]">META_ACCESS_TOKEN</code>, <code className="text-[#0081f2]">META_APP_ID</code>, and <code className="text-[#0081f2]">META_APP_SECRET</code> to your Vercel environment variables.
+                <span className="text-[#f8f8f7] font-semibold">No credentials configured. </span>
+                {isAdmin ? "Use the form below to add per-client credentials, or set global env vars in Vercel." : "Contact your Admin to configure credentials."}
               </div>
+            </div>
+          )}
+
+          {/* Admin: Add/Update credentials form */}
+          {isAdmin && (
+            <div>
+              <button
+                onClick={() => setShowMetaForm(!showMetaForm)}
+                className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.2)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.4)]`}
+              >
+                <KeyRound size={10} />
+                {credStatus?.meta.saved ? "Update Credentials" : "Add Credentials"}
+                {showMetaForm ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              </button>
+
+              {showMetaForm && (
+                <div className="mt-3 space-y-2.5 p-3 bg-[#0a1018] border border-[rgba(0,129,242,0.15)] rounded-lg">
+                  <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider flex items-center gap-1">
+                    <Lock size={9} /> Credentials are encrypted AES-256-GCM before storage. Never exposed to frontend.
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">Meta Access Token <span className="text-[#ef4444]">*</span></label>
+                    <div className="relative">
+                      <input
+                        type={showMetaToken ? "text" : "password"}
+                        value={metaAccessToken}
+                        onChange={(e) => setMetaAccessToken(e.target.value)}
+                        placeholder="EAAd..."
+                        className={inputCls}
+                        autoComplete="off"
+                        data-1p-ignore
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowMetaToken(!showMetaToken)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3d4f6e] hover:text-[#6b7a99]"
+                      >
+                        {showMetaToken ? <EyeOff size={12} /> : <Eye size={12} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">Ad Account ID <span className="text-[#ef4444]">*</span></label>
+                    <input
+                      type="text"
+                      value={metaAdAccountId}
+                      onChange={(e) => setMetaAdAccountId(e.target.value)}
+                      placeholder="1896960880964810"
+                      className={inputCls}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">Account Label (optional)</label>
+                    <input
+                      type="text"
+                      value={metaAccountLabel}
+                      onChange={(e) => setMetaAccountLabel(e.target.value)}
+                      placeholder="e.g. Kaczmar Builders — Meta"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={saveMetaCredentials}
+                      disabled={metaSaving || !metaAccessToken.trim() || !metaAdAccountId.trim()}
+                      className={`${btnCls} bg-[#0081f2]/10 border border-[#0081f2]/30 text-[#0081f2] hover:bg-[#0081f2]/20 disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      {metaSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                      Save Encrypted
+                    </button>
+                    <button
+                      onClick={() => { setShowMetaForm(false); setMetaAccessToken(""); setMetaAdAccountId(""); setMetaAccountLabel(""); }}
+                      className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#3d4f6e] hover:text-[#6b7a99]`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1615,19 +1924,131 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
             </div>
             <span className="text-[12px] font-semibold text-[#f8f8f7]">GoHighLevel</span>
             <span className="text-[10px] text-[#3d4f6e]">Read-only · Contacts, Appointments, Pipeline</span>
+            {credStatus?.ghl.saved && <CredSourceBadge source="per-client" />}
+            {!credStatus?.ghl.saved && ghlStatus?.hasCredentials && <CredSourceBadge source="global-env" />}
           </div>
           <StatusBadge status={ghlStatus} />
         </div>
 
         <div className="p-4 space-y-3">
-          {/* Credentials check */}
-          {ghlStatus && !ghlStatus.hasCredentials && (
+          {/* Saved credential info (masked) */}
+          {credStatus?.ghl.saved && (
+            <div className="flex items-center justify-between px-3 py-2.5 bg-[#a78bfa]/10 border border-[#a78bfa]/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <KeyRound size={11} className="text-[#a78bfa]" />
+                <div>
+                  <div className="text-[11px] font-semibold text-[#f8f8f7]">{credStatus.ghl.accountLabel ?? credStatus.ghl.accountId}</div>
+                  <div className="text-[10px] text-[#6b7a99]">Per-client credential · API Key: ••••••••••••••••••••••••••••••••</div>
+                  {credStatus.ghl.updatedAt && (
+                    <div className="text-[9px] text-[#3d4f6e]">Saved {new Date(credStatus.ghl.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                  )}
+                </div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={deleteGhlCredentials}
+                  disabled={ghlDeleting}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] text-[#ef4444] hover:bg-[#ef4444]/10 rounded transition-colors"
+                >
+                  {ghlDeleting ? <Loader2 size={9} className="animate-spin" /> : <Trash2 size={9} />}
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* No credentials warning */}
+          {ghlStatus && !ghlStatus.hasCredentials && !credStatus?.ghl.saved && (
             <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ff8400]/10 border border-[#ff8400]/30 rounded-lg">
               <AlertCircle size={12} className="text-[#ff8400] flex-shrink-0 mt-0.5" />
               <div className="text-[11px] text-[#6b7a99] leading-snug">
-                <span className="text-[#f8f8f7] font-semibold">Credentials not configured. </span>
-                Add <code className="text-[#0081f2]">GHL_API_KEY</code> and <code className="text-[#0081f2]">GHL_LOCATION_ID</code> to your Vercel environment variables.
+                <span className="text-[#f8f8f7] font-semibold">No credentials configured. </span>
+                {isAdmin ? "Use the form below to add per-client credentials, or set global env vars in Vercel." : "Contact your Admin to configure credentials."}
               </div>
+            </div>
+          )}
+
+          {/* Admin: Add/Update credentials form */}
+          {isAdmin && (
+            <div>
+              <button
+                onClick={() => setShowGhlForm(!showGhlForm)}
+                className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.2)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.4)]`}
+              >
+                <KeyRound size={10} />
+                {credStatus?.ghl.saved ? "Update Credentials" : "Add Credentials"}
+                {showGhlForm ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+              </button>
+
+              {showGhlForm && (
+                <div className="mt-3 space-y-2.5 p-3 bg-[#0a1018] border border-[rgba(0,129,242,0.15)] rounded-lg">
+                  <div className="text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider flex items-center gap-1">
+                    <Lock size={9} /> Credentials are encrypted AES-256-GCM before storage. Never exposed to frontend.
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">GHL API Key <span className="text-[#ef4444]">*</span></label>
+                    <div className="relative">
+                      <input
+                        type={showGhlKey ? "text" : "password"}
+                        value={ghlApiKey}
+                        onChange={(e) => setGhlApiKey(e.target.value)}
+                        placeholder="eyJhbGci..."
+                        className={inputCls}
+                        autoComplete="off"
+                        data-1p-ignore
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGhlKey(!showGhlKey)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#3d4f6e] hover:text-[#6b7a99]"
+                      >
+                        {showGhlKey ? <EyeOff size={12} /> : <Eye size={12} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">Location ID <span className="text-[#ef4444]">*</span></label>
+                    <input
+                      type="text"
+                      value={ghlLocationId}
+                      onChange={(e) => setGhlLocationId(e.target.value)}
+                      placeholder="0yQx5JFob31GRnLGkGI2"
+                      className={inputCls}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-[#6b7a99] mb-1">Account Label (optional)</label>
+                    <input
+                      type="text"
+                      value={ghlAccountLabel}
+                      onChange={(e) => setGhlAccountLabel(e.target.value)}
+                      placeholder="e.g. Kaczmar Builders — GHL"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={saveGhlCredentials}
+                      disabled={ghlSaving || !ghlApiKey.trim() || !ghlLocationId.trim()}
+                      className={`${btnCls} bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40 disabled:cursor-not-allowed`}
+                    >
+                      {ghlSaving ? <Loader2 size={10} className="animate-spin" /> : <Save size={10} />}
+                      Save Encrypted
+                    </button>
+                    <button
+                      onClick={() => { setShowGhlForm(false); setGhlApiKey(""); setGhlLocationId(""); setGhlAccountLabel(""); }}
+                      className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#3d4f6e] hover:text-[#6b7a99]`}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1702,11 +2123,11 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
 
       {/* Setup instructions */}
       <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.08)] rounded-xl p-4">
-        <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-2">Setup Instructions</div>
+        <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-2">Credential Priority</div>
         <div className="space-y-2 text-[11px] text-[#6b7a99] leading-relaxed">
-          <p><span className="text-[#f8f8f7] font-semibold">Meta Ads:</span> Add a Meta System User token with <code className="text-[#0081f2]">ads_read</code> permission. Set <code className="text-[#0081f2]">META_ACCESS_TOKEN</code>, <code className="text-[#0081f2]">META_APP_ID</code>, <code className="text-[#0081f2]">META_APP_SECRET</code> in Vercel. Then add this client&apos;s Ad Account ID in the client Overview tab under &quot;Meta Ad Account&quot;.</p>
-          <p><span className="text-[#f8f8f7] font-semibold">GoHighLevel:</span> Create a GHL Private Integration App with read-only scopes. Set <code className="text-[#0081f2]">GHL_API_KEY</code> and <code className="text-[#0081f2]">GHL_LOCATION_ID</code> in Vercel. Then add this client&apos;s Location ID in the client Overview tab under &quot;GHL Location ID&quot;.</p>
-          <p><span className="text-[#f8f8f7] font-semibold">Full setup guide:</span> See <code className="text-[#0081f2]">docs/integrations-setup.md</code> in the repository.</p>
+          <p><span className="text-[#a78bfa] font-semibold">1. Per-client (highest priority):</span> Credentials saved via the form above. Encrypted with AES-256-GCM, stored in Supabase, decrypted server-side only. Use this for clients with their own Meta/GHL accounts.</p>
+          <p><span className="text-[#3d4f6e] font-semibold">2. Global env vars (fallback):</span> <code className="text-[#0081f2]">META_ACCESS_TOKEN</code> + <code className="text-[#0081f2]">META_AD_ACCOUNT_ID</code> and <code className="text-[#0081f2]">GHL_API_KEY</code> + <code className="text-[#0081f2]">GHL_LOCATION_ID</code> in Vercel. Applied to all clients without per-client credentials.</p>
+          <p><span className="text-[#f8f8f7] font-semibold">Security:</span> Raw credential values are never returned to the browser, never logged, and never included in API responses. Only non-sensitive metadata (account ID, label, save date) is displayed.</p>
         </div>
       </div>
     </div>

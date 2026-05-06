@@ -17,6 +17,7 @@
  */
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveGHLCredentials } from "@/lib/integrations/credential-resolver";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 
@@ -151,18 +152,14 @@ export async function testGHLConnection(clientId: string): Promise<{
   connected: boolean;
   locationId?: string;
   locationName?: string;
+  credentialSource?: string;
   error?: string;
 }> {
-  const locationId = await getGHLLocationId(clientId);
-  const creds = getGHLCredentials(locationId ?? undefined);
-
-  if (!creds) {
-    return { connected: false, error: "GHL_API_KEY not configured in environment variables." };
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) {
+    return { connected: false, error: "GHL credentials not configured. Add GHL_API_KEY to Vercel env vars or save per-client credentials in the Integrations tab." };
   }
-
-  if (!creds.locationId) {
-    return { connected: false, error: "No GHL Location ID found for this client. Add it in the client Integrations tab." };
-  }
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
 
   try {
     const resp = await ghlGet(
@@ -180,6 +177,7 @@ export async function testGHLConnection(clientId: string): Promise<{
       connected: true,
       locationId: data.id ?? creds.locationId,
       locationName: data.name ?? data.business?.name ?? "GHL Location",
+      credentialSource: resolved.source,
     };
   } catch (err) {
     return { connected: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
@@ -190,9 +188,9 @@ export async function testGHLConnection(clientId: string): Promise<{
  * Fetch contacts for a GHL location.
  */
 export async function getGHLContacts(clientId: string): Promise<GHLContact[]> {
-  const locationId = await getGHLLocationId(clientId);
-  const creds = getGHLCredentials(locationId ?? undefined);
-  if (!creds?.locationId) return [];
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) return [];
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
 
   try {
     const resp = await ghlGet(
@@ -211,9 +209,9 @@ export async function getGHLContacts(clientId: string): Promise<GHLContact[]> {
  * Fetch opportunities for a GHL location.
  */
 export async function getGHLOpportunities(clientId: string): Promise<GHLOpportunity[]> {
-  const locationId = await getGHLLocationId(clientId);
-  const creds = getGHLCredentials(locationId ?? undefined);
-  if (!creds?.locationId) return [];
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) return [];
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
 
   try {
     const resp = await ghlGet(
@@ -232,9 +230,9 @@ export async function getGHLOpportunities(clientId: string): Promise<GHLOpportun
  * Fetch appointments for a GHL location.
  */
 export async function getGHLAppointments(clientId: string): Promise<GHLAppointment[]> {
-  const locationId = await getGHLLocationId(clientId);
-  const creds = getGHLCredentials(locationId ?? undefined);
-  if (!creds?.locationId) return [];
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) return [];
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
 
   try {
     const resp = await ghlGet(
@@ -256,10 +254,8 @@ export async function getGHLAppointments(clientId: string): Promise<GHLAppointme
  * READ-ONLY: only fetches and saves data. Never writes to GHL.
  */
 export async function syncGHLPipelineForClient(clientId: string): Promise<GHLSyncResult> {
-  const locationId = await getGHLLocationId(clientId);
-  const creds = getGHLCredentials(locationId ?? undefined);
-
-  if (!creds) {
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) {
     return {
       success: false,
       clientId,
@@ -269,23 +265,10 @@ export async function syncGHLPipelineForClient(clientId: string): Promise<GHLSyn
       bookedAppointments: 0,
       pipelineValue: 0,
       closedRevenue: 0,
-      error: "GHL_API_KEY not configured. Add GHL_API_KEY and GHL_LOCATION_ID to Vercel environment variables.",
+      error: "GHL credentials not configured. Add GHL_API_KEY to Vercel env vars or save per-client credentials in the Integrations tab.",
     };
   }
-
-  if (!creds.locationId) {
-    return {
-      success: false,
-      clientId,
-      contacts: 0,
-      opportunities: 0,
-      appointments: 0,
-      bookedAppointments: 0,
-      pipelineValue: 0,
-      closedRevenue: 0,
-      error: "No GHL Location ID found for this client.",
-    };
-  }
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
 
   try {
     const [contacts, opportunities, appointments] = await Promise.all([

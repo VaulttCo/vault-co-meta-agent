@@ -1,0 +1,186 @@
+/**
+ * POST /api/integrations/credentials/save
+ *
+ * Saves per-client integration credentials (Meta access token or GHL API key)
+ * encrypted at rest using AES-256-GCM.
+ *
+ * SECURITY:
+ * - Admin role required (checked via Supabase session)
+ * - Credentials are encrypted before writing to Supabase
+ * - Raw credential values are NEVER logged or returned
+ * - Only non-sensitive metadata (account_id, account_label) is returned
+ * - No write actions to Meta or GHL — only writes to Supabase
+ *
+ * Request body:
+ * {
+ *   clientId: string,
+ *   provider: "meta" | "ghl",
+ *   credentials: {
+ *     // For Meta:
+ *     accessToken?: string,
+ *     adAccountId?: string,
+ *     appId?: string,
+ *     appSecret?: string,
+ *     // For GHL:
+ *     apiKey?: string,
+ *     locationId?: string,
+ *   },
+ *   accountLabel?: string  // Human-readable label for display
+ * }
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { encryptCredential, hasEncryptionKey } from "@/lib/crypto/credentials";
+
+export async function POST(req: NextRequest) {
+  // ── 1. Auth check ─────────────────────────────────────────────────────────
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Supabase not configured." },
+      { status: 503 }
+    );
+  }
+
+  // Verify the user is authenticated and has admin role
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  // Check role from user_profiles table
+  const { data: profileRaw } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const profile = profileRaw as any;
+  if (!profile || profile.role !== "admin") {
+    return NextResponse.json(
+      { error: "Admin role required to save integration credentials." },
+      { status: 403 }
+    );
+  }
+
+  // ── 2. Encryption key check ────────────────────────────────────────────────
+  if (!hasEncryptionKey()) {
+    return NextResponse.json(
+      { error: "CREDENTIAL_ENCRYPTION_KEY not configured. Contact your administrator." },
+      { status: 503 }
+    );
+  }
+
+  // ── 3. Parse and validate request body ────────────────────────────────────
+  let body: {
+    clientId?: string;
+    provider?: string;
+    credentials?: Record<string, string>;
+    accountLabel?: string;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const { clientId, provider, credentials, accountLabel } = body;
+
+  if (!clientId || typeof clientId !== "string") {
+    return NextResponse.json({ error: "clientId is required." }, { status: 400 });
+  }
+  if (provider !== "meta" && provider !== "ghl") {
+    return NextResponse.json(
+      { error: "provider must be 'meta' or 'ghl'." },
+      { status: 400 }
+    );
+  }
+  if (!credentials || typeof credentials !== "object") {
+    return NextResponse.json({ error: "credentials object is required." }, { status: 400 });
+  }
+
+  // ── 4. Validate provider-specific required fields ─────────────────────────
+  let accountId: string | null = null;
+
+  if (provider === "meta") {
+    if (!credentials.accessToken) {
+      return NextResponse.json(
+        { error: "Meta credentials require accessToken." },
+        { status: 400 }
+      );
+    }
+    if (!credentials.adAccountId) {
+      return NextResponse.json(
+        { error: "Meta credentials require adAccountId (e.g. 1896960880964810)." },
+        { status: 400 }
+      );
+    }
+    accountId = credentials.adAccountId;
+  } else if (provider === "ghl") {
+    if (!credentials.apiKey) {
+      return NextResponse.json(
+        { error: "GHL credentials require apiKey." },
+        { status: 400 }
+      );
+    }
+    if (!credentials.locationId) {
+      return NextResponse.json(
+        { error: "GHL credentials require locationId." },
+        { status: 400 }
+      );
+    }
+    accountId = credentials.locationId;
+  }
+
+  // ── 5. Encrypt the credentials JSON ───────────────────────────────────────
+  let encryptedData: string;
+  try {
+    encryptedData = encryptCredential(JSON.stringify(credentials));
+  } catch (err) {
+    console.error("[credentials/save] Encryption error:", err);
+    return NextResponse.json(
+      { error: "Failed to encrypt credentials. Check CREDENTIAL_ENCRYPTION_KEY." },
+      { status: 500 }
+    );
+  }
+
+  // ── 6. Upsert into Supabase ────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const upsertData: any = {
+    client_id: clientId,
+    provider,
+    encrypted_data: encryptedData,
+    account_id: accountId,
+    account_label: accountLabel ?? null,
+    created_by: user.id,
+    updated_at: new Date().toISOString(),
+  };
+  const { error: upsertError } = await supabase
+    .from("client_integration_credentials")
+    .upsert(upsertData, { onConflict: "client_id,provider" });
+
+  if (upsertError) {
+    console.error("[credentials/save] Supabase upsert error:", upsertError);
+    return NextResponse.json(
+      { error: "Failed to save credentials to database." },
+      { status: 500 }
+    );
+  }
+
+  // ── 7. Return success (never return the raw credentials) ──────────────────
+  console.log(
+    `[credentials/save] Saved ${provider} credentials for client ${clientId} by user ${user.id}`
+  );
+
+  return NextResponse.json({
+    success: true,
+    clientId,
+    provider,
+    accountId,
+    accountLabel: accountLabel ?? null,
+    message: `${provider === "meta" ? "Meta Ads" : "GoHighLevel"} credentials saved and encrypted.`,
+  });
+}

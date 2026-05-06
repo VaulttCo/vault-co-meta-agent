@@ -17,6 +17,7 @@
  */
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveMetaCredentials } from "@/lib/integrations/credential-resolver";
 
 const META_API_VERSION = "v19.0";
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -143,17 +144,16 @@ export async function testMetaConnection(clientId: string): Promise<{
   connected: boolean;
   accountId?: string;
   accountName?: string;
+  credentialSource?: string;
   error?: string;
 }> {
-  const creds = getMetaCredentials();
-  if (!creds) {
-    return { connected: false, error: "META_ACCESS_TOKEN not configured in environment variables." };
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) {
+    return { connected: false, error: "Meta credentials not configured. Add META_ACCESS_TOKEN to Vercel env vars or save per-client credentials in the Integrations tab." };
   }
 
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) {
-    return { connected: false, error: "No Meta Ad Account ID found for this client. Add it in the client Integrations tab." };
-  }
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   try {
     const resp = await metaGet(
@@ -171,6 +171,7 @@ export async function testMetaConnection(clientId: string): Promise<{
       connected: true,
       accountId: data.id,
       accountName: data.name,
+      credentialSource: resolved.source,
     };
   } catch (err) {
     return { connected: false, error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
@@ -181,11 +182,10 @@ export async function testMetaConnection(clientId: string): Promise<{
  * Fetch all campaigns for a client's Meta ad account.
  */
 export async function getMetaCampaigns(clientId: string): Promise<MetaCampaign[]> {
-  const creds = getMetaCredentials();
-  if (!creds) return [];
-
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) return [];
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) return [];
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   try {
     const resp = await metaGet(
@@ -204,11 +204,10 @@ export async function getMetaCampaigns(clientId: string): Promise<MetaCampaign[]
  * Fetch ad sets for a client's Meta ad account.
  */
 export async function getMetaAdSets(clientId: string): Promise<unknown[]> {
-  const creds = getMetaCredentials();
-  if (!creds) return [];
-
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) return [];
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) return [];
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   try {
     const resp = await metaGet(
@@ -227,11 +226,10 @@ export async function getMetaAdSets(clientId: string): Promise<unknown[]> {
  * Fetch ads for a client's Meta ad account.
  */
 export async function getMetaAds(clientId: string): Promise<unknown[]> {
-  const creds = getMetaCredentials();
-  if (!creds) return [];
-
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) return [];
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) return [];
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   try {
     const resp = await metaGet(
@@ -253,11 +251,10 @@ export async function getMetaInsights(
   clientId: string,
   dateRange: { since: string; until: string }
 ): Promise<MetaInsights[]> {
-  const creds = getMetaCredentials();
-  if (!creds) return [];
-
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) return [];
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) return [];
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   try {
     const resp = await metaGet(
@@ -284,8 +281,8 @@ export async function getMetaInsights(
  * READ-ONLY: only fetches and saves data. Never writes to Meta.
  */
 export async function syncMetaPerformanceForClient(clientId: string): Promise<MetaSyncResult> {
-  const creds = getMetaCredentials();
-  if (!creds) {
+  const resolved = await resolveMetaCredentials(clientId);
+  if (!resolved) {
     return {
       success: false,
       clientId,
@@ -294,23 +291,11 @@ export async function syncMetaPerformanceForClient(clientId: string): Promise<Me
       totalLeads: 0,
       totalImpressions: 0,
       totalClicks: 0,
-      error: "Meta credentials not configured. Add META_ACCESS_TOKEN to Vercel environment variables.",
+      error: "Meta credentials not configured. Add META_ACCESS_TOKEN to Vercel env vars or save per-client credentials in the Integrations tab.",
     };
   }
-
-  const accountId = await getMetaAccountId(clientId);
-  if (!accountId) {
-    return {
-      success: false,
-      clientId,
-      campaignsSynced: 0,
-      totalSpend: 0,
-      totalLeads: 0,
-      totalImpressions: 0,
-      totalClicks: 0,
-      error: "No Meta Ad Account ID found for this client.",
-    };
-  }
+  const creds = { accessToken: resolved.accessToken, appId: resolved.appId, appSecret: resolved.appSecret };
+  const accountId = resolved.adAccountId;
 
   // Date range: last 30 days
   const until = new Date().toISOString().slice(0, 10);

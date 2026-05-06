@@ -504,18 +504,18 @@ export default function ReportsPage() {
         const metaData = metaRes.ok ? await metaRes.json() : null;
         const ghlData = ghlRes.ok ? await ghlRes.json() : null;
         integration = {
-          meta: metaData?.connected && metaData?.latestSnapshot ? {
-            totalSpend: metaData.latestSnapshot.spend ?? 0,
-            totalLeads: metaData.latestSnapshot.leads ?? 0,
-            cpl: metaData.latestSnapshot.leads > 0 ? (metaData.latestSnapshot.spend / metaData.latestSnapshot.leads) : null,
-            topCampaign: metaData.latestSnapshot.campaign_name ?? null,
+          meta: metaData?.connected && metaData?.campaigns?.[0] ? {
+            totalSpend: metaData.campaigns?.[0].spend ?? 0,
+            totalLeads: metaData.campaigns?.[0].leads ?? 0,
+            cpl: metaData.campaigns?.[0].leads > 0 ? (metaData.campaigns?.[0].spend / metaData.campaigns?.[0].leads) : null,
+            topCampaign: metaData.campaigns?.[0].campaign_name ?? null,
           } : null,
-          ghl: ghlData?.connected && ghlData?.latestSnapshot ? {
-            contacts: ghlData.latestSnapshot.contacts ?? 0,
-            appointments: ghlData.latestSnapshot.appointments ?? 0,
-            bookedAppointments: ghlData.latestSnapshot.booked_appointments ?? 0,
-            pipelineValue: ghlData.latestSnapshot.pipeline_value ?? 0,
-            closedRevenue: ghlData.latestSnapshot.closed_revenue ?? 0,
+          ghl: ghlData?.connected && ghlData?.snapshot ? {
+            contacts: ghlData.snapshot.contacts ?? 0,
+            appointments: ghlData.snapshot.appointments ?? 0,
+            bookedAppointments: ghlData.snapshot.booked_appointments ?? 0,
+            pipelineValue: ghlData.snapshot.pipeline_value ?? 0,
+            closedRevenue: ghlData.snapshot.closed_revenue ?? 0,
           } : null,
         };
       } catch {

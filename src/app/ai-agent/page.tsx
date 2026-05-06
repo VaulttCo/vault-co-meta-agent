@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Bot,
@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/Badge";
 import { clients, clientStatusVariant, type Client } from "@/lib/data";
 import { usePlans } from "@/components/PlanProvider";
 import { useIntelligence } from "@/components/IntelligenceProvider";
+import { useAuth } from "@/components/AuthProvider";
 import {
   getAssetsForClient,
   assetTypeColors,
@@ -450,11 +451,28 @@ const automationRules = [
 ];
 
 const agentSuggestions = [
-  "What's the best performing client campaign this month?",
-  "Build a new storm damage campaign for Acorns Roofing",
-  "Which clients need a creative refresh?",
-  "Show me clients with high CPBA",
+  "Summarize Kaczmar Builders",
+  "Show all pending approvals",
+  "List creatives approved for ads",
+  "Summarize Meta and GHL performance",
+  "What should I do next?",
+  "Why is CPL high for JJ Roofing Group?",
+  "What is missing before Acorns Roofing is ready?",
+  "Generate a report draft for Open Forge Construction",
 ];
+
+// ─────────────────────────────────────────────────────────────
+// Console message type
+// ─────────────────────────────────────────────────────────────
+
+interface ConsoleMsg {
+  role: "user" | "agent";
+  text: string;
+  dataSources?: string[];
+  relatedLinks?: { label: string; href: string }[];
+  actionSuggested?: { label: string; href: string };
+  isError?: boolean;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Sub-components
@@ -634,14 +652,23 @@ function AICampaignBuilderContent() {
     urlDraftId && !planResetByUser ? (getPlan(urlDraftId) ?? null) : null;
   const displayPlan = currentPlan ?? urlParamDraft;
 
-  // Console
-  const [consoleMessage, setConsoleMessage] = useState("");
-  const [chat, setChat] = useState<{ role: "user" | "agent"; text: string }[]>([
+  const { user } = useAuth();
+
+  // ── Veronica Console state ──
+  const [chat, setChat] = useState<ConsoleMsg[]>([
     {
       role: "agent",
-      text: "Hello! I'm Veronica, Vault Co's AI Growth Operator. I study client onboarding data, buyer psychology, market context, creative assets, and campaign performance to build approval-ready campaign drafts. What would you like to work on?",
+      text: "Veronica online. I have access to all portal data — clients, campaigns, approvals, reports, and Meta/GHL sync status. What do you want to know?",
+      dataSources: ["clients", "campaign_drafts", "reports", "approvals"],
     },
   ]);
+  const [consoleMessage, setConsoleMessage] = useState("");
+  const [isConsoleLoading, setIsConsoleLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat, isConsoleLoading]);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
   const clientIntelligence = selectedClientId ? (getIntelligence(selectedClientId) ?? null) : null;
@@ -734,17 +761,45 @@ function AICampaignBuilderContent() {
     saveDraft(updated);
   }
 
-  function sendConsoleMessage() {
-    if (!consoleMessage.trim()) return;
-    setChat((prev) => [
-      ...prev,
-      { role: "user", text: consoleMessage },
-      {
-        role: "agent",
-        text: `Working on: "${consoleMessage}". I'll pull the relevant client and campaign data, analyze performance against benchmarks, and return with actionable recommendations or a draft ready for your approval.`,
-      },
-    ]);
+  async function sendConsoleMessage() {
+    const msg = consoleMessage.trim();
+    if (!msg || isConsoleLoading) return;
     setConsoleMessage("");
+    setChat((prev) => [...prev, { role: "user", text: msg }]);
+    setIsConsoleLoading(true);
+    try {
+      const res = await fetch("/api/veronica", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: msg,
+          userRole: user?.role ?? "admin",
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          text: data.reply ?? "No response.",
+          dataSources: data.dataSources,
+          relatedLinks: data.relatedLinks,
+          actionSuggested: data.actionSuggested,
+        },
+      ]);
+    } catch {
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "agent",
+          text: "Veronica could not reach the portal. Check your connection and try again.",
+          isError: true,
+        },
+      ]);
+    } finally {
+      setIsConsoleLoading(false);
+    }
   }
 
   const canGenerate = !!selectedClient && !!goal && !!service && !!market && !!budget && !isGenerating;
@@ -1919,20 +1974,60 @@ function AICampaignBuilderContent() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chat.map((msg, i) => (
                 <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${msg.role === "agent" ? "bg-[#0D1520] border border-[#0081f2]/30" : "bg-[#ff8400]/15 border border-[#ff8400]/25"}`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden ${msg.role === "agent" ? "bg-[#0c0f15] border border-[#18b8f0]/30" : "bg-[#f07820]/15 border border-[#f07820]/25"}`}>
                     {msg.role === "agent"
                       ? <Image src="/vaultco-logo.png" alt="Agent" width={28} height={28} className="object-cover scale-[1.8] translate-y-[-2px]" />
-                      : <span className="text-[10px] font-bold text-[#ff8400]">VC</span>}
+                      : <span className="text-[10px] font-bold text-[#f07820]">VC</span>}
                   </div>
-                  <div className={`max-w-md px-4 py-3 rounded-xl text-[13px] leading-relaxed ${msg.role === "agent" ? "bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#f8f8f7]" : "bg-[#ff8400]/10 border border-[#ff8400]/15 text-[#f8f8f7]"}`}>
-                    {msg.text}
+                  <div className="flex flex-col gap-2 max-w-[75%]">
+                    <div className={`px-4 py-3 rounded-xl text-[13px] leading-relaxed whitespace-pre-line ${msg.role === "agent" ? (msg.isError ? "bg-[#ef4444]/5 border border-[#ef4444]/20 text-[#ef4444]" : "bg-[#131720] border border-[#1c2438] text-[#eef1f8]") : "bg-[#f07820]/10 border border-[#f07820]/15 text-[#eef1f8]"}`}>
+                      {msg.text}
+                    </div>
+                    {msg.dataSources && msg.dataSources.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {msg.dataSources.map((src) => (
+                          <span key={src} className="text-[10px] px-2 py-0.5 bg-[#1a1d27] border border-[#2a2e42] text-[#5a6278] rounded-full">
+                            {src.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {msg.relatedLinks && msg.relatedLinks.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {msg.relatedLinks.map((link) => (
+                          <a key={link.href} href={link.href} className="text-[11px] px-3 py-1 bg-[#131720] border border-[#18b8f0]/30 text-[#18b8f0] rounded-lg hover:bg-[#18b8f0]/5 transition-colors">
+                            {link.label}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {msg.actionSuggested && (
+                      <div>
+                        <a href={msg.actionSuggested.href} className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 vc-orange-gradient text-white rounded-lg hover:opacity-90 transition-opacity">
+                          <Sparkles size={10} />
+                          {msg.actionSuggested.label}
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
+              {isConsoleLoading && (
+                <div className="flex gap-3">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden bg-[#0c0f15] border border-[#18b8f0]/30">
+                    <Image src="/vaultco-logo.png" alt="Agent" width={28} height={28} className="object-cover scale-[1.8] translate-y-[-2px]" />
+                  </div>
+                  <div className="px-4 py-3 rounded-xl bg-[#131720] border border-[#1c2438] flex items-center gap-2">
+                    <Loader2 size={13} className="text-[#18b8f0] animate-spin" />
+                    <span className="text-[12px] text-[#5a6278]">Veronica is analyzing the portal…</span>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
             <div className="px-4 pt-3 flex flex-wrap gap-2">
               {agentSuggestions.map((s) => (
-                <button key={s} onClick={() => setConsoleMessage(s)} className="text-[11px] px-3 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#0081f2] hover:border-[#0081f2]/25 rounded-full transition-colors">{s}</button>
+                <button key={s} onClick={() => { if (!isConsoleLoading) setConsoleMessage(s); }} className="text-[11px] px-3 py-1.5 bg-[#131720] border border-[#1c2438] text-[#5a6278] hover:text-[#18b8f0] hover:border-[#18b8f0]/25 rounded-full transition-colors disabled:opacity-40">{s}</button>
               ))}
             </div>
             <div className="p-4 flex gap-3">
@@ -1940,12 +2035,12 @@ function AICampaignBuilderContent() {
                 type="text"
                 value={consoleMessage}
                 onChange={(e) => setConsoleMessage(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendConsoleMessage()}
-                placeholder="Build a campaign, write copy, analyze a client..."
-                className="flex-1 px-4 py-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[13px] text-[#f8f8f7] placeholder-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
+                onKeyDown={(e) => { if (e.key === "Enter" && !isConsoleLoading) sendConsoleMessage(); }}
+                placeholder="Ask about any client, campaign, approval, or performance…"
+                className="flex-1 px-4 py-2.5 bg-[#131720] border border-[#1c2438] rounded-lg text-[13px] text-[#eef1f8] placeholder-[#5a6278] focus:outline-none focus:border-[#18b8f0]/40 transition-colors"
               />
-              <button onClick={sendConsoleMessage} className="w-10 h-10 flex items-center justify-center vc-orange-gradient text-white rounded-lg transition-opacity hover:opacity-90 flex-shrink-0">
-                <Send size={14} />
+              <button onClick={sendConsoleMessage} disabled={isConsoleLoading} className={`w-10 h-10 flex items-center justify-center vc-orange-gradient text-white rounded-lg transition-opacity flex-shrink-0 ${isConsoleLoading ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"}`}>
+                {isConsoleLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </button>
             </div>
           </div>

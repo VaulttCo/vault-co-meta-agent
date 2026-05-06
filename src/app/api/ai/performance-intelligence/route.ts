@@ -145,8 +145,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Build AI prompt ──────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const isMockMode = !apiKey || (!metaHasData && !ghlHasData);
+  const apiKeyRaw = process.env.ANTHROPIC_API_KEY;
+  const isMockMode = !apiKeyRaw || (!metaHasData && !ghlHasData);
+  const apiKey = apiKeyRaw as string; // safe: isMockMode guard ensures apiKey is set before use
 
   let intelligence: PerformanceIntelligenceResult["intelligence"];
 

@@ -205,7 +205,11 @@ Respond in this exact JSON format:
 
 Only include wins, issues, recommendations, and next actions that are directly supported by the data. Do not fabricate metrics. If data is limited, say so in the summary and focus recommendations on what to track.`;
 
-    try {
+    // Primary model: claude-sonnet-4-5-20250929 | Fallback: claude-haiku-4-5-20251001
+    const PRIMARY_MODEL = "claude-sonnet-4-5-20250929";
+    const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+
+    async function callAnthropic(model: string): Promise<string> {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -214,27 +218,41 @@ Only include wins, issues, recommendations, and next actions that are directly s
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
+          model,
           max_tokens: 1024,
           messages: [{ role: "user", content: prompt }],
         }),
       });
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Anthropic API error ${response.status}: ${errBody.substring(0, 200)}`);
+      }
       const message = await response.json();
       const rawText = message.content?.[0]?.type === "text" ? message.content[0].text : "";
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        intelligence = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error("No JSON found in response");
+      if (!jsonMatch) throw new Error("No JSON found in response");
+      return jsonMatch[0];
+    }
+
+    try {
+      let jsonText: string;
+      try {
+        jsonText = await callAnthropic(PRIMARY_MODEL);
+        console.log(`[performance-intelligence] Used primary model: ${PRIMARY_MODEL}`);
+      } catch (primaryErr) {
+        console.warn(`[performance-intelligence] Primary model failed, trying fallback:`, primaryErr);
+        jsonText = await callAnthropic(FALLBACK_MODEL);
+        console.log(`[performance-intelligence] Used fallback model: ${FALLBACK_MODEL}`);
       }
+      intelligence = JSON.parse(jsonText);
     } catch (err) {
       console.error("[performance-intelligence] AI error:", err);
       intelligence = {
         performanceSummary: "AI analysis temporarily unavailable. Raw data is shown below.",
         wins: metaSummary ? [`$${metaSummary.totalSpend.toFixed(2)} total ad spend tracked`, `${metaSummary.totalLeads} leads generated`] : [],
-        issues: ["AI analysis failed — check Anthropic API key configuration."],
+        issues: ["AI analysis failed — both primary and fallback models unavailable."],
         recommendations: ["Review raw data above and run analysis again."],
-        nextActions: ["Verify ANTHROPIC_API_KEY is set in Vercel environment variables."],
+        nextActions: ["Verify ANTHROPIC_API_KEY has access to claude-sonnet-4-5-20250929 or claude-haiku-4-5-20251001."],
         veronicaNote: "Manual review recommended until AI analysis is restored.",
       };
     }

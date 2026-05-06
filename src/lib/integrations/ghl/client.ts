@@ -111,9 +111,13 @@ async function getGHLLocationId(clientId: string): Promise<string | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const client = clientRaw as any;
 
-    return client?.ghl_location_id ?? null;
+    if (client?.ghl_location_id) return client.ghl_location_id;
+
+    // Fall back to global env var (used when all clients share one location)
+    return process.env.GHL_LOCATION_ID ?? null;
   } catch {
-    return null;
+    // Last resort: global env var
+    return process.env.GHL_LOCATION_ID ?? null;
   }
 }
 

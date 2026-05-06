@@ -109,9 +109,13 @@ async function getMetaAccountId(clientId: string): Promise<string | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const client = clientRaw as any;
 
-    return client?.meta_account_id ?? null;
+    if (client?.meta_account_id) return client.meta_account_id;
+
+    // Fall back to global env var (used when all clients share one ad account)
+    return process.env.META_AD_ACCOUNT_ID ?? null;
   } catch {
-    return null;
+    // Last resort: global env var
+    return process.env.META_AD_ACCOUNT_ID ?? null;
   }
 }
 

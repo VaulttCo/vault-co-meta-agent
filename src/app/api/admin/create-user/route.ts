@@ -3,7 +3,8 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 // One-time admin user creation endpoint.
 // Protected by a static secret token — remove this route after use.
-const ADMIN_SECRET = process.env.ADMIN_SETUP_SECRET ?? "";
+// One-time secret — this endpoint and secret will be removed immediately after use
+const ADMIN_SECRET = "SKQ4ZMbXd5Pwded4eEd4W2XHwn8MCWCZXDdR0pcdryw";
 
 export async function POST(req: NextRequest) {
   try {

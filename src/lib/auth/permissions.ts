@@ -20,6 +20,7 @@ export interface Permissions {
   canApproveCreatives: boolean;   // Admin only
   canManageSettings: boolean;     // Admin only
   canConnectIntegrations: boolean;// Admin only
+  canAnalyzeCreatives: boolean;   // Admin + Media Buyer
   // Data visibility
   canViewInternalNotes: boolean;
   canViewStrategyData: boolean;
@@ -48,6 +49,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: true,
     canManageSettings: true,
     canConnectIntegrations: true,
+    canAnalyzeCreatives: true,
     canViewInternalNotes: true,
     canViewStrategyData: true,
     canUploadFiles: true,
@@ -72,6 +74,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canAnalyzeCreatives: true,
     canViewInternalNotes: true,
     canViewStrategyData: true,
     canUploadFiles: true,
@@ -96,6 +99,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canAnalyzeCreatives: false,
     canViewInternalNotes: false,
     canViewStrategyData: false,
     canUploadFiles: false,
@@ -120,6 +124,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canAnalyzeCreatives: false,
     canViewInternalNotes: false,
     canViewStrategyData: false,
     canUploadFiles: false,

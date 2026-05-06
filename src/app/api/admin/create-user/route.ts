@@ -63,6 +63,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         error: "Failed to create auth user",
         detail: adminData.error ?? adminData.message ?? "Unknown error",
+        rawStatus: adminRes.status,
+        rawData: adminData,
+        supabaseUrl: supabaseUrl ? supabaseUrl.substring(0, 30) + "..." : "missing",
+        hasServiceKey: !!serviceRoleKey,
       }, { status: 500 });
     }
 

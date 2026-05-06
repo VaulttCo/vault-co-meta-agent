@@ -471,6 +471,7 @@ export interface WeeklyReportInput {
   wins: string[];
   issues: string[];
   nextActions: string[];
+  internalNotes?: string;
   previousWeekComparison?: {
     leads?: number;
     spend?: string;

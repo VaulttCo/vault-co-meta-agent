@@ -34,6 +34,11 @@ import {
   Plus,
   Paperclip,
   Trash2,
+  Link2,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -63,6 +68,7 @@ const tabs = [
   { id: "ad-copy", label: "Ad Copy", icon: FileText },
   { id: "creative", label: "Creative Direction", icon: ImageIcon },
   { id: "lead-forms", label: "Lead Forms", icon: CheckSquare },
+  { id: "integrations", label: "Integrations", icon: Link2 },
   { id: "ghl", label: "GHL Workflow", icon: Settings },
   { id: "optimization", label: "Optimization", icon: Zap },
   { id: "reports", label: "Reports", icon: BarChart3 },
@@ -1289,8 +1295,11 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       {/* Files tab */}
       {activeTab === "files" && <ClientFilesTab clientId={client.id} />}
 
+      {/* Integrations tab */}
+      {activeTab === "integrations" && <IntegrationsTab clientId={client.id} clientName={client.name} />}
+
       {/* Placeholder for other tabs */}
-      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && (
+      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && activeTab !== "integrations" && (
         <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
           <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
             <Zap size={20} className="text-[#0081f2]" />
@@ -1301,6 +1310,405 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
           <p className="text-[12px] text-[#6b7a99]">This section is being built for {client.name}.</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Integrations Tab ─────────────────────────────────────────
+
+interface IntegrationStatus {
+  connected: boolean;
+  connectionStatus?: string;
+  accountId?: string;
+  accountName?: string;
+  locationId?: string;
+  locationName?: string;
+  lastSyncedAt?: string;
+  hasCredentials?: boolean;
+  totals?: {
+    spend: number;
+    leads: number;
+    impressions: number;
+    clicks: number;
+    cpl: number | null;
+  };
+  snapshot?: {
+    contacts: number;
+    appointments: number;
+    booked_appointments: number;
+    pipeline_value: number;
+    closed_revenue: number;
+    opportunities: number;
+  };
+  error?: string;
+}
+
+function IntegrationsTab({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const [metaStatus, setMetaStatus] = useState<IntegrationStatus | null>(null);
+  const [ghlStatus, setGhlStatus] = useState<IntegrationStatus | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [ghlLoading, setGhlLoading] = useState(false);
+  const [metaSyncing, setMetaSyncing] = useState(false);
+  const [ghlSyncing, setGhlSyncing] = useState(false);
+  const [metaMsg, setMetaMsg] = useState<string | null>(null);
+  const [ghlMsg, setGhlMsg] = useState<string | null>(null);
+
+  // Load status on mount
+  useEffect(() => {
+    loadMetaStatus();
+    loadGhlStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  async function loadMetaStatus() {
+    setMetaLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/meta/status?clientId=${clientId}`);
+      const data = await res.json();
+      setMetaStatus(data);
+    } catch {
+      setMetaStatus({ connected: false, error: "Failed to load status" });
+    } finally {
+      setMetaLoading(false);
+    }
+  }
+
+  async function loadGhlStatus() {
+    setGhlLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/ghl/status?clientId=${clientId}`);
+      const data = await res.json();
+      setGhlStatus(data);
+    } catch {
+      setGhlStatus({ connected: false, error: "Failed to load status" });
+    } finally {
+      setGhlLoading(false);
+    }
+  }
+
+  async function testMeta() {
+    setMetaLoading(true);
+    setMetaMsg(null);
+    try {
+      const res = await fetch("/api/integrations/meta/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.connected) {
+        setMetaMsg(`✓ Connected to ${data.accountName ?? data.accountId}`);
+      } else {
+        setMetaMsg(`✗ ${data.error ?? "Connection failed"}`);
+      }
+      await loadMetaStatus();
+    } catch {
+      setMetaMsg("✗ Network error");
+    } finally {
+      setMetaLoading(false);
+    }
+  }
+
+  async function syncMeta() {
+    setMetaSyncing(true);
+    setMetaMsg(null);
+    try {
+      const res = await fetch("/api/integrations/meta/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMetaMsg(`✓ Synced ${data.campaignsSynced} campaigns · $${data.totalSpend.toFixed(2)} spend · ${data.totalLeads} leads`);
+      } else {
+        setMetaMsg(`✗ ${data.error ?? "Sync failed"}`);
+      }
+      await loadMetaStatus();
+    } catch {
+      setMetaMsg("✗ Network error");
+    } finally {
+      setMetaSyncing(false);
+    }
+  }
+
+  async function testGHL() {
+    setGhlLoading(true);
+    setGhlMsg(null);
+    try {
+      const res = await fetch("/api/integrations/ghl/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.connected) {
+        setGhlMsg(`✓ Connected to ${data.locationName ?? data.locationId}`);
+      } else {
+        setGhlMsg(`✗ ${data.error ?? "Connection failed"}`);
+      }
+      await loadGhlStatus();
+    } catch {
+      setGhlMsg("✗ Network error");
+    } finally {
+      setGhlLoading(false);
+    }
+  }
+
+  async function syncGHL() {
+    setGhlSyncing(true);
+    setGhlMsg(null);
+    try {
+      const res = await fetch("/api/integrations/ghl/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGhlMsg(`✓ Synced ${data.contacts} contacts · ${data.bookedAppointments} booked appts · $${data.pipelineValue.toFixed(0)} pipeline`);
+      } else {
+        setGhlMsg(`✗ ${data.error ?? "Sync failed"}`);
+      }
+      await loadGhlStatus();
+    } catch {
+      setGhlMsg("✗ Network error");
+    } finally {
+      setGhlSyncing(false);
+    }
+  }
+
+  const cardCls = "bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden";
+  const btnCls = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors";
+
+  function StatusBadge({ status }: { status: IntegrationStatus | null; }) {
+    if (!status) return <span className="text-[10px] text-[#3d4f6e]">Loading…</span>;
+    if (status.connected) {
+      return (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-[#22c55e]">
+          <Wifi size={10} /> Connected
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 text-[10px] font-semibold text-[#6b7a99]">
+        <WifiOff size={10} /> Not Connected
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Link2 size={14} className="text-[#0081f2]" />
+          <span className="text-[13px] font-semibold text-[#f8f8f7]">Integrations — {clientName}</span>
+        </div>
+        <p className="text-[11px] text-[#6b7a99] leading-snug">
+          Connect Meta Ads and GoHighLevel to sync real performance data for this client.
+          All connections are <strong className="text-[#f8f8f7]">read-only</strong> — Veronica never writes to Meta or GHL.
+          Credentials are stored in Vercel environment variables and never exposed to the browser.
+        </p>
+      </div>
+
+      {/* Meta Ads */}
+      <div className={cardCls}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(0,129,242,0.15)]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-[#1877f2]/20 flex items-center justify-center">
+              <span className="text-[10px] font-bold text-[#1877f2]">M</span>
+            </div>
+            <span className="text-[12px] font-semibold text-[#f8f8f7]">Meta Ads</span>
+            <span className="text-[10px] text-[#3d4f6e]">Read-only · Campaigns, Insights, Spend</span>
+          </div>
+          <StatusBadge status={metaStatus} />
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* Credentials check */}
+          {metaStatus && !metaStatus.hasCredentials && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ff8400]/10 border border-[#ff8400]/30 rounded-lg">
+              <AlertCircle size={12} className="text-[#ff8400] flex-shrink-0 mt-0.5" />
+              <div className="text-[11px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Credentials not configured. </span>
+                Add <code className="text-[#0081f2]">META_ACCESS_TOKEN</code>, <code className="text-[#0081f2]">META_APP_ID</code>, and <code className="text-[#0081f2]">META_APP_SECRET</code> to your Vercel environment variables.
+              </div>
+            </div>
+          )}
+
+          {/* Account info */}
+          {metaStatus?.connected && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#0f1a28] rounded-lg p-3">
+                <div className="text-[10px] text-[#3d4f6e] mb-1">Ad Account</div>
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">{metaStatus.accountId ?? "—"}</div>
+              </div>
+              <div className="bg-[#0f1a28] rounded-lg p-3">
+                <div className="text-[10px] text-[#3d4f6e] mb-1">Last Synced</div>
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">
+                  {metaStatus.lastSyncedAt ? new Date(metaStatus.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Performance totals */}
+          {metaStatus?.totals && (metaStatus.totals.spend > 0 || metaStatus.totals.leads > 0) && (
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "Spend", value: `$${metaStatus.totals.spend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: "#ff8400" },
+                { label: "Leads", value: metaStatus.totals.leads.toLocaleString(), color: "#0081f2" },
+                { label: "Impressions", value: metaStatus.totals.impressions.toLocaleString(), color: "#a78bfa" },
+                { label: "CPL", value: metaStatus.totals.cpl != null ? `$${metaStatus.totals.cpl.toFixed(2)}` : "—", color: "#22c55e" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-[#0f1a28] rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] text-[#3d4f6e] mb-0.5">{label}</div>
+                  <div className="text-[12px] font-bold" style={{ color }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Message */}
+          {metaMsg && (
+            <div className={`text-[11px] px-3 py-2 rounded-lg ${metaMsg.startsWith("✓") ? "bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30" : "bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30"}`}>
+              {metaMsg}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={testMeta}
+              disabled={metaLoading}
+              className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.3)]`}
+            >
+              {metaLoading ? <Loader2 size={10} className="animate-spin" /> : <Wifi size={10} />}
+              Test Connection
+            </button>
+            <button
+              onClick={syncMeta}
+              disabled={metaSyncing || !metaStatus?.hasCredentials}
+              className={`${btnCls} bg-[#0081f2]/10 border border-[#0081f2]/30 text-[#0081f2] hover:bg-[#0081f2]/20 disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {metaSyncing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+              Sync Now
+            </button>
+            <button
+              onClick={loadMetaStatus}
+              className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#3d4f6e] hover:text-[#6b7a99]`}
+            >
+              <RefreshCw size={10} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* GoHighLevel */}
+      <div className={cardCls}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[rgba(0,129,242,0.15)]">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-[#22c55e]/20 flex items-center justify-center">
+              <span className="text-[10px] font-bold text-[#22c55e]">G</span>
+            </div>
+            <span className="text-[12px] font-semibold text-[#f8f8f7]">GoHighLevel</span>
+            <span className="text-[10px] text-[#3d4f6e]">Read-only · Contacts, Appointments, Pipeline</span>
+          </div>
+          <StatusBadge status={ghlStatus} />
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* Credentials check */}
+          {ghlStatus && !ghlStatus.hasCredentials && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ff8400]/10 border border-[#ff8400]/30 rounded-lg">
+              <AlertCircle size={12} className="text-[#ff8400] flex-shrink-0 mt-0.5" />
+              <div className="text-[11px] text-[#6b7a99] leading-snug">
+                <span className="text-[#f8f8f7] font-semibold">Credentials not configured. </span>
+                Add <code className="text-[#0081f2]">GHL_API_KEY</code> and <code className="text-[#0081f2]">GHL_LOCATION_ID</code> to your Vercel environment variables.
+              </div>
+            </div>
+          )}
+
+          {/* Location info */}
+          {ghlStatus?.connected && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#0f1a28] rounded-lg p-3">
+                <div className="text-[10px] text-[#3d4f6e] mb-1">Location ID</div>
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">{ghlStatus.locationId ?? "—"}</div>
+              </div>
+              <div className="bg-[#0f1a28] rounded-lg p-3">
+                <div className="text-[10px] text-[#3d4f6e] mb-1">Last Synced</div>
+                <div className="text-[12px] font-semibold text-[#f8f8f7]">
+                  {ghlStatus.lastSyncedAt ? new Date(ghlStatus.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Never"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pipeline snapshot */}
+          {ghlStatus?.snapshot && (
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "Contacts", value: (ghlStatus.snapshot.contacts ?? 0).toLocaleString(), color: "#0081f2" },
+                { label: "Appointments", value: (ghlStatus.snapshot.appointments ?? 0).toLocaleString(), color: "#a78bfa" },
+                { label: "Booked", value: (ghlStatus.snapshot.booked_appointments ?? 0).toLocaleString(), color: "#22c55e" },
+                { label: "Pipeline", value: `$${(ghlStatus.snapshot.pipeline_value ?? 0).toLocaleString()}`, color: "#ff8400" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-[#0f1a28] rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] text-[#3d4f6e] mb-0.5">{label}</div>
+                  <div className="text-[12px] font-bold" style={{ color }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Message */}
+          {ghlMsg && (
+            <div className={`text-[11px] px-3 py-2 rounded-lg ${ghlMsg.startsWith("✓") ? "bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30" : "bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30"}`}>
+              {ghlMsg}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={testGHL}
+              disabled={ghlLoading}
+              className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.3)]`}
+            >
+              {ghlLoading ? <Loader2 size={10} className="animate-spin" /> : <Wifi size={10} />}
+              Test Connection
+            </button>
+            <button
+              onClick={syncGHL}
+              disabled={ghlSyncing || !ghlStatus?.hasCredentials}
+              className={`${btnCls} bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {ghlSyncing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+              Sync Now
+            </button>
+            <button
+              onClick={loadGhlStatus}
+              className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#3d4f6e] hover:text-[#6b7a99]`}
+            >
+              <RefreshCw size={10} />
+              Refresh
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Setup instructions */}
+      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.08)] rounded-xl p-4">
+        <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-2">Setup Instructions</div>
+        <div className="space-y-2 text-[11px] text-[#6b7a99] leading-relaxed">
+          <p><span className="text-[#f8f8f7] font-semibold">Meta Ads:</span> Add a Meta System User token with <code className="text-[#0081f2]">ads_read</code> permission. Set <code className="text-[#0081f2]">META_ACCESS_TOKEN</code>, <code className="text-[#0081f2]">META_APP_ID</code>, <code className="text-[#0081f2]">META_APP_SECRET</code> in Vercel. Then add this client&apos;s Ad Account ID in the client Overview tab under &quot;Meta Ad Account&quot;.</p>
+          <p><span className="text-[#f8f8f7] font-semibold">GoHighLevel:</span> Create a GHL Private Integration App with read-only scopes. Set <code className="text-[#0081f2]">GHL_API_KEY</code> and <code className="text-[#0081f2]">GHL_LOCATION_ID</code> in Vercel. Then add this client&apos;s Location ID in the client Overview tab under &quot;GHL Location ID&quot;.</p>
+          <p><span className="text-[#f8f8f7] font-semibold">Full setup guide:</span> See <code className="text-[#0081f2]">docs/integrations-setup.md</code> in the repository.</p>
+        </div>
+      </div>
     </div>
   );
 }

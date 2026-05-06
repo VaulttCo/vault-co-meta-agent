@@ -53,22 +53,51 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function buildReportInput(client: Client): WeeklyReportInput {
+interface IntegrationSnapshot {
+  meta?: { totalSpend: number; totalLeads: number; cpl: number | null; topCampaign: string | null } | null;
+  ghl?: { contacts: number; appointments: number; bookedAppointments: number; pipelineValue: number; closedRevenue: number } | null;
+}
+
+function buildReportInput(client: Client, integration?: IntegrationSnapshot): WeeklyReportInput {
+  // Prefer synced Meta/GHL data over client.stats when available
+  const spendVal = integration?.meta?.totalSpend != null
+    ? `$${integration.meta.totalSpend.toFixed(2)} (Meta Ads)`
+    : client.stats.spend;
+  const leadsVal = integration?.meta?.totalLeads != null
+    ? integration.meta.totalLeads
+    : client.stats.leads;
+  const cplVal = integration?.meta?.cpl != null
+    ? `$${integration.meta.cpl.toFixed(2)} (Meta)`
+    : client.stats.cpl;
+  const bookedVal = integration?.ghl?.bookedAppointments != null
+    ? integration.ghl.bookedAppointments
+    : client.stats.booked;
+  const pipelineVal = integration?.ghl?.pipelineValue != null
+    ? `$${integration.ghl.pipelineValue.toLocaleString()} (GHL)`
+    : (client.stats.pipeline ?? "$0");
+  const revenueVal = integration?.ghl?.closedRevenue != null
+    ? `$${integration.ghl.closedRevenue.toLocaleString()} (GHL)`
+    : (client.stats.revenue ?? "$0");
+  const dataSourceNote = [
+    integration?.meta ? "Meta Ads (synced)" : "Manual entry",
+    integration?.ghl ? "GoHighLevel (synced)" : "Manual entry",
+  ].join(" · ");
   return {
     clientId: client.id,
     clientName: client.name,
     reportPeriod: "May 2026 — Week 1",
-    spend: client.stats.spend,
-    leads: client.stats.leads,
-    booked: client.stats.booked,
-    cpl: client.stats.cpl,
+    spend: typeof spendVal === "number" ? `$${spendVal}` : String(spendVal),
+    leads: typeof leadsVal === "number" ? leadsVal : Number(leadsVal) || 0,
+    booked: typeof bookedVal === "number" ? bookedVal : Number(bookedVal) || 0,
+    cpl: typeof cplVal === "number" ? `$${cplVal}` : String(cplVal),
     cpba: client.stats.cpba ?? "—",
     showRate: client.stats.showRate ?? "—",
-    pipelineValue: client.stats.pipeline ?? "$0",
-    revenueGenerated: client.stats.revenue ?? "$0",
+    pipelineValue: String(pipelineVal),
+    revenueGenerated: String(revenueVal),
     wins: [],
     issues: [],
     nextActions: [],
+    internalNotes: `Data source: ${dataSourceNote}`,
   };
 }
 
@@ -465,7 +494,35 @@ export default function ReportsPage() {
   async function handleGenerate(client: Client) {
     setGenerating((prev) => ({ ...prev, [client.id]: true }));
     try {
-      const input = buildReportInput(client);
+      // Fetch integration snapshots to enrich report with real Meta/GHL data
+      let integration: IntegrationSnapshot | undefined;
+      try {
+        const [metaRes, ghlRes] = await Promise.all([
+          fetch(`/api/integrations/meta/status?clientId=${encodeURIComponent(client.id)}`),
+          fetch(`/api/integrations/ghl/status?clientId=${encodeURIComponent(client.id)}`),
+        ]);
+        const metaData = metaRes.ok ? await metaRes.json() : null;
+        const ghlData = ghlRes.ok ? await ghlRes.json() : null;
+        integration = {
+          meta: metaData?.connected && metaData?.latestSnapshot ? {
+            totalSpend: metaData.latestSnapshot.spend ?? 0,
+            totalLeads: metaData.latestSnapshot.leads ?? 0,
+            cpl: metaData.latestSnapshot.leads > 0 ? (metaData.latestSnapshot.spend / metaData.latestSnapshot.leads) : null,
+            topCampaign: metaData.latestSnapshot.campaign_name ?? null,
+          } : null,
+          ghl: ghlData?.connected && ghlData?.latestSnapshot ? {
+            contacts: ghlData.latestSnapshot.contacts ?? 0,
+            appointments: ghlData.latestSnapshot.appointments ?? 0,
+            bookedAppointments: ghlData.latestSnapshot.booked_appointments ?? 0,
+            pipelineValue: ghlData.latestSnapshot.pipeline_value ?? 0,
+            closedRevenue: ghlData.latestSnapshot.closed_revenue ?? 0,
+          } : null,
+        };
+      } catch {
+        // Non-fatal — fall back to client.stats
+        integration = undefined;
+      }
+      const input = buildReportInput(client, integration);
       const res = await fetch("/api/ai/generate-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

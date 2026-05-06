@@ -12,22 +12,33 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest) {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) {
+  // ── 1. Auth check (cookie-based session client) ────────────────────────────
+  // The service role client cannot read user sessions from cookies.
+  const sessionClient = await getSupabaseSessionClient();
+  if (!sessionClient) {
     return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await sessionClient.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  // ── 2. Validate query params ───────────────────────────────────────────
   const clientId = req.nextUrl.searchParams.get("clientId");
   if (!clientId) {
     return NextResponse.json({ error: "clientId query param required." }, { status: 400 });
+  }
+
+  // ── 3. Query credential metadata (service role — bypasses RLS) ────────────
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase service role not configured." }, { status: 503 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

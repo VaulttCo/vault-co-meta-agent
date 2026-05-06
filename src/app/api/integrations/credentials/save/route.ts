@@ -30,28 +30,37 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
 import { encryptCredential, hasEncryptionKey } from "@/lib/crypto/credentials";
 
 export async function POST(req: NextRequest) {
-  // ── 1. Auth check ─────────────────────────────────────────────────────────
-  const supabase = getSupabaseServerClient();
-  if (!supabase) {
+  // ── 1. Auth check (cookie-based session client) ────────────────────────────
+  // The service role client cannot read user sessions from cookies.
+  // We must use the @supabase/ssr createServerClient (anon key + cookies) here.
+  const sessionClient = await getSupabaseSessionClient();
+  if (!sessionClient) {
     return NextResponse.json(
       { error: "Supabase not configured." },
       { status: 503 }
     );
   }
 
-  // Verify the user is authenticated and has admin role
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await sessionClient.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  // Check role from user_profiles table
+  // ── 2. Role check (service role client — bypasses RLS for user_profiles) ──
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Supabase service role not configured." },
+      { status: 503 }
+    );
+  }
+
   const { data: profileRaw } = await supabase
     .from("user_profiles")
     .select("role")
@@ -66,7 +75,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 2. Encryption key check ────────────────────────────────────────────────
+  // ── 3. Encryption key check ────────────────────────────────────────────────
   if (!hasEncryptionKey()) {
     return NextResponse.json(
       { error: "CREDENTIAL_ENCRYPTION_KEY not configured. Contact your administrator." },
@@ -74,7 +83,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 3. Parse and validate request body ────────────────────────────────────
+  // ── 4. Parse and validate request body ────────────────────────────────────
   let body: {
     clientId?: string;
     provider?: string;
@@ -102,7 +111,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "credentials object is required." }, { status: 400 });
   }
 
-  // ── 4. Validate provider-specific required fields ─────────────────────────
+  // ── 5. Validate provider-specific required fields ─────────────────────────
   let accountId: string | null = null;
 
   if (provider === "meta") {
@@ -135,7 +144,7 @@ export async function POST(req: NextRequest) {
     accountId = credentials.locationId;
   }
 
-  // ── 5. Encrypt the credentials JSON ───────────────────────────────────────
+  // ── 6. Encrypt the credentials JSON ───────────────────────────────────────
   let encryptedData: string;
   try {
     encryptedData = encryptCredential(JSON.stringify(credentials));
@@ -147,7 +156,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 6. Upsert into Supabase ────────────────────────────────────────────────
+  // ── 7. Upsert into Supabase (service role — bypasses RLS) ──────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const upsertData: any = {
     client_id: clientId,
@@ -170,7 +179,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 7. Return success (never return the raw credentials) ──────────────────
+  // ── 8. Return success (never return the raw credentials) ──────────────────
   console.log(
     `[credentials/save] Saved ${provider} credentials for client ${clientId} by user ${user.id}`
   );

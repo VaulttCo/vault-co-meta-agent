@@ -6,20 +6,29 @@
  *
  * Request body: { clientId: string, provider: "meta" | "ghl" }
  */
-
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function DELETE(req: NextRequest) {
-  // ── 1. Auth check ─────────────────────────────────────────────────────────
-  const supabase = getSupabaseServerClient();
-  if (!supabase) {
+  // ── 1. Auth check (cookie-based session client) ────────────────────────────
+  // The service role client cannot read user sessions from cookies.
+  // We must use the @supabase/ssr createServerClient (anon key + cookies) here.
+  const sessionClient = await getSupabaseSessionClient();
+  if (!sessionClient) {
     return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await sessionClient.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  // ── 2. Role check + DB operations (service role client — bypasses RLS) ─────
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: "Supabase service role not configured." }, { status: 503 });
   }
 
   const { data: profileRaw } = await supabase
@@ -36,7 +45,7 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  // ── 2. Parse body ──────────────────────────────────────────────────────────
+  // ── 3. Parse body ──────────────────────────────────────────────────────────
   let body: { clientId?: string; provider?: string };
   try {
     body = await req.json();
@@ -52,7 +61,7 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  // ── 3. Delete from Supabase ────────────────────────────────────────────────
+  // ── 4. Delete from Supabase ────────────────────────────────────────────────
   const { error } = await supabase
     .from("client_integration_credentials")
     .delete()
@@ -64,7 +73,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Failed to delete credentials." }, { status: 500 });
   }
 
-  console.log(`[credentials/delete] Deleted ${provider} credentials for client ${clientId} by user ${user.id}`);
+  console.log(
+    `[credentials/delete] Deleted ${provider} credentials for client ${clientId} by user ${user.id}`
+  );
 
   return NextResponse.json({
     success: true,

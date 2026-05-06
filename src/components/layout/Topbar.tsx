@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck } from "lucide-react";
+import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -20,7 +20,11 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/settings": { title: "Settings", subtitle: "Account, integrations & AI provider settings" },
 };
 
-export function Topbar() {
+interface TopbarProps {
+  onMenuClick?: () => void;
+}
+
+export function Topbar({ onMenuClick }: TopbarProps) {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const { user, signOut, can } = useAuth();
@@ -48,31 +52,50 @@ export function Topbar() {
 
   return (
     <header
-      className="h-[68px] flex items-center justify-between px-6 flex-shrink-0 border-b"
+      className="h-[68px] flex items-center justify-between px-4 sm:px-6 flex-shrink-0 border-b gap-3"
       style={{
         backgroundColor: "var(--t-header-bg)",
         borderColor: "rgba(0, 129, 242, 0.12)",
         backdropFilter: "blur(12px)",
       }}
     >
-      <div>
-        <h1
-          className="text-[16px] font-bold tracking-wide"
-          style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
+      {/* Left: hamburger (mobile) + page title */}
+      <div className="flex items-center gap-3 min-w-0">
+        {/* Mobile hamburger */}
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 transition-all"
+          style={{
+            border: "1px solid rgba(0, 129, 242, 0.15)",
+            backgroundColor: "var(--t-input-bg)",
+            color: "var(--t-muted)",
+          }}
+          aria-label="Open menu"
         >
-          {page?.title}
-        </h1>
-        <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>{page?.subtitle}</p>
+          <Menu size={15} />
+        </button>
+
+        <div className="min-w-0">
+          <h1
+            className="text-[15px] sm:text-[16px] font-bold tracking-wide truncate"
+            style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
+          >
+            {page?.title}
+          </h1>
+          <p className="text-[11px] truncate hidden sm:block" style={{ color: "var(--t-muted)" }}>
+            {page?.subtitle}
+          </p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* Search */}
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        {/* Search — hidden on mobile */}
         <div className="relative hidden md:flex items-center">
           <Search size={13} className="absolute left-3" style={{ color: "var(--t-muted)" }} />
           <input
             type="text"
             placeholder="Search clients, campaigns..."
-            className="w-52 pl-8 pr-3 py-1.5 rounded-lg text-[13px] focus:outline-none transition-colors"
+            className="w-44 lg:w-52 pl-8 pr-3 py-1.5 rounded-lg text-[13px] focus:outline-none transition-colors"
             style={{
               backgroundColor: "var(--t-input-bg)",
               border: "1px solid rgba(0, 129, 242, 0.15)",
@@ -114,9 +137,9 @@ export function Topbar() {
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#ff8400] rounded-full"></span>
         </button>
 
-        {/* GHL connection badge — not connected */}
+        {/* GHL connection badge — hidden on mobile */}
         <div
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
           style={{
             backgroundColor: "var(--t-input-bg)",
             border: "1px solid rgba(61, 79, 110, 0.25)",
@@ -127,9 +150,9 @@ export function Topbar() {
           <span className="font-medium" style={{ color: "#3d4f6e" }}>Not connected</span>
         </div>
 
-        {/* Meta connection badge — not connected */}
+        {/* Meta connection badge — hidden on mobile */}
         <div
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
           style={{
             backgroundColor: "var(--t-input-bg)",
             border: "1px solid rgba(61, 79, 110, 0.25)",

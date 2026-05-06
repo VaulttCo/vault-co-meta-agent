@@ -94,7 +94,7 @@ function AddClientModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div
-        className="w-full max-w-lg shadow-2xl rounded-xl overflow-hidden"
+        className="w-full max-w-lg shadow-2xl rounded-xl overflow-hidden max-h-[90vh] flex flex-col"
         style={{
           backgroundColor: "#0a1118",
           border: "1px solid rgba(0, 129, 242, 0.20)",
@@ -380,8 +380,8 @@ export default function ClientsPage() {
       />
 
       {/* Search & filters */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5">
+        <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7a99" }} />
           <input
             type="text"
@@ -447,7 +447,7 @@ export default function ClientsPage() {
             )}
           </div>
         ) : (
-          <table className="w-full text-[13px]">
+          <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
             <thead>
               <tr className="border-b" style={{ borderColor: "rgba(0, 129, 242, 0.10)" }}>
                 {["Client", "Market", "Status", "Budget", "Leads", "Booked", "CPL", "Avg. Job Value", ""].map(
@@ -511,7 +511,7 @@ export default function ClientsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 

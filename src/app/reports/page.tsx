@@ -359,7 +359,7 @@ function ViewReportModal({
 
         <div className="p-6 space-y-6 flex-1">
           {/* KPI Snapshot */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: "Leads", value: String(report.leads), color: "#0081f2" },
               { label: "Booked", value: String(report.booked), color: "#22c55e" },
@@ -635,7 +635,7 @@ export default function ReportsPage() {
       />
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: "Total Leads (Active Clients)", value: isLoading ? "…" : String(totalLeads), icon: Users, color: "#0081f2" },
           { label: "Total Booked (MTD)", value: isLoading ? "…" : String(totalBooked), icon: CalendarCheck, color: "#22c55e" },

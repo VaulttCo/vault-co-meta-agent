@@ -391,7 +391,7 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Summary row */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {[
           { label: "Needs Review", count: needsReviewCount, color: "#0081f2" },
           { label: "Changes Requested", count: changesRequestedCount, color: "#f59e0b" },

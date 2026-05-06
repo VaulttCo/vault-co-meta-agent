@@ -2,7 +2,22 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { ShieldCheck, Sparkles, Mail, Lock, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  ShieldCheck,
+  Sparkles,
+  Mail,
+  Lock,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Brain,
+  Megaphone,
+  BarChart3,
+  FileText,
+  CheckSquare,
+  RefreshCw,
+} from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { MOCK_USERS } from "@/lib/auth/mock-users";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/auth/types";
@@ -56,7 +71,7 @@ function SupabaseLoginForm() {
 
   if (magicSent) {
     return (
-      <div className="w-full max-w-md">
+      <div className="w-full">
         <div
           className="flex flex-col items-center gap-4 px-6 py-8 rounded-2xl text-center"
           style={{
@@ -70,7 +85,8 @@ function SupabaseLoginForm() {
               Magic link sent
             </p>
             <p className="text-[12px] mt-1.5" style={{ color: "#6b7a99" }}>
-              Check your inbox at <span style={{ color: "#0081f2" }}>{email}</span>.
+              Check your inbox at{" "}
+              <span style={{ color: "#0081f2" }}>{email}</span>.
               Click the link to sign in — it expires in 1 hour.
             </p>
           </div>
@@ -87,7 +103,7 @@ function SupabaseLoginForm() {
   }
 
   return (
-    <div className="w-full max-w-md space-y-4">
+    <div className="w-full space-y-4">
       {/* Mode toggle */}
       <div
         className="flex rounded-xl overflow-hidden"
@@ -222,7 +238,7 @@ function DemoRolePicker() {
   const { signInAs } = useAuth();
 
   return (
-    <div className="w-full max-w-md space-y-3">
+    <div className="w-full space-y-3">
       <div
         className="text-[10px] font-semibold uppercase tracking-widest mb-1 px-1"
         style={{ color: "#3d4f6e" }}
@@ -288,108 +304,231 @@ function DemoRolePicker() {
   );
 }
 
+// ── Veronica brand panel (right side on desktop) ──────────────────────────────
+function VeronicaPanel() {
+  const features = [
+    { icon: Brain,       label: "Client Intelligence",               desc: "AI-extracted client profiles, brand tone, and offer positioning." },
+    { icon: Megaphone,   label: "Campaign Drafts",                   desc: "Anthropic-powered Meta ad copy, creative direction, and lead forms." },
+    { icon: RefreshCw,   label: "Meta + GHL Read-Only Sync",         desc: "Live performance data pulled from Meta Ads and GoHighLevel." },
+    { icon: BarChart3,   label: "Reports + Performance Intelligence", desc: "Weekly Veronica-prepared client reports with actionable insights." },
+    { icon: CheckSquare, label: "Human Approval Gates Active",       desc: "All drafts require human review before anything reaches Meta." },
+    { icon: FileText,    label: "Approval-Ready Growth Plans",       desc: "Structured recommendations reviewed and approved by your team." },
+  ];
+
+  return (
+    <div
+      className="hidden lg:flex flex-col justify-between h-full px-10 py-12 relative overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, #060d1a 0%, #091525 60%, #0a1c30 100%)",
+        borderLeft: "1px solid rgba(0, 129, 242, 0.12)",
+      }}
+    >
+      {/* Decorative glows */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 80% 10%, rgba(0, 129, 242, 0.12), transparent 40%),
+            radial-gradient(circle at 20% 80%, rgba(255, 132, 0, 0.07), transparent 35%),
+            radial-gradient(circle at 50% 50%, rgba(18, 46, 94, 0.20), transparent 55%)
+          `,
+        }}
+      />
+
+      {/* Top section */}
+      <div className="relative z-10">
+        {/* Live badge */}
+        <div className="flex items-center gap-2 mb-8">
+          <span
+            className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full"
+            style={{
+              color: "#22c55e",
+              backgroundColor: "rgba(34, 197, 94, 0.08)",
+              border: "1px solid rgba(34, 197, 94, 0.20)",
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+            Online · Monitoring 24/7
+          </span>
+        </div>
+
+        {/* Veronica headline */}
+        <h2
+          className="text-[32px] font-bold leading-tight mb-2"
+          style={{
+            fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
+            color: "#f8f8f7",
+          }}
+        >
+          Veronica Internal<br />Growth Portal
+        </h2>
+        <p className="text-[13px] mb-8" style={{ color: "#6b7a99" }}>
+          AI Growth Operator by{" "}
+          <span style={{ color: "#ff8400", fontWeight: 600 }}>Vault Co</span>
+        </p>
+
+        {/* Feature list */}
+        <div className="space-y-4">
+          {features.map(({ icon: Icon, label, desc }) => (
+            <div key={label} className="flex items-start gap-3">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{
+                  backgroundColor: "rgba(0, 129, 242, 0.10)",
+                  border: "1px solid rgba(0, 129, 242, 0.18)",
+                }}
+              >
+                <Icon size={14} style={{ color: "#0081f2" }} />
+              </div>
+              <div>
+                <div className="text-[12px] font-semibold" style={{ color: "#f8f8f7" }}>
+                  {label}
+                </div>
+                <div className="text-[11px] leading-snug mt-0.5" style={{ color: "#4a5d7e" }}>
+                  {desc}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom read-only safety note */}
+      <div className="relative z-10 mt-8">
+        <div
+          className="px-4 py-3.5 rounded-xl"
+          style={{
+            backgroundColor: "rgba(0, 129, 242, 0.05)",
+            border: "1px solid rgba(0, 129, 242, 0.14)",
+          }}
+        >
+          <div className="flex items-start gap-2.5">
+            <ShieldCheck size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#0081f2" }} />
+            <p className="text-[11px] leading-snug" style={{ color: "#4a5d7e" }}>
+              <span className="font-semibold" style={{ color: "#6b7a99" }}>Read-only safety: </span>
+              Veronica can analyze, recommend, and draft. She cannot publish campaigns, change budgets, send SMS, or push workflows.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
   const { isDemoMode } = useAuth();
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-16 relative overflow-hidden"
-      style={{
-        backgroundColor: "#05070B",
-        backgroundImage: `
-          radial-gradient(circle at 15% 20%, rgba(0, 129, 242, 0.10), transparent 34%),
-          radial-gradient(circle at 85% 18%, rgba(255, 132, 0, 0.10), transparent 26%),
-          radial-gradient(circle at 50% 65%, rgba(18, 46, 94, 0.18), transparent 42%)
-        `,
-      }}
+      className="min-h-screen flex items-stretch relative overflow-hidden"
+      style={{ backgroundColor: "#05070B" }}
     >
-      {/* Logo + brand */}
-      <div className="mb-8 flex flex-col items-center gap-5">
-        <div className="w-[140px] h-[38px] relative">
-          <Image
-            src="/vaultco-logo.png"
-            alt="Vault Co"
-            fill
-            className="object-contain"
-            priority
-          />
-        </div>
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span
-              className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+      {/* ── Left column: login card ── */}
+      <div
+        className="w-full lg:w-[480px] xl:w-[520px] flex-shrink-0 flex flex-col items-center justify-center px-6 sm:px-10 py-12 relative overflow-y-auto"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 15% 20%, rgba(0, 129, 242, 0.10), transparent 34%),
+            radial-gradient(circle at 85% 18%, rgba(255, 132, 0, 0.10), transparent 26%),
+            radial-gradient(circle at 50% 65%, rgba(18, 46, 94, 0.18), transparent 42%)
+          `,
+        }}
+      >
+        <div className="w-full max-w-[400px]">
+          {/* Logo + header */}
+          <div className="mb-8 flex flex-col items-center gap-5">
+            <div className="w-[140px] h-[38px] relative">
+              <Image
+                src="/vaultco-logo.png"
+                alt="Vault Co"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-3">
+                <span
+                  className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full"
+                  style={{
+                    color: "#0081f2",
+                    backgroundColor: "rgba(0, 129, 242, 0.08)",
+                    border: "1px solid rgba(0, 129, 242, 0.20)",
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                  Internal Growth Portal
+                </span>
+              </div>
+              <h1
+                className="text-[26px] sm:text-[28px] font-bold tracking-wide"
+                style={{
+                  fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
+                  color: "#f8f8f7",
+                }}
+              >
+                Vault Co Command Center
+              </h1>
+              <p className="text-[13px] mt-1" style={{ color: "#6b7a99" }}>
+                Powered by{" "}
+                <span style={{ color: "#ff8400", fontWeight: 600 }}>Veronica</span>
+                {" "}— AI Growth Operator
+              </p>
+            </div>
+          </div>
+
+          {/* Demo mode notice */}
+          {isDemoMode && (
+            <div className="mb-5">
+              <div
+                className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
+                style={{
+                  backgroundColor: "rgba(255, 132, 0, 0.05)",
+                  border: "1px solid rgba(255, 132, 0, 0.18)",
+                }}
+              >
+                <Sparkles size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#ff8400" }} />
+                <p className="text-[12px] leading-snug" style={{ color: "#6b7a99" }}>
+                  <span className="font-semibold" style={{ color: "#ff8400" }}>Demo Mode — </span>
+                  NEXT_PUBLIC_AUTH_MODE=demo is active. Select a demo user to preview role-based access.
+                  This mode is disabled in production.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Auth form or demo picker */}
+          {isDemoMode ? <DemoRolePicker /> : <SupabaseLoginForm />}
+
+          {/* Safety notice */}
+          <div className="mt-7">
+            <div
+              className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
               style={{
-                color: "#0081f2",
-                backgroundColor: "rgba(0, 129, 242, 0.08)",
-                border: "1px solid rgba(0, 129, 242, 0.20)",
+                backgroundColor: "rgba(0, 129, 242, 0.04)",
+                border: "1px solid rgba(0, 129, 242, 0.12)",
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
-              Internal Growth Portal
-            </span>
+              <ShieldCheck size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#6b7a99" }} />
+              <p className="text-[11px] leading-snug" style={{ color: "#3d4f6e" }}>
+                {isDemoMode
+                  ? "Role permissions protect client accounts from unapproved campaign launches, budget changes, and workflow pushes. Only Admins can approve final campaign launch or mark campaigns Ready for Meta."
+                  : "Access is restricted to approved Vault Co team members. Contact your admin if you need an account or have forgotten your password."}
+              </p>
+            </div>
           </div>
-          <h1
-            className="text-[28px] font-bold tracking-wide"
-            style={{
-              fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
-              color: "#f8f8f7",
-            }}
-          >
-            Vault Co Command Center
-          </h1>
-          <p className="text-[13px] mt-1" style={{ color: "#6b7a99" }}>
-            Powered by{" "}
-            <span style={{ color: "#ff8400", fontWeight: 600 }}>Veronica</span>
-            {" "}— AI Growth Operator
+
+          <p className="text-[11px] mt-6 text-center" style={{ color: "#3d4f6e" }}>
+            Vault Co — Internal Portal · Veronica by Vault Co · Role-based access control active
           </p>
         </div>
       </div>
 
-      {/* Demo mode notice */}
-      {isDemoMode && (
-        <div className="w-full max-w-md mb-5">
-          <div
-            className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
-            style={{
-              backgroundColor: "rgba(255, 132, 0, 0.05)",
-              border: "1px solid rgba(255, 132, 0, 0.18)",
-            }}
-          >
-            <Sparkles size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#ff8400" }} />
-            <p className="text-[12px] leading-snug" style={{ color: "#6b7a99" }}>
-              <span className="font-semibold" style={{ color: "#ff8400" }}>Demo Mode — </span>
-              NEXT_PUBLIC_AUTH_MODE=demo is active. Select a demo user to preview role-based access.
-              This mode is disabled in production.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Auth form or demo picker */}
-      {isDemoMode ? <DemoRolePicker /> : <SupabaseLoginForm />}
-
-      {/* Safety notice */}
-      <div className="w-full max-w-md mt-7">
-        <div
-          className="flex items-start gap-2.5 px-4 py-3 rounded-xl"
-          style={{
-            backgroundColor: "rgba(0, 129, 242, 0.04)",
-            border: "1px solid rgba(0, 129, 242, 0.12)",
-          }}
-        >
-          <ShieldCheck size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#6b7a99" }} />
-          <p className="text-[11px] leading-snug" style={{ color: "#3d4f6e" }}>
-            {isDemoMode
-              ? "Role permissions protect client accounts from unapproved campaign launches, budget changes, and workflow pushes. Only Admins can approve final campaign launch or mark campaigns Ready for Meta."
-              : "Access is restricted to approved Vault Co team members. Contact your admin if you need an account or have forgotten your password."}
-          </p>
-        </div>
+      {/* ── Right column: Veronica brand panel (desktop only) ── */}
+      <div className="hidden lg:flex flex-1">
+        <VeronicaPanel />
       </div>
-
-      <p className="text-[11px] mt-6" style={{ color: "#3d4f6e" }}>
-        Vault Co — Internal Portal · Veronica by Vault Co · Role-based access control active
-      </p>
     </div>
   );
 }

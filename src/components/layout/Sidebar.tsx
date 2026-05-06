@@ -17,6 +17,7 @@ import {
   LogOut,
   ClipboardList,
   ExternalLink,
+  X,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -47,7 +48,11 @@ const settingsItem: NavItem = {
 
 const CLIENT_ONBOARDING_URL = "https://portal-vaulttco.manus.space";
 
-export function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+export function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
   const { plans, hasLoaded } = usePlans();
   const { user, permissions, signOut } = useAuth();
@@ -69,15 +74,15 @@ export function Sidebar() {
 
   return (
     <aside
-      className="w-[228px] flex-shrink-0 flex flex-col border-r"
+      className="w-[228px] flex-shrink-0 flex flex-col border-r h-full"
       style={{
         backgroundColor: "var(--t-sidebar-bg)",
         borderColor: "rgba(0, 129, 242, 0.12)",
       }}
     >
-      {/* Logo area — matches onboarding portal header */}
+      {/* Logo area */}
       <div
-        className="h-[68px] flex items-center px-5 border-b"
+        className="h-[68px] flex items-center justify-between px-5 border-b flex-shrink-0"
         style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -91,11 +96,22 @@ export function Sidebar() {
             />
           </div>
         </div>
+        {/* Mobile close button */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="lg:hidden w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0"
+            style={{ color: "var(--t-muted)" }}
+            aria-label="Close menu"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       {/* Internal portal label */}
       <div
-        className="px-5 py-2.5 border-b"
+        className="px-5 py-2.5 border-b flex-shrink-0"
         style={{ borderColor: "rgba(0, 129, 242, 0.08)", backgroundColor: "rgba(0, 129, 242, 0.04)" }}
       >
         <div className="flex items-center gap-1.5">
@@ -173,7 +189,7 @@ export function Sidebar() {
           );
         })}
 
-        {/* Client Onboarding — external link to Manus onboarding dashboard */}
+        {/* Client Onboarding — external link */}
         <div
           className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
           style={{ color: "var(--t-dim)" }}
@@ -209,7 +225,7 @@ export function Sidebar() {
 
       {/* Bottom */}
       <div
-        className="border-t py-2.5 px-3 space-y-0.5"
+        className="border-t py-2.5 px-3 space-y-0.5 flex-shrink-0"
         style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
       >
         {showSettings && (

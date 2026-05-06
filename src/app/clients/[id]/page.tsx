@@ -403,7 +403,7 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         {ALL_FILE_CATEGORIES.map((cat) => {
           const color = FILE_CATEGORY_COLORS[cat];
           return (
@@ -1168,7 +1168,7 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       {/* Overview tab */}
       {activeTab === "overview" && (
         <div className="space-y-5">
-          <div className="grid grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {[
               { label: "Leads", value: client.stats.leads > 0 ? client.stats.leads : "—", color: "#0081f2" },
               { label: "Booked", value: client.stats.booked > 0 ? client.stats.booked : "—", color: "#22c55e" },
@@ -1864,7 +1864,7 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
 
           {/* Performance totals */}
           {metaStatus?.totals && (metaStatus.totals.spend > 0 || metaStatus.totals.leads > 0) && (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { label: "Spend", value: `$${metaStatus.totals.spend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: "#ff8400" },
                 { label: "Leads", value: metaStatus.totals.leads.toLocaleString(), color: "#0081f2" },
@@ -2070,7 +2070,7 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
 
           {/* Pipeline snapshot */}
           {ghlStatus?.snapshot && (
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
                 { label: "Contacts", value: (ghlStatus.snapshot.contacts ?? 0).toLocaleString(), color: "#0081f2" },
                 { label: "Appointments", value: (ghlStatus.snapshot.appointments ?? 0).toLocaleString(), color: "#a78bfa" },

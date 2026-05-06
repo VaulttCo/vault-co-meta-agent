@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -11,6 +11,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isLoginPage = pathname === "/login";
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
@@ -22,7 +23,12 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     }
   }, [user, isLoading, isLoginPage, router]);
 
-  // Login page: no sidebar, just the page content centered
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
+  // Login page: no sidebar, just the page content
   if (isLoginPage) {
     return <>{children}</>;
   }
@@ -34,10 +40,30 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <Sidebar />
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — always visible on lg+, slide-in on mobile */}
+      <div
+        className={`
+          fixed inset-y-0 left-0 z-40 flex flex-col
+          transform transition-transform duration-200 ease-in-out
+          lg:static lg:translate-x-0 lg:z-auto
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        `}
+      >
+        <Sidebar onClose={() => setSidebarOpen(false)} />
+      </div>
+
+      {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-6">
+        <Topbar onMenuClick={() => setSidebarOpen((v) => !v)} />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {children}
         </main>
       </div>

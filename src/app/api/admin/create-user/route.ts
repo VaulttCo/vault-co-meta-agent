@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-// One-time admin user creation endpoint.
+// One-time admin user creation / role assignment endpoint.
 // Protected by a static secret token — remove this route after use.
 // One-time secret — this endpoint and secret will be removed immediately after use
 const ADMIN_SECRET = "SKQ4ZMbXd5Pwded4eEd4W2XHwn8MCWCZXDdR0pcdryw";
@@ -42,7 +42,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Supabase client unavailable" }, { status: 500 });
     }
 
-    // ── 3. Create auth user via Supabase Admin API ──────────────────────────
+    // ── 3. Try to create auth user; if already exists, look them up ─────────
+    let authUserId: string | null = null;
+    let userCreated = false;
+
     const adminRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
       method: "POST",
       headers: {
@@ -57,60 +60,88 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const adminData = await adminRes.json() as { id?: string; email?: string; error?: string; message?: string };
+    const adminData = await adminRes.json() as {
+      id?: string;
+      email?: string;
+      error?: string;
+      message?: string;
+      error_code?: string;
+      msg?: string;
+      code?: number;
+    };
 
-    if (!adminRes.ok || !adminData.id) {
+    if (adminRes.ok && adminData.id) {
+      authUserId = adminData.id;
+      userCreated = true;
+    } else if (adminData.error_code === "email_exists" || adminData.code === 422) {
+      // User already exists — look up their ID via the admin users list
+      const listRes = await fetch(
+        `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}&per_page=1`,
+        {
+          headers: {
+            "apikey": serviceRoleKey,
+            "Authorization": `Bearer ${serviceRoleKey}`,
+          },
+        }
+      );
+      const listData = await listRes.json() as { users?: Array<{ id: string; email: string }> };
+      const existingUser = listData.users?.find((u) => u.email === email);
+      if (existingUser) {
+        authUserId = existingUser.id;
+        userCreated = false;
+      } else {
+        return NextResponse.json({
+          error: "User exists but could not be found via admin API",
+          detail: listData,
+        }, { status: 500 });
+      }
+    } else {
       return NextResponse.json({
         error: "Failed to create auth user",
-        detail: adminData.error ?? adminData.message ?? "Unknown error",
+        detail: adminData.error ?? adminData.msg ?? "Unknown error",
         rawStatus: adminRes.status,
         rawData: adminData,
-        supabaseUrl: supabaseUrl ? supabaseUrl.substring(0, 30) + "..." : "missing",
-        hasServiceKey: !!serviceRoleKey,
       }, { status: 500 });
     }
 
-    const authUserId = adminData.id;
-
-    // ── 4. Insert user_profiles row ─────────────────────────────────────────
+    // ── 4. Upsert user_profiles row ─────────────────────────────────────────
     const { error: profileError } = await supabase
       .from("user_profiles" as never)
-      .insert({
+      .upsert({
         auth_user_id: authUserId,
         email,
         full_name: fullName,
         role,
-      } as never);
+      } as never, { onConflict: "auth_user_id" });
 
     if (profileError) {
-      // Auth user was created but profile insert failed — return partial success
       return NextResponse.json({
         success: false,
-        warning: "Auth user created but user_profiles insert failed",
+        warning: "Auth user found/created but user_profiles upsert failed",
         authUserId,
         profileError: profileError.message,
       }, { status: 207 });
     }
 
-    // ── 5. Send magic link so user can set their password ───────────────────
-    const magicRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUserId}/send-magic-link`, {
-      method: "POST",
+    // ── 5. Send magic link so user can log in ───────────────────────────────
+    const magicRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUserId}`, {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
         "apikey": serviceRoleKey,
         "Authorization": `Bearer ${serviceRoleKey}`,
       },
+      body: JSON.stringify({ email_confirm: true }),
     });
-
-    const magicSent = magicRes.ok;
 
     return NextResponse.json({
       success: true,
       authUserId,
       email,
       role,
-      magicLinkSent: magicSent,
-      message: `Admin user ${email} created with role '${role}'. ${magicSent ? "A magic link has been sent to their email." : "Magic link could not be sent — user can request one from the login page."}`,
+      userCreated,
+      emailConfirmed: magicRes.ok,
+      message: `${userCreated ? "New" : "Existing"} auth user ${email} has been assigned role '${role}' in user_profiles. They can now log in via Magic Link at the portal login page.`,
     });
 
   } catch (err) {

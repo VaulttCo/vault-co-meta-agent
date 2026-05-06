@@ -210,27 +210,40 @@ Only include wins, issues, recommendations, and next actions that are directly s
     const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 
     async function callAnthropic(model: string): Promise<string> {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 1024,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+      console.log(`[performance-intelligence] Calling Anthropic model: ${model}, apiKey prefix: ${apiKey.substring(0, 20)}`);
+      let response: Response;
+      try {
+        response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: 1024,
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
+      } catch (fetchErr) {
+        console.error(`[performance-intelligence] Fetch failed for model ${model}:`, fetchErr);
+        throw fetchErr;
+      }
+      console.log(`[performance-intelligence] Anthropic response status: ${response.status} for model: ${model}`);
       if (!response.ok) {
         const errBody = await response.text();
+        console.error(`[performance-intelligence] Anthropic error body: ${errBody.substring(0, 400)}`);
         throw new Error(`Anthropic API error ${response.status}: ${errBody.substring(0, 200)}`);
       }
       const message = await response.json();
       const rawText = message.content?.[0]?.type === "text" ? message.content[0].text : "";
+      console.log(`[performance-intelligence] Raw AI response length: ${rawText.length}, first 100 chars: ${rawText.substring(0, 100)}`);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found in response");
+      if (!jsonMatch) {
+        console.error(`[performance-intelligence] No JSON in response. Full text: ${rawText.substring(0, 500)}`);
+        throw new Error("No JSON found in response");
+      }
       return jsonMatch[0];
     }
 

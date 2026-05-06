@@ -1,9 +1,10 @@
 /**
  * GET /api/integrations/ghl/status?clientId=xxx
  * Get GoHighLevel connection status and latest synced data for a client.
+ * Requires a valid Supabase user session — returns 401 if unauthenticated.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient, getSupabaseSessionClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // ── Auth guard: require a valid Supabase session ──────────────────────────
+    const sessionClient = await getSupabaseSessionClient();
+    if (!sessionClient) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { data: { user } } = await sessionClient.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const supabase = getSupabaseServerClient();
     if (!supabase) {
       return NextResponse.json({ connected: false, error: "Supabase not available" });

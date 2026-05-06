@@ -1,70 +1,138 @@
-# Vault Co Auth Setup
+# Vault Co — Veronica Portal: Auth Setup Guide
 
-The Vault Co Internal Portal uses **Supabase Auth** for production and a **Mock Demo Mode** for local development.
+**Status: LIVE — Supabase Auth is active in production.**
 
-## 1. Local Development (Demo Mode)
+---
 
-By default, the app runs in demo mode locally. This allows you to test role-based access control without setting up a database.
+## Overview
 
-In your `.env.local`:
-```env
+The Veronica Portal uses **Supabase Auth** (email/password + magic link) with **role-based access control** enforced at the Next.js middleware layer. Every request to a protected route is validated server-side before the page renders.
+
+---
+
+## What Is Already Done (One-Time Setup Complete)
+
+| Step | Status |
+| :--- | :--- |
+| `user_profiles` table created in Supabase | Done |
+| RLS (Row Level Security) enabled on `user_profiles` | Done |
+| Auto-insert trigger on `auth.users` to `user_profiles` | Done |
+| Public signups disabled | Done |
+| `NEXT_PUBLIC_AUTH_MODE=supabase` set in Vercel | Done |
+| Nick Moore (`nick@anuagency.info`) created as Admin | Done |
+| Jaxon (`jaxonparton10@gmail.com`) created as Admin | Done |
+
+---
+
+## Current Admin Users
+
+| Name | Email | Role | Status |
+| :--- | :--- | :--- | :--- |
+| Nick Moore | nick@anuagency.info | admin | active |
+| Jaxon | jaxonparton10@gmail.com | admin | active |
+
+---
+
+## First Login Instructions
+
+### Nick Moore
+Use the **Magic Link** tab on the login page to receive a one-time sign-in link at `nick@anuagency.info`. No password needed unless you set one.
+
+### Jaxon
+A temporary password was set during account creation: `VaultCo2026!Temp`
+
+**Jaxon must change his password after first login:**
+1. Log in at [vault-co-meta-agent.vercel.app/login](https://vault-co-meta-agent.vercel.app/login) with email `jaxonparton10@gmail.com` and the temporary password above
+2. Go to **Settings** and update the password, or use the **Magic Link** tab to sign in without a password going forward
+
+---
+
+## How to Add New Team Members
+
+1. Go to [Supabase Dashboard → Authentication → Users](https://supabase.com/dashboard/project/mxfinioxtqupkmctgqcl/auth/users)
+2. Click **Add User → Create new user**
+3. Enter their email and a temporary password
+4. The `user_profiles` row is created automatically by the trigger with role `setter` (default)
+5. To change the role, go to **Table Editor → user_profiles** and update the `role` column to `admin`, `media_buyer`, or `setter`
+
+---
+
+## Role Permissions
+
+| Feature | Admin | Media Buyer | Setter |
+| :--- | :---: | :---: | :---: |
+| Dashboard | Yes | Yes | Yes |
+| Clients (view) | Yes | Yes | Yes |
+| Clients (create/edit) | Yes | Yes | No |
+| Campaigns | Yes | Yes | No |
+| Analytics | Yes | Yes | No |
+| Reports | Yes | Yes | No |
+| Approvals | Yes | Yes | Yes |
+| Creatives | Yes | Yes | No |
+| Settings | Yes | No | No |
+| AI Tools | Yes | Yes | No |
+
+---
+
+## Route Protection
+
+All routes are protected at the **Next.js Edge Middleware** layer (`src/middleware.ts`). Unauthenticated requests are redirected to `/login?next=<original-route>` before any page renders. After login, the user is redirected back to the original route.
+
+The `/login` and `/auth/callback` routes are public (no auth required).
+
+---
+
+## Local Development (Demo Mode)
+
+To use the demo role-picker locally without Supabase credentials:
+
+```bash
+# .env.local
 NEXT_PUBLIC_AUTH_MODE=demo
 ```
 
-When `demo` mode is active:
-- The `/login` page shows a role-picker with mock users (Admin, Media Buyer, Setter).
-- The Next.js middleware skips all server-side auth checks.
-- Auth state is stored in `localStorage`.
+This restores the mock role-picker. **Never set this in Vercel production environment variables.**
 
-## 2. Production (Supabase Auth)
+---
 
-In production (Vercel), the app must use real Supabase Auth.
+## Magic Link Configuration (Supabase)
 
-In your Vercel environment variables:
-```env
-NEXT_PUBLIC_AUTH_MODE=supabase
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
+Ensure the following redirect URL is set in Supabase:
 
-When `supabase` mode is active:
-- The `/login` page shows a real Email/Password and Magic Link form.
-- The Next.js middleware protects all routes at the edge. Unauthenticated users are redirected to `/login`.
-- Auth state is managed via secure cookies using `@supabase/ssr`.
+1. Go to [Authentication → URL Configuration](https://supabase.com/dashboard/project/mxfinioxtqupkmctgqcl/auth/url-configuration)
+2. Set **Site URL** to: `https://vault-co-meta-agent.vercel.app`
+3. Add to **Redirect URLs**: `https://vault-co-meta-agent.vercel.app/auth/callback`
 
-## 3. Database Setup
+---
 
-To use Supabase Auth, you must create the `user_profiles` table. This table stores the user's role and display name, linking back to the `auth.users` table.
+## Database Migration Reference
 
-1. Go to your Supabase Dashboard → SQL Editor
-2. Copy the contents of `docs/migrations/001_user_profiles.sql`
-3. Run the query
+The `user_profiles` table was created by `docs/migrations/001_user_profiles.sql`. It contains:
 
-### Creating Users
+- `id` — UUID primary key
+- `auth_user_id` — references `auth.users(id)` with cascade delete
+- `email` — user email
+- `full_name` — display name
+- `role` — one of `admin`, `media_buyer`, `setter`
+- `status` — one of `active`, `inactive`
+- `created_at`, `updated_at` — timestamps
 
-Because this is an internal portal, public sign-ups should be disabled in Supabase:
-1. Go to **Authentication → Providers → Email**
-2. Turn OFF "Confirm email" (optional, but easier for internal tools)
-3. Turn OFF "Enable Signups" (prevents random people from creating accounts)
+A trigger automatically inserts a row into `user_profiles` whenever a new user is created in `auth.users`.
 
-To add a team member:
-1. Go to **Authentication → Users** in the Supabase Dashboard
-2. Click **Add User → Create New User**
-3. Enter their email and a temporary password
-4. The database trigger (`on_auth_user_created`) will automatically create a row in `user_profiles` with the default role `setter`.
-5. Go to the **Table Editor → user_profiles** and change their role to `admin` or `media_buyer` as needed.
+---
 
-## 4. Role-Based Access Control (RBAC)
+## Supabase Project Details
 
-Roles are defined in `src/lib/auth/types.ts`:
-- `admin`: Full access
-- `media_buyer`: Can generate and submit campaigns, view analytics
-- `setter`: Can view clients and notes
-- `client_viewer`: Read-only access to approved reports
+| Property | Value |
+| :--- | :--- |
+| Project Ref | `mxfinioxtqupkmctgqcl` |
+| Region | us-east-1 |
+| Dashboard | [supabase.com/dashboard/project/mxfinioxtqupkmctgqcl](https://supabase.com/dashboard/project/mxfinioxtqupkmctgqcl) |
 
-Permissions are mapped in `src/lib/auth/permissions.ts`.
+---
 
-To check permissions in a component:
+## Using Permissions in Components
+
 ```tsx
 import { useAuth } from "@/components/AuthProvider";
 
@@ -78,3 +146,9 @@ export function MyComponent() {
   return <button>Approve</button>;
 }
 ```
+
+Permissions are mapped in `src/lib/auth/permissions.ts`.
+
+---
+
+*Last updated: May 2026 — Setup completed*

@@ -50,14 +50,31 @@ export async function POST(req: NextRequest) {
       db.getReports(),
     ]);
 
-    // Fetch client-specific data when a clientId is targeted
+    // If no explicit clientId, detect a mentioned client from the message text
+    // so the client brain is built with full intelligence context
+    let effectiveClientId = clientId;
+    if (!effectiveClientId) {
+      const m = message.toLowerCase();
+      const detected = clients.find((c) => {
+        if (m.includes(c.name.toLowerCase())) return true;
+        if (m.includes(c.id.toLowerCase())) return true;
+        const ownerParts = c.owner.toLowerCase().split(" ");
+        if (ownerParts.some((w: string) => w.length >= 4 && m.includes(w))) return true;
+        const genericWords = new Set(["group", "roofing", "construction", "builders", "remodeling", "forge", "home"]);
+        const nameParts = c.name.toLowerCase().split(/[\s-]+/);
+        return nameParts.some((w: string) => w.length >= 4 && !genericWords.has(w) && m.includes(w));
+      });
+      if (detected) effectiveClientId = detected.id;
+    }
+
+    // Fetch client-specific data when a client is targeted (explicit or detected from message)
     let clientIntelligence = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let creativeAssets: any[] = [];
-    if (clientId) {
+    if (effectiveClientId) {
       [clientIntelligence, creativeAssets] = await Promise.all([
-        db.getClientIntelligence(clientId),
-        db.getCreativeAssets(clientId),
+        db.getClientIntelligence(effectiveClientId),
+        db.getCreativeAssets(effectiveClientId),
       ]);
     }
 
@@ -116,7 +133,7 @@ export async function POST(req: NextRequest) {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-5",
+            model: "claude-sonnet-4-6",
             max_tokens: 2048,
             system: systemPrompt,
             messages: [

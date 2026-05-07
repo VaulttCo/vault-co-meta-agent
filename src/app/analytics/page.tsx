@@ -1,7 +1,13 @@
 "use client";
-import { useState, useEffect } from "react";
-import { WifiOff, BarChart2, RefreshCw, TrendingUp, Users, DollarSign, Target, Loader2, Calendar } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import {
+  WifiOff, BarChart2, RefreshCw, TrendingUp, Users, DollarSign,
+  Target, Loader2, Calendar, AlertTriangle, Settings, ArrowRight,
+} from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
+
+const LOAD_TIMEOUT_MS = 10_000; // 10 seconds before we give up and show disconnected state
 
 interface MetaAggregate {
   connected: boolean;
@@ -39,11 +45,26 @@ export default function AnalyticsPage() {
   const [meta, setMeta] = useState<MetaAggregate | null>(null);
   const [ghl, setGHL] = useState<GHLAggregate | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timedOut, setTimedOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadData(showRefreshing = false) {
-    if (showRefreshing) setRefreshing(true);
-    else setLoading(true);
+    if (showRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+      setTimedOut(false);
+    }
+
+    // Safety timeout — never spin forever
+    if (!showRefreshing) {
+      timeoutRef.current = setTimeout(() => {
+        setLoading(false);
+        setTimedOut(true);
+      }, LOAD_TIMEOUT_MS);
+    }
+
     try {
       const [metaRes, ghlRes] = await Promise.all([
         fetch("/api/analytics/meta-aggregate"),
@@ -57,18 +78,29 @@ export default function AnalyticsPage() {
       setMeta(null);
       setGHL(null);
     } finally {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
       setLoading(false);
       setRefreshing(false);
     }
   }
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const hasMetaData = meta?.connected && (meta.totalSpend > 0 || meta.totalLeads > 0);
   const hasGHLData = ghl?.connected && (ghl.totalContacts > 0 || ghl.totalAppointments > 0);
+  const bothDisconnected = !hasMetaData && !hasGHLData;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header row */}
       <div className="flex items-start justify-between">
         <PageHeader
           title="Analytics"
@@ -76,7 +108,7 @@ export default function AnalyticsPage() {
         />
         <button
           onClick={() => loadData(true)}
-          disabled={refreshing}
+          disabled={refreshing || loading}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#0D1520] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors disabled:opacity-50"
         >
           {refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
@@ -84,12 +116,102 @@ export default function AnalyticsPage() {
         </button>
       </div>
 
+      {/* Loading state */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={20} className="animate-spin text-[#0081f2]" />
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <Loader2 size={24} className="animate-spin text-[#0081f2]" />
+          <p className="text-[12px] text-[#3d4f6e]">Loading analytics data…</p>
         </div>
       ) : (
         <>
+          {/* Top-level disconnected banner — shown when both integrations are missing */}
+          {bothDisconnected && (
+            <div
+              className="rounded-xl border p-5 flex flex-col sm:flex-row sm:items-start gap-4"
+              style={{
+                backgroundColor: "rgba(255, 132, 0, 0.04)",
+                borderColor: "rgba(255, 132, 0, 0.20)",
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{
+                  backgroundColor: "rgba(255, 132, 0, 0.10)",
+                  border: "1px solid rgba(255, 132, 0, 0.25)",
+                }}
+              >
+                <AlertTriangle size={18} style={{ color: "#ff8400" }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-[#f8f8f7]">
+                  No integrations connected
+                </p>
+                <p className="text-[12px] mt-1 leading-relaxed text-[#6b7a99]">
+                  Connect Meta Ads and GoHighLevel to view live performance analytics.
+                  Both integrations are currently disconnected.
+                </p>
+                {timedOut && (
+                  <p className="text-[11px] mt-1 text-[#ff8400]">
+                    Request timed out — the integrations may not be configured in this environment.
+                  </p>
+                )}
+                {/* Integration status chips */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <span
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium"
+                    style={{
+                      backgroundColor: "rgba(61,79,110,0.15)",
+                      border: "1px solid rgba(61,79,110,0.25)",
+                      color: "#6b7a99",
+                    }}
+                  >
+                    <WifiOff size={10} />
+                    Meta Ads — not connected
+                  </span>
+                  <span
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium"
+                    style={{
+                      backgroundColor: "rgba(61,79,110,0.15)",
+                      border: "1px solid rgba(61,79,110,0.25)",
+                      color: "#6b7a99",
+                    }}
+                  >
+                    <WifiOff size={10} />
+                    GoHighLevel — not connected
+                  </span>
+                </div>
+                {/* Action links */}
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Link
+                    href="/settings"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                    style={{
+                      backgroundColor: "rgba(0,129,242,0.10)",
+                      border: "1px solid rgba(0,129,242,0.25)",
+                      color: "#0081f2",
+                    }}
+                  >
+                    <Settings size={11} />
+                    Go to Settings
+                    <ArrowRight size={10} />
+                  </Link>
+                  <Link
+                    href="/clients"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                    style={{
+                      backgroundColor: "rgba(61,79,110,0.10)",
+                      border: "1px solid rgba(61,79,110,0.20)",
+                      color: "#6b7a99",
+                    }}
+                  >
+                    Open Client Integrations
+                    <ArrowRight size={10} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Meta Ads Section */}
           <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(0,129,242,0.15)]">
@@ -174,7 +296,7 @@ export default function AnalyticsPage() {
                   <p className="text-[13px] font-semibold text-[#6b7a99]">Meta Ads not connected</p>
                   <p className="text-[11px] mt-1 max-w-sm leading-relaxed text-[#3d4f6e]">
                     Performance analytics will appear once Meta read-only reporting is connected.
-                    Go to a client profile → Integrations tab to connect Meta Ads.
+                    Open a client profile and go to the Integrations tab to connect Meta Ads.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[rgba(61,79,110,0.10)] border border-[rgba(61,79,110,0.20)] text-[#3d4f6e]">
@@ -233,13 +355,13 @@ export default function AnalyticsPage() {
                 </p>
               </div>
             ) : (
-              <div className="p-6 flex items-start gap-4">
+              <div className="p-6 flex flex-col sm:flex-row items-start gap-4">
                 <WifiOff size={16} className="flex-shrink-0 mt-0.5 text-[#3d4f6e]" />
                 <div>
                   <p className="text-[13px] font-semibold text-[#6b7a99]">GoHighLevel not connected</p>
                   <p className="text-[11px] mt-1 leading-snug text-[#3d4f6e]">
                     Appointment and pipeline data will appear once GHL sync is connected.
-                    Go to a client profile → Integrations tab to connect GoHighLevel.
+                    Open a client profile and go to the Integrations tab to connect GoHighLevel.
                   </p>
                 </div>
               </div>

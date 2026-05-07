@@ -16,7 +16,6 @@ import {
   Sparkles,
   LogOut,
   ClipboardList,
-  ExternalLink,
   X,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
@@ -46,7 +45,8 @@ const settingsItem: NavItem = {
   label: "Settings", href: "/settings", icon: Settings, permission: "canViewSettings",
 };
 
-const CLIENT_ONBOARDING_URL = "https://portal-vaulttco.manus.space";
+// Client Onboarding portal URL — update when the portal is live
+// const CLIENT_ONBOARDING_URL = "https://portal-vaulttco.manus.space"; // 404 — disabled until active URL is available
 
 interface SidebarProps {
   onClose?: () => void;
@@ -189,38 +189,34 @@ export function Sidebar({ onClose }: SidebarProps) {
           );
         })}
 
-        {/* Client Onboarding — external link */}
+        {/* Client Onboarding — coming soon */}
         <div
           className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
           style={{ color: "var(--t-dim)" }}
         >
           Onboarding
         </div>
-        <a
-          href={CLIENT_ONBOARDING_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group"
-          style={{ color: "var(--t-muted)" }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "#f8f8f7";
-            (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0, 129, 242, 0.06)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.color = "var(--t-muted)";
-            (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
-          }}
+        <div
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
+          style={{ color: "var(--t-dim)", opacity: 0.5 }}
+          title="Client Onboarding Portal — coming soon"
         >
           <ClipboardList
             size={15}
-            className="flex-shrink-0 transition-colors"
+            className="flex-shrink-0"
           />
           <span className="truncate">Client Onboarding</span>
-          <ExternalLink
-            size={10}
-            className="ml-auto flex-shrink-0 opacity-40 group-hover:opacity-80 transition-opacity"
-          />
-        </a>
+          <span
+            className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+            style={{
+              color: "#6b7a99",
+              backgroundColor: "rgba(61,79,110,0.15)",
+              border: "1px solid rgba(61,79,110,0.25)",
+            }}
+          >
+            Soon
+          </span>
+        </div>
       </nav>
 
       {/* Bottom */}

@@ -115,7 +115,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
   },
   {
     id: "ca-004",
-    clientId: "jj-roofing",
+    clientId: "jj-roofing-group",
     clientName: "JJ Roofing Group",
     fileName: "phoenix_storm_reel.mp4",
     fileType: "video",
@@ -133,7 +133,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
   },
   {
     id: "ca-005",
-    clientId: "jj-roofing",
+    clientId: "jj-roofing-group",
     clientName: "JJ Roofing Group",
     fileName: "homeowner_testimonial_az.mp4",
     fileType: "video",
@@ -151,7 +151,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
   },
   {
     id: "ca-006",
-    clientId: "jj-roofing",
+    clientId: "jj-roofing-group",
     clientName: "JJ Roofing Group",
     fileName: "tempe_neighborhood_drone.mp4",
     fileType: "video",
@@ -205,7 +205,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
   },
   {
     id: "ca-009",
-    clientId: "open-forge",
+    clientId: "open-forge-construction",
     clientName: "Open Forge Construction",
     fileName: "kitchen_remodel_before_after.jpg",
     fileType: "image",
@@ -223,7 +223,7 @@ export const MOCK_CREATIVE_ASSETS: CreativeAsset[] = [
   },
   {
     id: "ca-010",
-    clientId: "open-forge",
+    clientId: "open-forge-construction",
     clientName: "Open Forge Construction",
     fileName: "owner_qa_clip_process.mp4",
     fileType: "video",

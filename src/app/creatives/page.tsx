@@ -922,13 +922,8 @@ export default function CreativesPage() {
   // Filtered assets
   const filtered = useMemo(() => {
     return allAssets.filter((a) => {
-      // Bug 3 fix: normalize clientId comparison to handle jj-roofing vs jj-roofing-group mismatches
-      if (filterClient !== "all") {
-        const normId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
-        const assetNorm = normId(a.clientId);
-        const filterNorm = normId(filterClient);
-        if (assetNorm !== filterNorm && !assetNorm.startsWith(filterNorm) && !filterNorm.startsWith(assetNorm)) return false;
-      }
+      // Bug 3 fix: exact clientId match (mock asset IDs now aligned with canonical client IDs)
+      if (filterClient !== "all" && a.clientId !== filterClient) return false;
       // Bug 4 fix: normalize assetType comparison to handle Before/After vs before_after vs before-after
       if (filterType !== "all") {
         const normType = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");

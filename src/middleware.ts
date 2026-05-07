@@ -6,6 +6,12 @@
  * 2. Redirect unauthenticated users to /login for all protected routes
  * 3. Redirect authenticated users away from /login to the dashboard
  *
+ * Security policy — FAIL CLOSED:
+ * - If Supabase env vars are missing or contain placeholder values, protected routes
+ *   are treated as unauthenticated and redirected to /login.
+ * - There is NO open fallback that allows protected routes through when Supabase
+ *   is not configured. This prevents accidental exposure during misconfiguration.
+ *
  * In demo mode (NEXT_PUBLIC_AUTH_MODE=demo), all route protection is skipped
  * because there are no real Supabase sessions — the client-side AuthProvider
  * handles demo auth via localStorage.
@@ -22,22 +28,23 @@ import { createServerClient } from "@supabase/ssr";
 // Routes that do NOT require authentication
 const PUBLIC_ROUTES = ["/login", "/auth/callback"];
 
-// Routes that require authentication (all others are also protected by default)
-const PROTECTED_PREFIXES = [
-  "/",
-  "/clients",
-  "/campaigns",
-  "/ai-agent",
-  "/creatives",
-  "/analytics",
-  "/reports",
-  "/approvals",
-  "/settings",
+// Placeholder values that indicate Supabase is not properly configured
+const PLACEHOLDER_PATTERNS = [
+  "placeholder.supabase.co",
+  "your-project.supabase.co",
+  "YOUR_SUPABASE",
+  "example.supabase.co",
 ];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
+  );
+}
+
+function isPlaceholderValue(value: string): boolean {
+  return PLACEHOLDER_PATTERNS.some((pattern) =>
+    value.toLowerCase().includes(pattern.toLowerCase())
   );
 }
 
@@ -64,8 +71,25 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // If Supabase is not configured, allow all requests (prevents lockout during setup)
-  if (!supabaseUrl || !supabaseAnonKey) {
+  // FAIL CLOSED: If Supabase env vars are missing or contain placeholder values,
+  // treat the request as unauthenticated. Protected routes redirect to /login.
+  // Public routes (e.g. /login itself) are still accessible so users can see
+  // the login page and a configuration error message.
+  const supabaseConfigured =
+    supabaseUrl &&
+    supabaseAnonKey &&
+    !isPlaceholderValue(supabaseUrl) &&
+    !isPlaceholderValue(supabaseAnonKey);
+
+  if (!supabaseConfigured) {
+    // If the user is trying to access a protected route, redirect to /login
+    if (!isPublicRoute(pathname)) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", pathname);
+      loginUrl.searchParams.set("error", "config");
+      return NextResponse.redirect(loginUrl);
+    }
+    // Allow /login and /auth/callback through so the login page can render
     return NextResponse.next();
   }
 

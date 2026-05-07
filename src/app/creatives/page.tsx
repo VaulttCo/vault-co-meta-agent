@@ -81,10 +81,12 @@ function AssetThumbnail({
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
   const Icon = asset.fileType === "video" ? Video : ImageIcon;
 
-  if (asset.thumbnailUrl && !imgError) {
+  // Issue 1 fix: use thumbnailUrl first, then storageUrl for images as fallback
+  const previewUrl = asset.thumbnailUrl ?? (asset.fileType === "image" ? (asset.storageUrl ?? null) : null);
+  if (previewUrl && !imgError) {
     return (
       <img
-        src={asset.thumbnailUrl}
+        src={previewUrl}
         alt={asset.fileName}
         className={`w-full h-full object-cover ${className}`}
         onError={() => setImgError(true)}
@@ -374,13 +376,19 @@ function AssetDetailModal({
                 </div>
               )}
 
-              {/* Notes */}
-              {asset.notes && (
-                <div>
-                  <div className="text-[10px] text-[#3d4f6e] uppercase tracking-wider mb-1">Notes</div>
-                  <p className="text-[11px] text-[#6b7a99] leading-relaxed">{asset.notes}</p>
-                </div>
-              )}
+              {/* Notes — Bug 1 fix: strip __META__: suffix before rendering */}
+              {(() => {
+                const META_SEP = "\n__META__:";
+                const raw = asset.notes ?? "";
+                const idx = raw.indexOf(META_SEP);
+                const displayNotes = idx === -1 ? raw : raw.substring(0, idx);
+                return displayNotes ? (
+                  <div>
+                    <div className="text-[10px] text-[#3d4f6e] uppercase tracking-wider mb-1">Notes</div>
+                    <p className="text-[11px] text-[#6b7a99] leading-relaxed">{displayNotes}</p>
+                  </div>
+                ) : null;
+              })()}
 
               {/* Tags */}
               {asset.tags.length > 0 && (
@@ -393,10 +401,10 @@ function AssetDetailModal({
                 </div>
               )}
 
-              {/* Storage URL link */}
-              {asset.thumbnailUrl && (
+              {/* Storage URL link — Issue 1 fix: use storageUrl as fallback */}
+              {(asset.thumbnailUrl || asset.storageUrl) && (
                 <a
-                  href={asset.thumbnailUrl}
+                  href={asset.storageUrl ?? asset.thumbnailUrl ?? ""}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-[10px] text-[#0081f2] hover:text-[#0081f2]/80 transition-colors"
@@ -862,7 +870,7 @@ function AssetCard({
 // ─────────────────────────────────────────────────────────────
 export default function CreativesPage() {
   const { can } = useAuth();
-  const { allAssets, addAsset, usingSupabase, loading } = usePersistedCreativeAssets();
+  const { allAssets, addAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
@@ -872,6 +880,19 @@ export default function CreativesPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [analysisResults, setAnalysisResults] = useState<Map<string, AnalysisResult>>(new Map());
+  // Bug 2 fix: rehydrate analysisResults from __META__ data parsed by the hook on initial load
+  useEffect(() => {
+    if (initialAnalysisResults.size > 0) {
+      setAnalysisResults((prev) => {
+        const next = new Map(prev);
+        initialAnalysisResults.forEach((v, k) => {
+          if (!next.has(k)) next.set(k, v as AnalysisResult);
+        });
+        return next;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAnalysisResults]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [detailAsset, setDetailAsset] = useState<CreativeAsset | null>(null);
@@ -901,8 +922,18 @@ export default function CreativesPage() {
   // Filtered assets
   const filtered = useMemo(() => {
     return allAssets.filter((a) => {
-      if (filterClient !== "all" && a.clientId !== filterClient) return false;
-      if (filterType !== "all" && a.assetType !== filterType) return false;
+      // Bug 3 fix: normalize clientId comparison to handle jj-roofing vs jj-roofing-group mismatches
+      if (filterClient !== "all") {
+        const normId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const assetNorm = normId(a.clientId);
+        const filterNorm = normId(filterClient);
+        if (assetNorm !== filterNorm && !assetNorm.startsWith(filterNorm) && !filterNorm.startsWith(assetNorm)) return false;
+      }
+      // Bug 4 fix: normalize assetType comparison to handle Before/After vs before_after vs before-after
+      if (filterType !== "all") {
+        const normType = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (normType(a.assetType) !== normType(filterType)) return false;
+      }
       if (filterStatus !== "all" && a.status !== filterStatus) return false;
       if (filterAnalyzed === "analyzed" && !analysisResults.has(a.id)) return false;
       if (filterAnalyzed === "unanalyzed" && analysisResults.has(a.id)) return false;

@@ -9,12 +9,41 @@
  *
  * The hook merges persisted assets with MOCK_CREATIVE_ASSETS so the full library
  * is always available. Callers receive the merged list plus an `addAsset` function.
+ *
+ * Fix (Bug 2): On initial load, the hook now parses the `__META__:` JSON suffix
+ * from the `notes` field and returns a pre-populated `initialAnalysisResults` Map
+ * so the creatives page can rehydrate its `analysisResults` state after refresh.
  */
 import { useState, useEffect, useCallback } from "react";
 import { MOCK_CREATIVE_ASSETS, type CreativeAsset } from "./creativeAssets";
 import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
 
 const LS_KEY = "vc_creative_assets";
+const META_SEPARATOR = "\n__META__:";
+
+/**
+ * Parse the __META__: suffix from a notes string.
+ * Returns { userNotes, meta } where meta is the decoded JSON object (or {}).
+ */
+export function parseNotesAndMeta(raw: string | null): {
+  userNotes: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meta: Record<string, any>;
+} {
+  if (!raw) return { userNotes: "", meta: {} };
+  const idx = raw.indexOf(META_SEPARATOR);
+  if (idx === -1) return { userNotes: raw, meta: {} };
+  const userNotes = raw.substring(0, idx);
+  try {
+    const meta = JSON.parse(raw.substring(idx + META_SEPARATOR.length));
+    return {
+      userNotes,
+      meta: typeof meta === "object" && meta !== null ? meta : {},
+    };
+  } catch {
+    return { userNotes, meta: {} };
+  }
+}
 
 function loadFromLocalStorage(): CreativeAsset[] {
   if (typeof window === "undefined") return [];
@@ -49,11 +78,19 @@ export interface UsePersistedCreativeAssetsResult {
   usingSupabase: boolean;
   /** Whether the initial load is still in progress */
   loading: boolean;
+  /**
+   * Pre-populated analysis results extracted from the __META__: notes suffix.
+   * The creatives page should merge this into its analysisResults state on mount.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  initialAnalysisResults: Map<string, any>;
 }
 
 export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
   const [uploadedAssets, setUploadedAssets] = useState<CreativeAsset[]>([]);
   const [loading, setLoading] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [initialAnalysisResults, setInitialAnalysisResults] = useState<Map<string, any>>(new Map());
   const usingSupabase = isSupabaseConfigured();
 
   // ── Initial load ──────────────────────────────────────────────────────────
@@ -71,37 +108,62 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
 
           if (!cancelled) {
             if (!error && data) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const analysisMap = new Map<string, any>();
+
               // Map Supabase snake_case rows to CreativeAsset interface
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const mapped: CreativeAsset[] = (data as any[]).map((row) => ({
-                id: row.id,
-                clientId: row.client_id,
-                clientName: row.client_id, // will be enriched below if needed
-                fileName: row.file_name,
-                fileType: (row.file_type === "image" ? "image" : "video") as "image" | "video",
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                assetType: row.asset_type as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                category: ((row as any).category ?? "Creative Asset") as any,
-                thumbnailUrl: row.thumbnail_url ?? null,
-                uploadDate: row.upload_date,
-                service: row.service ?? "",
-                market: row.market ?? "",
-                campaignUseCase: row.campaign_use_case ?? "",
-                notes: row.notes ?? "",
-                // Map Supabase lowercase status back to TypeScript display status
-                status: (() => {
-                  const s = row.status as string;
-                  if (s === "uploaded") return "Uploaded" as const;
-                  if (s === "active") return (row.approved_for_ads ? "Approved" as const : "Uploaded" as const);
-                  if (s === "pending") return "Needs Review" as const;
-                  if (s === "draft") return "Uploaded" as const;
-                  return "Uploaded" as const;
-                })(),
-                tags: Array.isArray(row.tags) ? row.tags : [],
-                approvedForAds: row.approved_for_ads,
-              }));
+              const mapped: CreativeAsset[] = (data as any[]).map((row) => {
+                // Parse __META__: suffix from notes — extracts ai_analysis if present
+                const { userNotes, meta } = parseNotesAndMeta(row.notes ?? "");
+
+                // If this row has a persisted AI analysis, add it to the map
+                if (meta.ai_analysis) {
+                  analysisMap.set(row.id, {
+                    assetId: row.id,
+                    analysis: meta.ai_analysis,
+                    mockMode: meta.mock_mode ?? false,
+                    savedToDb: true,
+                  });
+                }
+
+                return {
+                  id: row.id,
+                  clientId: row.client_id,
+                  clientName: row.client_id, // will be enriched below if needed
+                  fileName: row.file_name,
+                  fileType: (row.file_type === "image" ? "image" : "video") as "image" | "video",
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  assetType: row.asset_type as any,
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  category: ((row as any).category ?? "Creative Asset") as any,
+                  // Use thumbnail_url from the row, or fall back to meta.thumbnail_url
+                  // (stored in __META__ by the supabase-storage-provider for uploaded files)
+                  thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
+                  // Expose storage_url via a non-interface field for preview use
+                  // (stored in __META__ by the supabase-storage-provider)
+                  storageUrl: (meta.storage_url as string | null) ?? null,
+                  uploadDate: row.upload_date,
+                  service: row.service ?? "",
+                  market: row.market ?? "",
+                  campaignUseCase: row.campaign_use_case ?? "",
+                  // Strip __META__: suffix so the Notes field shows only user text
+                  notes: userNotes,
+                  // Map Supabase lowercase status back to TypeScript display status
+                  status: (() => {
+                    const s = row.status as string;
+                    if (s === "uploaded") return "Uploaded" as const;
+                    if (s === "active") return (row.approved_for_ads ? "Approved" as const : "Uploaded" as const);
+                    if (s === "pending") return "Needs Review" as const;
+                    if (s === "draft") return "Uploaded" as const;
+                    return "Uploaded" as const;
+                  })(),
+                  tags: Array.isArray(row.tags) ? row.tags : [],
+                  approvedForAds: row.approved_for_ads,
+                };
+              });
               setUploadedAssets(mapped);
+              setInitialAnalysisResults(analysisMap);
             }
             setLoading(false);
           }
@@ -176,5 +238,5 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     ),
   ];
 
-  return { allAssets, uploadedAssets, addAsset, usingSupabase, loading };
+  return { allAssets, uploadedAssets, addAsset, usingSupabase, loading, initialAnalysisResults };
 }

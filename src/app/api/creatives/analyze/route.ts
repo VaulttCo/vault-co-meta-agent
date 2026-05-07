@@ -44,6 +44,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // ── 1b. Role check (Bug 5 fix) — admin and media_buyer only ──
+  const serviceClient = getSupabaseServerClient();
+  if (serviceClient) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profileRaw } = await (serviceClient.from("user_profiles") as any)
+      .select("role")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const profile = profileRaw as any;
+    if (!profile || (profile.role !== "admin" && profile.role !== "media_buyer")) {
+      return NextResponse.json(
+        { error: "Forbidden — admin or media_buyer role required" },
+        { status: 403 }
+      );
+    }
+  }
+
   // ── 2. Parse request body ─────────────────────────────────
   let body: { assets?: AnalyzeAssetInput[] };
   try {

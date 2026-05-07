@@ -46,6 +46,8 @@ export interface CreativeAsset {
   /** High-level file category, separate from creative format type */
   category: AssetCategory;
   thumbnailUrl: string | null;
+  /** Direct storage URL for the full asset file (from Supabase Storage or __META__) */
+  storageUrl?: string | null;
   uploadDate: string;
   service: string;
   market: string;

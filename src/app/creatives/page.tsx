@@ -29,6 +29,10 @@ import {
   ChevronRight,
   Info,
   ExternalLink,
+  MoreVertical,
+  Trash2,
+  ThumbsUp,
+  Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -300,6 +304,13 @@ function AssetDetailModal({
   analyzing,
   canAnalyze,
   resolveClientName,
+  canApprove,
+  canDelete,
+  onApprove,
+  onNeedsReview,
+  onDelete,
+  actionLoading,
+  actionError,
 }: {
   asset: CreativeAsset;
   onClose: () => void;
@@ -308,8 +319,16 @@ function AssetDetailModal({
   analyzing: boolean;
   canAnalyze: boolean;
   resolveClientName: (a: CreativeAsset) => string;
+  canApprove: boolean;
+  canDelete: boolean;
+  onApprove: (asset: CreativeAsset) => void;
+  onNeedsReview: (asset: CreativeAsset) => void;
+  onDelete: (asset: CreativeAsset) => void;
+  actionLoading: string | null;
+  actionError: string | null;
 }) {
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
+  const isActioning = actionLoading === asset.id;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -349,6 +368,50 @@ function AssetDetailModal({
                   </span>
                 )}
               </div>
+
+              {/* Action error */}
+              {actionError && actionLoading === null && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-[#ef4444]/08 border border-[#ef4444]/20 rounded-lg">
+                  <AlertCircle size={11} className="text-[#ef4444] flex-shrink-0" />
+                  <span className="text-[11px] text-[#ef4444]">{actionError}</span>
+                </div>
+              )}
+
+              {/* Action buttons — admin only */}
+              {(canApprove || canDelete) && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {canApprove && (
+                    <>
+                      <button
+                        onClick={() => onApprove(asset)}
+                        disabled={isActioning}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-[#22c55e] bg-[#22c55e]/08 border border-[#22c55e]/25 rounded-lg hover:border-[#22c55e]/45 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isActioning ? <Loader2 size={10} className="animate-spin" /> : <ThumbsUp size={10} />}
+                        Approve for Ads
+                      </button>
+                      <button
+                        onClick={() => onNeedsReview(asset)}
+                        disabled={isActioning}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-[#f59e0b] bg-[#f59e0b]/08 border border-[#f59e0b]/25 rounded-lg hover:border-[#f59e0b]/45 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isActioning ? <Loader2 size={10} className="animate-spin" /> : <Clock size={10} />}
+                        Mark Needs Review
+                      </button>
+                    </>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => onDelete(asset)}
+                      disabled={isActioning}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-[#ef4444] bg-[#ef4444]/08 border border-[#ef4444]/25 rounded-lg hover:border-[#ef4444]/45 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isActioning ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                      Delete
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Metadata grid */}
               <div className="space-y-2">
@@ -736,6 +799,70 @@ function UploadModal({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Confirm delete modal
+// ─────────────────────────────────────────────────────────────
+function ConfirmDeleteModal({
+  asset,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  asset: CreativeAsset;
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-sm bg-[#0D1520] border border-[#ef4444]/30 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0,129,242,0.15)]">
+          <div className="flex items-center gap-2">
+            <Trash2 size={14} className="text-[#ef4444]" />
+            <span className="text-[13px] font-semibold text-[#f8f8f7]">Delete Asset</span>
+          </div>
+          <button onClick={onCancel} className="text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="flex items-start gap-3 px-3 py-3 bg-[#ef4444]/08 border border-[#ef4444]/20 rounded-lg">
+            <AlertCircle size={14} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[12px] font-semibold text-[#f8f8f7] mb-0.5">This action cannot be undone</div>
+              <p className="text-[11px] text-[#6b7a99]">
+                The database record for <span className="text-[#f8f8f7] font-medium">{asset.fileName}</span> will be permanently deleted.
+                The file in storage will not be affected.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-[rgba(0,129,242,0.15)] flex items-center justify-end gap-3">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 text-[12px] text-[#6b7a99] border border-[rgba(0,129,242,0.15)] rounded-lg hover:text-[#f8f8f7] transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold bg-[#ef4444] text-white rounded-lg hover:bg-[#dc2626] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <><Loader2 size={12} className="animate-spin" />Deleting…</>
+            ) : (
+              <><Trash2 size={12} />Delete Asset</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Asset card
 // ─────────────────────────────────────────────────────────────
 function AssetCard({
@@ -746,6 +873,12 @@ function AssetCard({
   onOpen,
   analysisResult,
   canAnalyze,
+  canApprove,
+  canDelete,
+  onApprove,
+  onNeedsReview,
+  onDelete,
+  actionLoading,
 }: {
   asset: CreativeAsset;
   resolveClientName: (a: CreativeAsset) => string;
@@ -754,8 +887,29 @@ function AssetCard({
   onOpen: (asset: CreativeAsset) => void;
   analysisResult?: AnalysisResult;
   canAnalyze: boolean;
+  canApprove: boolean;
+  canDelete: boolean;
+  onApprove: (asset: CreativeAsset) => void;
+  onNeedsReview: (asset: CreativeAsset) => void;
+  onDelete: (asset: CreativeAsset) => void;
+  actionLoading: string | null;
 }) {
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const isActioning = actionLoading === asset.id;
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [menuOpen]);
 
   return (
     <div
@@ -784,8 +938,8 @@ function AssetCard({
           </button>
         )}
 
-        {/* Status badges */}
-        <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1.5">
+        {/* Status badges — shift down when action menu is present to avoid overlap */}
+        <div className={`absolute flex flex-col items-end gap-1.5 ${(canApprove || canDelete) ? "top-10 right-2.5" : "top-2.5 right-2.5"}`}>
           <Badge label={asset.status} variant={assetStatusVariant[asset.status]} />
         </div>
 
@@ -808,6 +962,54 @@ function AssetCard({
             <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold text-[#a78bfa] bg-[#0D1520]/90 border border-[#a78bfa]/30">
               <Sparkles size={8} />AI
             </span>
+          </div>
+        )}
+
+        {/* Action menu (3-dot) — only shown when canApprove or canDelete */}
+        {(canApprove || canDelete) && (
+          <div
+            ref={menuRef}
+            className="absolute top-2.5 right-2.5 z-20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+              disabled={isActioning}
+              className="flex items-center justify-center w-6 h-6 rounded-md bg-[#0D1520]/90 border border-[rgba(0,129,242,0.25)] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.45)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+            >
+              {isActioning ? <Loader2 size={11} className="animate-spin" /> : <MoreVertical size={11} />}
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-7 w-44 bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-xl shadow-xl overflow-hidden">
+                {canApprove && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onApprove(asset); }}
+                      className="flex items-center gap-2 w-full px-3 py-2.5 text-[11px] text-[#22c55e] hover:bg-[#22c55e]/08 transition-colors text-left"
+                    >
+                      <ThumbsUp size={11} />Approve for Ads
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onNeedsReview(asset); }}
+                      className="flex items-center gap-2 w-full px-3 py-2.5 text-[11px] text-[#f59e0b] hover:bg-[#f59e0b]/08 transition-colors text-left"
+                    >
+                      <Clock size={11} />Mark Needs Review
+                    </button>
+                  </>
+                )}
+                {canDelete && (
+                  <>
+                    {canApprove && <div className="border-t border-[rgba(0,129,242,0.12)]" />}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(asset); }}
+                      className="flex items-center gap-2 w-full px-3 py-2.5 text-[11px] text-[#ef4444] hover:bg-[#ef4444]/08 transition-colors text-left"
+                    >
+                      <Trash2 size={11} />Delete Asset
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -870,7 +1072,7 @@ function AssetCard({
 // ─────────────────────────────────────────────────────────────
 export default function CreativesPage() {
   const { can } = useAuth();
-  const { allAssets, addAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
+  const { allAssets, addAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
@@ -896,8 +1098,14 @@ export default function CreativesPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [detailAsset, setDetailAsset] = useState<CreativeAsset | null>(null);
+  // Asset action state
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmDeleteAsset, setConfirmDeleteAsset] = useState<CreativeAsset | null>(null);
 
   const canAnalyze = can("canAnalyzeCreatives");
+  const canApproveCreatives = can("canApproveCreatives");
+  const canDeleteCreatives = can("canDeleteFiles");
 
   // Load clients
   useEffect(() => {
@@ -1026,6 +1234,98 @@ export default function CreativesPage() {
   const analyzeSingle = useCallback((asset: CreativeAsset) => {
     runAnalysis([asset]);
   }, [runAnalysis]);
+
+  // ── Asset action handlers ─────────────────────────────────────────────────
+  const handleApprove = useCallback(async (asset: CreativeAsset) => {
+    if (!canApproveCreatives) return;
+    setActionLoading(asset.id);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/creatives/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId: asset.id, action: "approve" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to approve" }));
+        // In mock mode (Supabase not configured) the API may return 500 — still update local state
+        if (res.status !== 500) {
+          setActionError(err.error ?? "Failed to approve asset");
+          return;
+        }
+      }
+      const patch: Partial<CreativeAsset> = { status: "Approved", approvedForAds: true };
+      updateAsset(asset.id, patch);
+      // Update detail modal if open
+      setDetailAsset((prev) => prev?.id === asset.id ? { ...prev, ...patch } : prev);
+    } catch {
+      setActionError("Network error — please try again");
+    } finally {
+      setActionLoading(null);
+    }
+  }, [canApproveCreatives, updateAsset]);
+
+  const handleNeedsReview = useCallback(async (asset: CreativeAsset) => {
+    if (!canApproveCreatives) return;
+    setActionLoading(asset.id);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/creatives/update-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId: asset.id, action: "needs-review" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to update" }));
+        if (res.status !== 500) {
+          setActionError(err.error ?? "Failed to update asset status");
+          return;
+        }
+      }
+      const patch: Partial<CreativeAsset> = { status: "Needs Review", approvedForAds: false };
+      updateAsset(asset.id, patch);
+      setDetailAsset((prev) => prev?.id === asset.id ? { ...prev, ...patch } : prev);
+    } catch {
+      setActionError("Network error — please try again");
+    } finally {
+      setActionLoading(null);
+    }
+  }, [canApproveCreatives, updateAsset]);
+
+  const handleDelete = useCallback((asset: CreativeAsset) => {
+    if (!canDeleteCreatives) return;
+    setConfirmDeleteAsset(asset);
+  }, [canDeleteCreatives]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!confirmDeleteAsset || !canDeleteCreatives) return;
+    const asset = confirmDeleteAsset;
+    setActionLoading(asset.id);
+    setActionError(null);
+    try {
+      const res = await fetch("/api/creatives/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assetId: asset.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Failed to delete" }));
+        if (res.status !== 500) {
+          setActionError(err.error ?? "Failed to delete asset");
+          setConfirmDeleteAsset(null);
+          return;
+        }
+      }
+      removeAsset(asset.id);
+      setConfirmDeleteAsset(null);
+      // Close detail modal if it was showing the deleted asset
+      setDetailAsset((prev) => prev?.id === asset.id ? null : prev);
+    } catch {
+      setActionError("Network error — please try again");
+    } finally {
+      setActionLoading(null);
+    }
+  }, [confirmDeleteAsset, canDeleteCreatives, removeAsset]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -1256,6 +1556,12 @@ export default function CreativesPage() {
               onOpen={setDetailAsset}
               analysisResult={analysisResults.get(a.id)}
               canAnalyze={canAnalyze}
+              canApprove={canApproveCreatives}
+              canDelete={canDeleteCreatives}
+              onApprove={handleApprove}
+              onNeedsReview={handleNeedsReview}
+              onDelete={handleDelete}
+              actionLoading={actionLoading}
             />
           ))}
         </div>
@@ -1281,6 +1587,23 @@ export default function CreativesPage() {
           analyzing={analyzing}
           canAnalyze={canAnalyze}
           resolveClientName={resolveClientName}
+          canApprove={canApproveCreatives}
+          canDelete={canDeleteCreatives}
+          onApprove={handleApprove}
+          onNeedsReview={handleNeedsReview}
+          onDelete={handleDelete}
+          actionLoading={actionLoading}
+          actionError={actionError}
+        />
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmDeleteAsset && (
+        <ConfirmDeleteModal
+          asset={confirmDeleteAsset}
+          onConfirm={confirmDelete}
+          onCancel={() => setConfirmDeleteAsset(null)}
+          loading={actionLoading === confirmDeleteAsset.id}
         />
       )}
     </div>

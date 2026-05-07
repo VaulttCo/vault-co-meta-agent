@@ -13,6 +13,8 @@
  * Fix (Bug 2): On initial load, the hook now parses the `__META__:` JSON suffix
  * from the `notes` field and returns a pre-populated `initialAnalysisResults` Map
  * so the creatives page can rehydrate its `analysisResults` state after refresh.
+ *
+ * Update: Added `updateAsset` and `removeAsset` for approve/needs-review/delete actions.
  */
 import { useState, useEffect, useCallback } from "react";
 import { MOCK_CREATIVE_ASSETS, type CreativeAsset } from "./creativeAssets";
@@ -74,6 +76,17 @@ export interface UsePersistedCreativeAssetsResult {
   uploadedAssets: CreativeAsset[];
   /** Add a new asset and persist it */
   addAsset: (asset: CreativeAsset) => Promise<void>;
+  /**
+   * Optimistically update a persisted asset in local state.
+   * Used after approve/needs-review API calls succeed.
+   */
+  updateAsset: (id: string, patch: Partial<CreativeAsset>) => void;
+  /**
+   * Optimistically remove an asset from local state.
+   * Used after delete API call succeeds.
+   * Also removes from MOCK_CREATIVE_ASSETS view via the deletedIds set.
+   */
+  removeAsset: (id: string) => void;
   /** Whether Supabase is active (vs localStorage fallback) */
   usingSupabase: boolean;
   /** Whether the initial load is still in progress */
@@ -91,6 +104,8 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
   const [loading, setLoading] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [initialAnalysisResults, setInitialAnalysisResults] = useState<Map<string, any>>(new Map());
+  // Track deleted IDs so they are excluded from the merged allAssets list
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const usingSupabase = isSupabaseConfigured();
 
   // ── Initial load ──────────────────────────────────────────────────────────
@@ -138,10 +153,8 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   category: ((row as any).category ?? "Creative Asset") as any,
                   // Use thumbnail_url from the row, or fall back to meta.thumbnail_url
-                  // (stored in __META__ by the supabase-storage-provider for uploaded files)
                   thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
                   // Expose storage_url via a non-interface field for preview use
-                  // (stored in __META__ by the supabase-storage-provider)
                   storageUrl: (meta.storage_url as string | null) ?? null,
                   uploadDate: row.upload_date,
                   service: row.service ?? "",
@@ -202,7 +215,6 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
           market: asset.market,
           campaign_use_case: asset.campaignUseCase,
           notes: asset.notes,
-          // Map TypeScript display status to Supabase-compatible lowercase status
           status: (() => {
             const s = asset.status as string;
             if (s === "Uploaded") return "uploaded";
@@ -231,12 +243,32 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     });
   }, [usingSupabase]);
 
+  // ── Update asset (optimistic) ─────────────────────────────────────────────
+  const updateAsset = useCallback((id: string, patch: Partial<CreativeAsset>) => {
+    setUploadedAssets((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, ...patch } : a));
+      if (!usingSupabase) saveToLocalStorage(next);
+      return next;
+    });
+  }, [usingSupabase]);
+
+  // ── Remove asset (optimistic) ─────────────────────────────────────────────
+  const removeAsset = useCallback((id: string) => {
+    setUploadedAssets((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      if (!usingSupabase) saveToLocalStorage(next);
+      return next;
+    });
+    // Also track in deletedIds so mock assets with this ID are hidden
+    setDeletedIds((prev) => new Set([...prev, id]));
+  }, [usingSupabase]);
+
   const allAssets: CreativeAsset[] = [
-    ...uploadedAssets,
+    ...uploadedAssets.filter((a) => !deletedIds.has(a.id)),
     ...MOCK_CREATIVE_ASSETS.filter(
-      (m) => !uploadedAssets.some((u) => u.id === m.id)
+      (m) => !deletedIds.has(m.id) && !uploadedAssets.some((u) => u.id === m.id)
     ),
   ];
 
-  return { allAssets, uploadedAssets, addAsset, usingSupabase, loading, initialAnalysisResults };
+  return { allAssets, uploadedAssets, addAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults };
 }

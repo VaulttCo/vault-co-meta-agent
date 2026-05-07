@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDataProvider } from "@/lib/data/data-provider";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 import {
   buildVeronicaSystemPrompt,
   mockVeronicaResponse,
@@ -14,30 +16,45 @@ import {
 } from "@/lib/ai/veronica";
 
 export async function POST(req: NextRequest) {
-  let body: { message: string; clientId?: string; userRole?: string };
+  // ── 1. Server-side auth + role resolution ────────────────────────────────
+  // SECURITY: Role is resolved entirely from the Supabase server-side session.
+  // Any userRole field in the request body is intentionally ignored.
+  const auth = await resolveServerRole();
+  if (!auth) {
+    // No valid session — unauthenticated
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const serverRole = auth.role;
 
+  // ── 2. Permission check ──────────────────────────────────────────────────
+  // Veronica Console requires canViewAiBuilder + canViewStrategyData.
+  // client_viewer and setter do not have these permissions.
+  if (!can(serverRole, "canViewAiBuilder") || !can(serverRole, "canViewStrategyData")) {
+    return NextResponse.json(
+      {
+        error: "Forbidden — your role does not have access to the Veronica Console operator tools.",
+      },
+      { status: 403 }
+    );
+  }
+
+  // ── 3. Parse request body ────────────────────────────────────────────────
+  // NOTE: userRole from body is intentionally NOT used — use serverRole only.
+  let body: { message: string; clientId?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { message, clientId, userRole = "admin" } = body;
+  const { message, clientId } = body;
 
   if (!message?.trim()) {
     return NextResponse.json({ error: "Message is required" }, { status: 400 });
   }
 
-  // client_viewer role has no access to the operator console
-  if (userRole === "client_viewer") {
-    return NextResponse.json({
-      reply:
-        "Your account role does not have access to the Veronica Console operator tools. Contact your Vault Co admin if you need access.",
-      dataSources: [],
-      mockMode: false,
-      provider: "restricted",
-    } satisfies VeronicaConsoleResponse);
-  }
+  // Use the server-resolved role for all downstream logic
+  const userRole = serverRole;
 
   try {
     const db = getDataProvider();
@@ -103,6 +120,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Setters see clients but not strategy/intelligence data
+    // (setter cannot reach this point due to permission check above, but kept for safety)
     const filteredIntelligence = userRole === "setter" ? null : clientIntelligence;
 
     const ctx: VeronicaPortalContext = {

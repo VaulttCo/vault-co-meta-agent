@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 import { runCreativeAnalysisAgent } from "@/lib/agents/creativeAnalysis";
 import type { AssetType } from "@/lib/creativeAssets";
 
@@ -34,35 +36,28 @@ interface AnalyzeAssetInput {
 }
 
 export async function POST(req: NextRequest) {
-  // ── 1. Auth guard ─────────────────────────────────────────
-  const sessionClient = await getSupabaseSessionClient();
-  if (!sessionClient) {
+  // ── 1. Server-side auth + role resolution ────────────────────────────────
+  // SECURITY: Role is resolved entirely from the Supabase server-side session.
+  // Any role value in the request body is intentionally ignored.
+  const auth = await resolveServerRole();
+  if (!auth) {
+    // No valid session — unauthenticated
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { data: { user }, error: authError } = await sessionClient.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId, role: serverRole } = auth;
+
+  // ── 2. Permission check — admin and media_buyer only ─────────────────────
+  // This check is unconditional — it does NOT depend on Supabase being
+  // configured. resolveServerRole() returns null when Supabase is missing,
+  // which is already handled above as a 401.
+  if (!can(serverRole, "canAnalyzeCreatives")) {
+    return NextResponse.json(
+      { error: "Forbidden — admin or media_buyer role required" },
+      { status: 403 }
+    );
   }
 
-  // ── 1b. Role check (Bug 5 fix) — admin and media_buyer only ──
-  const serviceClient = getSupabaseServerClient();
-  if (serviceClient) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: profileRaw } = await (serviceClient.from("user_profiles") as any)
-      .select("role")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const profile = profileRaw as any;
-    if (!profile || (profile.role !== "admin" && profile.role !== "media_buyer")) {
-      return NextResponse.json(
-        { error: "Forbidden — admin or media_buyer role required" },
-        { status: 403 }
-      );
-    }
-  }
-
-  // ── 2. Parse request body ─────────────────────────────────
+  // ── 3. Parse request body ─────────────────────────────────────────────────
   let body: { assets?: AnalyzeAssetInput[] };
   try {
     body = await req.json();
@@ -84,7 +79,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 3. Validate each asset ────────────────────────────────
+  // ── 4. Validate each asset ────────────────────────────────────────────────
   for (const a of assets) {
     if (!a.id || !a.assetType || !a.service) {
       return NextResponse.json(
@@ -94,12 +89,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4. Determine provider ─────────────────────────────────
+  // ── 5. Determine provider ─────────────────────────────────────────────────
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   const useAnthropic = !!apiKey;
   let overallMockMode = !useAnthropic;
 
-  // ── 5. Analyze each asset ─────────────────────────────────
+  // ── 6. Analyze each asset ─────────────────────────────────────────────────
   const results: Array<{
     assetId: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,7 +222,7 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
         );
       }
 
-      // ── 6. Persist analysis to Supabase via notes __META__ ──
+      // ── 7. Persist analysis to Supabase via notes __META__ ────────────────
       let savedToDb = false;
       if (supabase) {
         try {
@@ -253,7 +248,7 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
             ...existingMeta,
             ai_analysis: analysis,
             analyzed_at: new Date().toISOString(),
-            analyzed_by: user.id,
+            analyzed_by: userId,
             mock_mode: assetMockMode,
           };
 
@@ -290,6 +285,6 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
     results,
     totalAnalyzed: results.length,
     mockMode: overallMockMode,
-    analyzedBy: user.email ?? user.id,
+    analyzedBy: userId,
   });
 }

@@ -379,6 +379,124 @@ create policy "Authenticated update integrations"
 
 ---
 
+## 8. client_integration_credentials
+
+Stores per-client encrypted API credentials for Meta Ads and GoHighLevel.
+`encrypted_data` is AES-256-GCM ciphertext — never readable without `CREDENTIAL_ENCRYPTION_KEY`.
+All reads and writes go through the Supabase service role client. No authenticated user policies
+are granted; RLS is enabled with no select/insert/update policies so direct client access is denied.
+
+```sql
+create table public.client_integration_credentials (
+  id             text primary key default gen_random_uuid()::text,
+  client_id      text not null references public.clients(id) on delete cascade,
+  provider       text not null check (provider in ('meta', 'ghl')),
+  encrypted_data text not null,
+  account_id     text,
+  account_label  text,
+  created_by     text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  unique (client_id, provider)
+);
+
+create index client_integration_credentials_client_id_idx
+  on public.client_integration_credentials(client_id);
+
+create trigger client_integration_credentials_updated_at
+  before update on public.client_integration_credentials
+  for each row execute procedure update_updated_at();
+
+-- RLS enabled — no authenticated policies — all access via service role only
+alter table public.client_integration_credentials enable row level security;
+```
+
+---
+
+## 9. meta_campaign_snapshots
+
+Point-in-time snapshots of Meta Ads campaign performance, written by `/api/integrations/meta/sync`.
+Each row covers one campaign for one date range. The sync route upserts on
+`(client_id, campaign_id, date_start, date_end)`.
+
+```sql
+create table public.meta_campaign_snapshots (
+  id              text primary key default gen_random_uuid()::text,
+  client_id       text not null references public.clients(id) on delete cascade,
+  meta_account_id text,
+  campaign_id     text not null,
+  campaign_name   text,
+  status          text,
+  objective       text,
+  spend           numeric(12,2),
+  impressions     integer,
+  clicks          integer,
+  ctr             numeric(10,6),
+  cpc             numeric(10,6),
+  cpm             numeric(10,6),
+  leads           integer,
+  cpl             numeric(10,2),
+  date_start      date not null,
+  date_end        date not null,
+  raw_payload     jsonb,
+  synced_at       timestamptz not null default now(),
+  created_at      timestamptz not null default now(),
+  unique (client_id, campaign_id, date_start, date_end)
+);
+
+create index meta_campaign_snapshots_client_id_idx
+  on public.meta_campaign_snapshots(client_id);
+create index meta_campaign_snapshots_synced_at_idx
+  on public.meta_campaign_snapshots(synced_at desc);
+
+alter table public.meta_campaign_snapshots enable row level security;
+
+create policy "Authenticated read meta snapshots"
+  on public.meta_campaign_snapshots for select
+  using (auth.role() = 'authenticated');
+```
+
+---
+
+## 10. ghl_pipeline_snapshots
+
+Point-in-time snapshots of GoHighLevel pipeline data, written by `/api/integrations/ghl/sync`.
+One row per client location (upserted on `(client_id, ghl_location_id)`), always reflecting
+the most recent sync.
+
+```sql
+create table public.ghl_pipeline_snapshots (
+  id                  text primary key default gen_random_uuid()::text,
+  client_id           text not null references public.clients(id) on delete cascade,
+  ghl_location_id     text not null,
+  leads               integer,
+  contacts            integer,
+  appointments        integer,
+  booked_appointments integer,
+  show_rate           numeric(5,2),
+  opportunities       integer,
+  pipeline_value      numeric(12,2),
+  closed_revenue      numeric(12,2),
+  raw_payload         jsonb,
+  synced_at           timestamptz not null default now(),
+  created_at          timestamptz not null default now(),
+  unique (client_id, ghl_location_id)
+);
+
+create index ghl_pipeline_snapshots_client_id_idx
+  on public.ghl_pipeline_snapshots(client_id);
+create index ghl_pipeline_snapshots_synced_at_idx
+  on public.ghl_pipeline_snapshots(synced_at desc);
+
+alter table public.ghl_pipeline_snapshots enable row level security;
+
+create policy "Authenticated read ghl snapshots"
+  on public.ghl_pipeline_snapshots for select
+  using (auth.role() = 'authenticated');
+```
+
+---
+
 ## Run Order
 
 Execute the SQL blocks in this order:
@@ -392,6 +510,9 @@ Execute the SQL blocks in this order:
 7. `approvals` table
 8. `reports` table
 9. `integration_connections` table
+10. `client_integration_credentials` table
+11. `meta_campaign_snapshots` table
+12. `ghl_pipeline_snapshots` table
 
 ## Seed Data — 4 Demo Clients
 

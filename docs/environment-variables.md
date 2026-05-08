@@ -20,6 +20,24 @@ All environment variables for the Vault Co portal. Set these in `.env.local` for
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Supabase anon (public) key — from Project Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Supabase service role key — **server-side only, never expose to browser** |
 
+## Credential Encryption
+
+| Variable | Required | Description |
+|---|---|---|
+| `CREDENTIAL_ENCRYPTION_KEY` | When using per-client credentials | 64-character hex string (32 bytes / 256 bits). Used by AES-256-GCM to encrypt Meta and GHL API credentials before storing them in Supabase. If absent, `/api/integrations/credentials/save` returns 503. |
+
+Generate a key:
+
+```bash
+openssl rand -hex 32
+```
+
+**Security rules:**
+- Never commit this key to git — it is the master decryption key for all per-client credentials
+- Never name it `NEXT_PUBLIC_*` — it must remain server-side only
+- If the key is rotated, all previously saved credentials must be re-entered (they were encrypted with the old key)
+- All encryption and decryption happens exclusively in `src/lib/crypto/credentials.ts` on the server
+
 **Fallback behavior:** When Supabase vars are absent, the app uses in-memory mock data. The Settings page shows which provider is active.
 
 **Security note:** `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security. It must only be used in route handlers (`src/app/api/**`). Never reference it in client components or files without `// Server-side` in the header comment. It intentionally does not start with `NEXT_PUBLIC_`.
@@ -41,6 +59,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# Credential encryption — required for per-client Meta/GHL credential storage
+# EXAMPLE ONLY — do not use this value. Generate a real key with:
+#   openssl rand -hex 32
+CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 ```
 
 ## What runs in mock mode by default
@@ -57,6 +80,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - `ANTHROPIC_API_KEY`
 - `OPENAI_API_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `CREDENTIAL_ENCRYPTION_KEY` — master key for all per-client credentials; rotation requires re-entering all saved credentials
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (technically public, but still keep out of source control)
 
 `.env.local` is in `.gitignore`. Never commit it. If a key is accidentally committed, rotate it immediately in the respective provider's console.

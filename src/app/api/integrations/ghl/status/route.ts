@@ -4,11 +4,23 @@
  * Requires a valid Supabase user session — returns 401 if unauthenticated.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient, getSupabaseSessionClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  // ── Auth guard (before any parameter validation) ──────────────────────────
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewAnalytics")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
 
@@ -17,16 +29,6 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // ── Auth guard: require a valid Supabase session ──────────────────────────
-    const sessionClient = await getSupabaseSessionClient();
-    if (!sessionClient) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const { data: { user } } = await sessionClient.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    // ─────────────────────────────────────────────────────────────────────────
 
     const supabase = getSupabaseServerClient();
     if (!supabase) {

@@ -4,10 +4,20 @@
  */
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewAnalytics")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const supabase = getSupabaseServerClient();
     if (!supabase) {

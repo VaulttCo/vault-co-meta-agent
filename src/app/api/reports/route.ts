@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { PersistedReport } from "@/lib/data/data-provider";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 // ── GET /api/reports?clientId=xxx ─────────────────────────────
 export async function GET(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewStrategyData")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(req.url);
   const clientId = searchParams.get("clientId");
 
@@ -68,6 +78,14 @@ export async function GET(req: NextRequest) {
 
 // ── POST /api/reports ─────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewStrategyData")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let report: PersistedReport;
   try {
     report = await req.json();

@@ -4,10 +4,20 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { syncGHLPipelineForClient } from "@/lib/integrations/ghl/client";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewStrategyData")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const { clientId } = body;

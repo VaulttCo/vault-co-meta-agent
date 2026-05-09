@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateCampaignDraft } from "@/lib/ai/service";
 import type { CampaignGenerationInput } from "@/lib/ai/service";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 // Extend Vercel function timeout to 60s (max for hobby plan, well within pro plan limit)
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canGenerateCampaigns")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: CampaignGenerationInput;
 
   try {

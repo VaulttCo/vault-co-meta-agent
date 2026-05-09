@@ -361,8 +361,29 @@ function AssetDetailModal({
                     className="w-full h-full object-contain bg-black"
                     preload="metadata"
                   />
+                ) : asset.fileType === "image" && (asset.storageUrl || asset.thumbnailUrl) ? (
+                  <img
+                    src={asset.storageUrl ?? asset.thumbnailUrl ?? ""}
+                    alt={asset.fileName}
+                    className="w-full h-full object-contain bg-[#0f1a28]"
+                    onError={(e) => {
+                      // On error, hide the img and show the fallback thumbnail
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        const fallback = parent.querySelector(".asset-thumb-fallback") as HTMLElement | null;
+                        if (fallback) fallback.style.display = "flex";
+                      }
+                    }}
+                  />
                 ) : (
                   <AssetThumbnail asset={asset} />
+                )}
+                {/* Fallback shown only if the img above errors */}
+                {asset.fileType === "image" && (asset.storageUrl || asset.thumbnailUrl) && (
+                  <div className="asset-thumb-fallback w-full h-full" style={{ display: "none" }}>
+                    <AssetThumbnail asset={asset} />
+                  </div>
                 )}
               </div>
 
@@ -1175,6 +1196,48 @@ export default function CreativesPage() {
   useEffect(() => {
     getDataProvider().getClients().then(setClients).catch(() => setClients([]));
   }, []);
+
+  // Backfill: for rows where storage_url/thumbnail_url columns are null but
+  // __META__ in notes has the values (uploaded before the column-write fix),
+  // update the real columns so previews work after refresh.
+  useEffect(() => {
+    if (!usingSupabase || loading) return;
+    import("@/lib/supabase/client").then(({ getSupabaseBrowserClient }) => {
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
+      import("@/lib/usePersistedCreativeAssets").then(({ parseNotesAndMeta }) => {
+        (supabase as any)
+          .from("creative_assets")
+          .select("id, notes, storage_url, thumbnail_url")
+          .then(({ data }: { data: any[] | null }) => {
+            if (!data) return;
+            const toUpdate = data.filter(
+              (row: any) =>
+                (!row.storage_url || !row.thumbnail_url) && row.notes?.includes("__META__:")
+            );
+            for (const row of toUpdate) {
+              const { meta } = parseNotesAndMeta(row.notes);
+              const newStorageUrl = (meta.storage_url as string) || null;
+              const newThumbnailUrl = (meta.thumbnail_url as string) || null;
+              if (newStorageUrl || newThumbnailUrl) {
+                (supabase as any)
+                  .from("creative_assets")
+                  .update({
+                    ...(newStorageUrl && !row.storage_url ? { storage_url: newStorageUrl } : {}),
+                    ...(newThumbnailUrl && !row.thumbnail_url ? { thumbnail_url: newThumbnailUrl } : {}),
+                  })
+                  .eq("id", row.id)
+                  .then(({ error }: { error: any }) => {
+                    if (error) console.warn("[backfill] update failed for", row.id, error.message);
+                    else console.log("[backfill] updated storage URLs for", row.id);
+                  });
+              }
+            }
+          });
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usingSupabase, loading]);
 
   // Client name resolution
   const clientNameMap = useMemo(() => {

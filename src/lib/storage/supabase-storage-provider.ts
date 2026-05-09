@@ -2,20 +2,20 @@
 // NEXT_PUBLIC_SUPABASE_ANON_KEY are set.
 //
 // Buckets used:
-//   creative-assets   — private, stores original uploaded files
-//   creative-thumbnails — public, stores thumbnail/preview images
+//   creative-assets     — private, stores original uploaded files (images + videos)
+//   creative-thumbnails — public,  stores thumbnail/preview images (images only)
 //
-// File metadata is persisted to the `creative_assets` table via the data
-// provider so that all file records survive page refreshes.
+// URL strategy:
+//   Images  → thumbnailUrl = public URL from creative-thumbnails (permanent, never expires)
+//             storageUrl   = public URL from creative-thumbnails (same, for full-size view)
+//   Videos  → storageUrl   = signed URL from creative-assets (1 year TTL)
+//             thumbnailUrl = null (no thumbnail generated server-side)
 //
-// Schema note: The original creative_assets table only has these columns:
-//   id, client_id, file_name, file_type, asset_type, upload_date, notes,
-//   status, tags (text[]), approved_for_ads, created_at, updated_at
+// Both storage_url and thumbnail_url are written to the real DB columns AND
+// encoded in __META__ inside notes for backward compatibility with the
+// AI analysis persistence path.
 //
-// Extra fields (mime_type, file_size, category, storage_url, thumbnail_url,
-// uploaded_by) are encoded as a JSON suffix appended to the notes column:
-//   "User notes here\n__META__:{...json...}"
-// This avoids schema-cache issues with newly added columns.
+// Schema: creative_assets table has real storage_url text and thumbnail_url text columns.
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { StorageProvider } from "./storage-provider";
@@ -26,7 +26,10 @@ const ASSETS_BUCKET = "creative-assets";
 const THUMBS_BUCKET = "creative-thumbnails";
 const META_SEPARATOR = "\n__META__:";
 
-// Build a deterministic storage path: {clientId}/{timestamp}-{fileName}
+// 1 year in seconds — long-lived signed URL for private video assets
+const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
+
+// Build a deterministic storage path: {clientId}/{timestamp}-{sanitisedFileName}
 function storagePath(clientId: string, fileName: string): string {
   return `${clientId}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 }
@@ -65,6 +68,12 @@ function toFileCategory(val: unknown): FileCategory {
   return "creative_asset";
 }
 
+// Check whether a URL looks like an expired Supabase signed URL
+// (token= param is present but the URL is a signed URL, not a public URL)
+function isSignedUrl(url: string): boolean {
+  return url.includes("/sign/") || url.includes("token=");
+}
+
 export class SupabaseStorageProvider implements StorageProvider {
   readonly name = "supabase" as const;
 
@@ -93,6 +102,11 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     return (data ?? []).map((row: any): ClientFile => {
       const { notes, meta } = decodeNotes(row.notes);
+
+      // Prefer real DB columns; fall back to __META__ for rows written before this fix
+      const storageUrl: string = row.storage_url ?? (meta.storage_url as string) ?? "";
+      const thumbnailUrl: string | null = row.thumbnail_url ?? (meta.thumbnail_url as string) ?? null;
+
       return {
         id: row.id,
         clientId: row.client_id,
@@ -101,8 +115,8 @@ export class SupabaseStorageProvider implements StorageProvider {
         fileSize: (meta.file_size as number) ?? 0,
         mimeType: (meta.mime_type as string) ?? "",
         category: toFileCategory(meta.category),
-        storageUrl: (meta.storage_url as string) ?? "",
-        thumbnailUrl: (meta.thumbnail_url as string) ?? null,
+        storageUrl,
+        thumbnailUrl,
         uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
         uploadedAt: row.upload_date ?? new Date().toISOString(),
         notes,
@@ -126,6 +140,9 @@ export class SupabaseStorageProvider implements StorageProvider {
     if (error || !data) return null;
 
     const { notes, meta } = decodeNotes(data.notes);
+    const storageUrl: string = data.storage_url ?? (meta.storage_url as string) ?? "";
+    const thumbnailUrl: string | null = data.thumbnail_url ?? (meta.thumbnail_url as string) ?? null;
+
     return {
       id: data.id,
       clientId: data.client_id,
@@ -134,8 +151,8 @@ export class SupabaseStorageProvider implements StorageProvider {
       fileSize: (meta.file_size as number) ?? 0,
       mimeType: (meta.mime_type as string) ?? "",
       category: toFileCategory(meta.category),
-      storageUrl: (meta.storage_url as string) ?? "",
-      thumbnailUrl: (meta.thumbnail_url as string) ?? null,
+      storageUrl,
+      thumbnailUrl,
       uploadedBy: (meta.uploaded_by as string) ?? "Veronica",
       uploadedAt: data.upload_date ?? new Date().toISOString(),
       notes,
@@ -157,48 +174,92 @@ export class SupabaseStorageProvider implements StorageProvider {
     // If a real browser File blob is attached, upload it to Supabase Storage
     const blob = fileRecord._blob;
     if (blob) {
-      const path = storagePath(fileRecord.clientId, fileRecord.fileName);
+      const isImage = fileRecord.mimeType.startsWith("image/");
+      const isVideo = fileRecord.mimeType.startsWith("video/");
 
-      const { data: uploadData, error: uploadError } = await (supabase as any).storage
-        .from(ASSETS_BUCKET)
-        .upload(path, blob, {
-          contentType: fileRecord.mimeType,
-          upsert: false,
-        });
+      if (isImage) {
+        // ── Images: upload to public creative-thumbnails bucket ──────────────
+        // Using the public bucket means the URL never expires and no signed URL
+        // refresh is needed. We store the same URL in both storageUrl and thumbnailUrl.
+        const thumbPath = storagePath(fileRecord.clientId, fileRecord.fileName);
 
-      if (uploadError) {
-        console.error("[SupabaseStorageProvider] upload:", uploadError.message);
-        // Fall through — still save metadata with a placeholder URL
-      } else {
-        // Get a signed URL valid for 7 days (private bucket)
-        const { data: signed } = await (supabase as any).storage
-          .from(ASSETS_BUCKET)
-          .createSignedUrl(uploadData.path, 60 * 60 * 24 * 7);
+        const { data: thumbUpload, error: thumbError } = await (supabase as any).storage
+          .from(THUMBS_BUCKET)
+          .upload(thumbPath, blob, {
+            contentType: fileRecord.mimeType,
+            upsert: true,
+          });
 
-        storageUrl = signed?.signedUrl ?? storageUrl;
-
-        // For images, also store in the public thumbnails bucket
-        if (fileRecord.mimeType.startsWith("image/")) {
-          const thumbPath = storagePath(fileRecord.clientId, `thumb_${fileRecord.fileName}`);
-          await (supabase as any).storage
-            .from(THUMBS_BUCKET)
-            .upload(thumbPath, blob, {
-              contentType: fileRecord.mimeType,
-              upsert: false,
-            });
-
+        if (thumbError) {
+          console.error("[SupabaseStorageProvider] thumbnail upload:", thumbError.message);
+        } else {
           const { data: pubData } = (supabase as any).storage
             .from(THUMBS_BUCKET)
-            .getPublicUrl(thumbPath);
+            .getPublicUrl(thumbUpload?.path ?? thumbPath);
 
-          thumbnailUrl = pubData?.publicUrl ?? null;
+          const publicUrl: string = pubData?.publicUrl ?? "";
+          if (publicUrl) {
+            storageUrl = publicUrl;
+            thumbnailUrl = publicUrl;
+          }
+        }
+
+        // Also upload original to private creative-assets bucket for archival
+        const assetPath = storagePath(fileRecord.clientId, `original_${fileRecord.fileName}`);
+        await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .upload(assetPath, blob, {
+            contentType: fileRecord.mimeType,
+            upsert: true,
+          });
+
+      } else if (isVideo) {
+        // ── Videos: upload to private creative-assets bucket, get long-lived signed URL ──
+        const path = storagePath(fileRecord.clientId, fileRecord.fileName);
+
+        const { data: uploadData, error: uploadError } = await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .upload(path, blob, {
+            contentType: fileRecord.mimeType,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("[SupabaseStorageProvider] video upload:", uploadError.message);
+        } else {
+          // 1-year signed URL so video doesn't break after a week
+          const { data: signed, error: signError } = await (supabase as any).storage
+            .from(ASSETS_BUCKET)
+            .createSignedUrl(uploadData?.path ?? path, SIGNED_URL_TTL);
+
+          if (signError) {
+            console.error("[SupabaseStorageProvider] createSignedUrl:", signError.message);
+          } else {
+            storageUrl = signed?.signedUrl ?? storageUrl;
+          }
+        }
+      } else {
+        // ── Other file types: upload to private bucket, get signed URL ────────
+        const path = storagePath(fileRecord.clientId, fileRecord.fileName);
+
+        const { data: uploadData, error: uploadError } = await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .upload(path, blob, {
+            contentType: fileRecord.mimeType,
+            upsert: true,
+          });
+
+        if (!uploadError && uploadData) {
+          const { data: signed } = await (supabase as any).storage
+            .from(ASSETS_BUCKET)
+            .createSignedUrl(uploadData.path, SIGNED_URL_TTL);
+          storageUrl = signed?.signedUrl ?? storageUrl;
         }
       }
     }
 
-    // Encode extra metadata into the notes column to avoid schema-cache issues.
-    // The original creative_assets table does not have mime_type, file_size,
-    // category, storage_url, thumbnail_url, or uploaded_by columns.
+    // Encode extra metadata into notes for backward compatibility with the
+    // AI analysis persistence path (which reads/writes __META__ in notes).
     const encodedNotes = encodeNotes(fileRecord.notes ?? "", {
       mime_type: fileRecord.mimeType,
       file_size: fileRecord.fileSize,
@@ -208,23 +269,31 @@ export class SupabaseStorageProvider implements StorageProvider {
       uploaded_by: fileRecord.uploadedBy,
     });
 
-    // Persist metadata — only write columns that exist in the original schema
+    // Persist metadata — write storage_url and thumbnail_url to real DB columns
+    // (the table has these columns per database-schema.md and types.ts)
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")
       .upsert({
         id: fileRecord.id,
         client_id: fileRecord.clientId,
         file_name: fileRecord.fileName,
-        file_type: fileRecord.fileType,
+        file_type: fileRecord.fileType === "image" || fileRecord.fileType === "video"
+          ? fileRecord.fileType
+          : "image",
         asset_type: "image",
         upload_date: fileRecord.uploadedAt,
         notes: encodedNotes,
         status: fileRecord.status,
+        // Write to real columns — this is the primary fix
+        storage_url: storageUrl || null,
+        thumbnail_url: thumbnailUrl || null,
         tags: [],
         approved_for_ads: false,
       });
 
-    if (dbError) console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
+    if (dbError) {
+      console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
+    }
 
     return { ...fileRecord, storageUrl, thumbnailUrl };
   }
@@ -241,9 +310,17 @@ export class SupabaseStorageProvider implements StorageProvider {
     if (file?.storageUrl) {
       try {
         const url = new URL(file.storageUrl);
-        const pathParts = url.pathname.split(`/${ASSETS_BUCKET}/`);
-        if (pathParts.length > 1) {
-          await (supabase as any).storage.from(ASSETS_BUCKET).remove([pathParts[1]]);
+        // Determine which bucket from the URL path
+        if (url.pathname.includes(`/${ASSETS_BUCKET}/`)) {
+          const pathParts = url.pathname.split(`/${ASSETS_BUCKET}/`);
+          if (pathParts.length > 1) {
+            await (supabase as any).storage.from(ASSETS_BUCKET).remove([pathParts[1].split("?")[0]]);
+          }
+        } else if (url.pathname.includes(`/${THUMBS_BUCKET}/`)) {
+          const pathParts = url.pathname.split(`/${THUMBS_BUCKET}/`);
+          if (pathParts.length > 1) {
+            await (supabase as any).storage.from(THUMBS_BUCKET).remove([pathParts[1].split("?")[0]]);
+          }
         }
       } catch {
         // URL parsing failed — skip storage deletion, still remove metadata

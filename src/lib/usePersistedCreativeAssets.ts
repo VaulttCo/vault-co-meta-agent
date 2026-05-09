@@ -157,10 +157,9 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
                   assetType: row.asset_type as any,
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   category: ((row as any).category ?? "Creative Asset") as any,
-                  // Use thumbnail_url from the row, or fall back to meta.thumbnail_url
+                  // Prefer real DB columns; fall back to __META__ for rows written before the fix
                   thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
-                  // Expose storage_url via a non-interface field for preview use
-                  storageUrl: (meta.storage_url as string | null) ?? null,
+                  storageUrl: row.storage_url ?? (meta.storage_url as string | null) ?? null,
                   uploadDate: row.upload_date,
                   service: row.service ?? "",
                   market: row.market ?? "",

@@ -451,14 +451,14 @@ const automationRules = [
 ];
 
 const agentSuggestions = [
-  "Summarize Kaczmar Builders",
-  "Show all pending approvals",
-  "List creatives approved for ads",
-  "Summarize Meta and GHL performance",
-  "What should I do next?",
-  "Why is CPL high for JJ Roofing Group?",
-  "What is missing before Acorns Roofing is ready?",
-  "Generate a report draft for Open Forge Construction",
+  "What is blocking Kaczmar from launch?",
+  "Which clients are at risk this week?",
+  "Which client should we focus on first?",
+  "Should we increase ad spend anywhere?",
+  "Which clients have follow-up bottlenecks?",
+  "Which clients are missing reports?",
+  "Which approvals are blocking launch?",
+  "What should Vault Co do today?",
 ];
 
 // ─────────────────────────────────────────────────────────────

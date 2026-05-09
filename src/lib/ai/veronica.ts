@@ -61,6 +61,40 @@ export interface DiagnosticFinding {
   relatedAction?: { label: string; href: string };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Part 2 — Bottleneck type classification
+// ─────────────────────────────────────────────────────────────
+
+export type BottleneckType =
+  | "setup"
+  | "ad"
+  | "followup"
+  | "sales_show"
+  | "reporting_data"
+  | "none";
+
+export interface BottleneckDiagnosis {
+  type: BottleneckType;
+  label: string;
+  proofData: string;
+  likelyMeaning: string;
+  nextAction: string;
+  notToDo: string;
+  dataConfidence: "high" | "medium" | "low";
+}
+
+// ─────────────────────────────────────────────────────────────
+// Part 1 — Client health score
+// ─────────────────────────────────────────────────────────────
+
+export interface ClientHealthScore {
+  score: number;
+  status: "healthy" | "watch" | "at_risk" | "blocked";
+  topBlocker: string | null;
+  nextBestAction: string;
+  riskReasons: string[];
+}
+
 export interface LaunchReadinessCheck {
   clientId: string;
   clientName: string;
@@ -69,6 +103,10 @@ export interface LaunchReadinessCheck {
   isReady: boolean;
   complete: string[];
   missing: string[];
+  // Part 4 extensions
+  launchStatus: "ready" | "almost_ready" | "blocked" | "incomplete";
+  blockingItems: string[];
+  recommendedLaunchSequence: string[];
 }
 
 export interface ClientBrain {
@@ -115,6 +153,8 @@ export interface ClientBrain {
   recentReports: PersistedReport[];
   launchReadiness: LaunchReadinessCheck;
   diagnostics: DiagnosticFinding[];
+  healthScore: ClientHealthScore;
+  bottleneck: BottleneckDiagnosis;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -131,32 +171,90 @@ function checkLaunchReadiness(
   client: Client,
   approvedAssets: CreativeAsset[],
   drafts: CampaignDraft[],
-  intelligence: ClientIntelligence | null
+  intelligence: ClientIntelligence | null,
+  pendingApprovals: Approval[],
+  integrationConnections: IntegrationConnection[],
+  recentReports: PersistedReport[],
+  hasDataConflicts: boolean
 ): LaunchReadinessCheck {
-  const checks: Array<{ label: string; pass: boolean }> = [
+  const clientConns = integrationConnections.filter((ic) => ic.clientId === client.id);
+  const ghlSynced = clientConns.some((ic) => ic.provider === "ghl" && ic.lastSyncedAt);
+
+  // Blocking checks — must all pass to launch
+  const blocking: Array<{ label: string; pass: boolean }> = [
     { label: "Meta Ad Account connected", pass: !!client.metaAccountId && !isValuePending(client.metaAccountId) },
-    { label: "Facebook Page connected", pass: !!client.fbPageId && !isValuePending(client.fbPageId) },
     { label: "Meta Pixel installed", pass: !!client.pixelId && !isValuePending(client.pixelId) },
+    { label: "Facebook Page connected", pass: !!client.fbPageId && !isValuePending(client.fbPageId) },
     { label: "GHL Location connected", pass: !!client.ghlLocationId && !isValuePending(client.ghlLocationId) },
+    { label: "GHL sync confirmed", pass: ghlSynced },
     { label: "Approved creative asset", pass: approvedAssets.length > 0 },
-    { label: "Client intelligence extracted", pass: !!intelligence },
     {
       label: "Campaign draft approved or ready",
       pass: drafts.some((d) => d.status === "ready_for_meta" || d.status === "approved"),
     },
   ];
 
-  const passed = checks.filter((c) => c.pass);
-  const failed = checks.filter((c) => !c.pass);
+  // Non-blocking checks — important but don't gate launch
+  const nonBlocking: Array<{ label: string; pass: boolean }> = [
+    { label: "Client intelligence extracted", pass: !!intelligence },
+    {
+      label: "No high-priority approvals blocking",
+      pass: !pendingApprovals.some((a) => a.priority === "high"),
+    },
+    {
+      label: "Report baseline on file",
+      pass: client.status !== "active" || recentReports.length > 0,
+    },
+    { label: "No data conflicts detected", pass: !hasDataConflicts },
+  ];
+
+  const allChecks = [...blocking, ...nonBlocking];
+  const passed = allChecks.filter((c) => c.pass);
+  const failed = allChecks.filter((c) => !c.pass);
+  const failedBlocking = blocking.filter((c) => !c.pass);
+  const failedNonBlocking = nonBlocking.filter((c) => !c.pass);
+
+  // launchStatus
+  let launchStatus: LaunchReadinessCheck["launchStatus"];
+  if (failed.length === 0) launchStatus = "ready";
+  else if (failedBlocking.length === 0 && failedNonBlocking.length <= 2) launchStatus = "almost_ready";
+  else if (failedBlocking.length > 0 && failed.length >= 3) launchStatus = "incomplete";
+  else launchStatus = "blocked";
+
+  const blockingItems = failedBlocking.map((c) => c.label);
+
+  // Recommended sequence: fix blockers first, then non-blockers
+  const blockingOrder = [
+    "Meta Ad Account connected",
+    "Meta Pixel installed",
+    "Facebook Page connected",
+    "GHL Location connected",
+    "GHL sync confirmed",
+    "Approved creative asset",
+    "Campaign draft approved or ready",
+  ];
+  const nonBlockingOrder = [
+    "Client intelligence extracted",
+    "No high-priority approvals blocking",
+    "Report baseline on file",
+    "No data conflicts detected",
+  ];
+  const recommendedLaunchSequence = [
+    ...blockingOrder.filter((l) => failedBlocking.some((c) => c.label === l)),
+    ...nonBlockingOrder.filter((l) => failedNonBlocking.some((c) => c.label === l)),
+  ];
 
   return {
     clientId: client.id,
     clientName: client.name,
     score: passed.length,
-    maxScore: checks.length,
+    maxScore: allChecks.length,
     isReady: failed.length === 0,
     complete: passed.map((c) => c.label),
     missing: failed.map((c) => c.label),
+    launchStatus,
+    blockingItems,
+    recommendedLaunchSequence,
   };
 }
 
@@ -487,6 +585,396 @@ function runDiagnosticsForClient(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Part 5 — Data conflict detection
+// ─────────────────────────────────────────────────────────────
+
+function detectAdditionalDataConflicts(
+  client: Client,
+  drafts: CampaignDraft[],
+  reports: PersistedReport[],
+  assets: CreativeAsset[],
+  integrationConnections: IntegrationConnection[]
+): DiagnosticFinding[] {
+  const findings: DiagnosticFinding[] = [];
+  const approvedAssets = assets.filter((a) => a.approvedForAds);
+  const clientConns = integrationConnections.filter((ic) => ic.clientId === client.id);
+
+  // Conflict 1: Draft approved/ready but no approved creative
+  const hasReadyDraft = drafts.some(
+    (d) => d.status === "ready_for_meta" || d.status === "approved"
+  );
+  if (hasReadyDraft && approvedAssets.length === 0) {
+    findings.push({
+      clientId: client.id,
+      clientName: client.name,
+      signal:
+        "This is a data mismatch, not a performance issue. Campaign draft is approved/ready but no creative assets are approved for Meta ads.",
+      severity: "critical",
+      likelyCause:
+        "The campaign draft was approved before creative assets were reviewed, or creatives were unapproved after the draft was approved.",
+      recommendation:
+        "Go to Creative Library and approve at least one creative asset for this client before submitting the campaign to Meta.",
+      blocked:
+        "Do not submit this campaign to Meta. Fix the creative first.",
+      relatedAction: { label: "Creative Library", href: "/creatives" },
+    });
+  }
+
+  // Conflict 2: Report shows leads but live stats show 0 leads with active Meta sync
+  const reportWithLeads = reports.find((r) => r.leads > 0);
+  const hasMetaSync = clientConns.some(
+    (ic) => ic.provider === "meta" && ic.lastSyncedAt
+  );
+  if (reportWithLeads && client.stats.leads === 0 && hasMetaSync) {
+    findings.push({
+      clientId: client.id,
+      clientName: client.name,
+      signal: `This is a data mismatch, not a performance issue. Report "${reportWithLeads.reportPeriod}" shows ${reportWithLeads.leads} leads but live stats show 0 leads despite active Meta sync.`,
+      severity: "warning",
+      likelyCause:
+        "The report was generated from a different period or the Meta sync reset the stats counter. Live stats and report data are out of sync.",
+      recommendation:
+        "Trigger a fresh Meta sync from Settings → Integrations and compare the current period to the report period before drawing conclusions.",
+      blocked:
+        "Do not assume lead volume is zero. Verify the sync window matches the reporting period.",
+      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+    });
+  }
+
+  // Conflict 3: GHL sync active but GHL Pipeline ID missing/pending
+  const hasGhlSync = clientConns.some(
+    (ic) => ic.provider === "ghl" && ic.lastSyncedAt
+  );
+  if (hasGhlSync && (!client.ghlPipelineId || isValuePending(client.ghlPipelineId))) {
+    findings.push({
+      clientId: client.id,
+      clientName: client.name,
+      signal:
+        "This is a data mismatch, not a performance issue. GHL sync is active but GHL Pipeline ID is missing or pending in the client profile.",
+      severity: "warning",
+      likelyCause:
+        "GHL location connected but the pipeline has not been configured or the pipeline ID was not saved. Without this, contact stage tracking and booking data cannot flow.",
+      recommendation:
+        "Verify the GHL Pipeline ID in Settings → Integrations. Confirm the correct pipeline is mapped for this client.",
+      blocked:
+        "Do not assume GHL follow-up is fully operational without a confirmed pipeline ID.",
+      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+    });
+  }
+
+  // Conflict 4: Assets with "Approved" status but approvedForAds = false
+  const approvedStatusNotForAds = assets.filter(
+    (a) => a.status === "Approved" && !a.approvedForAds
+  );
+  if (approvedStatusNotForAds.length > 0) {
+    findings.push({
+      clientId: client.id,
+      clientName: client.name,
+      signal: `This is a data mismatch, not a performance issue. ${approvedStatusNotForAds.length} creative asset(s) have "Approved" status but are not flagged for Meta ads.`,
+      severity: "info",
+      likelyCause:
+        "Assets were approved in the Creative Library but the 'Approved for Ads' flag was not toggled. These assets do not count toward campaign readiness.",
+      recommendation:
+        "Review these assets in Creative Library and enable 'Approved for Ads' if they are ready for Meta.",
+      blocked:
+        "These assets cannot be used in Meta submissions until approvedForAds is enabled.",
+      relatedAction: { label: "Creative Library", href: "/creatives" },
+    });
+  }
+
+  return findings;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Part 1 — Compute client health score (0–100)
+// ─────────────────────────────────────────────────────────────
+
+function computeClientHealthScore(data: {
+  integrations: ClientBrain["integrations"];
+  performance: ClientBrain["performance"];
+  intelligence: ClientIntelligence | null;
+  approvedAssets: CreativeAsset[];
+  drafts: CampaignDraft[];
+  pendingApprovals: Approval[];
+  recentReports: PersistedReport[];
+  diagnostics: DiagnosticFinding[];
+  clientStatus: string;
+}): ClientHealthScore {
+  const {
+    integrations,
+    performance,
+    intelligence,
+    approvedAssets,
+    drafts,
+    pendingApprovals,
+    recentReports,
+    diagnostics,
+    clientStatus,
+  } = data;
+  let score = 0;
+  const riskReasons: string[] = [];
+
+  // Integration readiness — 30 pts
+  if (integrations.metaConnected) score += 8;
+  else riskReasons.push("Meta Ad Account not connected (-8)");
+  if (integrations.pixelInstalled) score += 7;
+  else riskReasons.push("Meta Pixel not installed (-7)");
+  if (integrations.fbPageConnected) score += 7;
+  else riskReasons.push("Facebook Page not connected (-7)");
+  if (integrations.ghlConnected) score += 8;
+  else riskReasons.push("GHL Location not connected (-8)");
+
+  // Performance KPIs — 30 pts
+  // Unknown = half credit (no data yet, not a failure)
+  if (performance.cplStatus === "ok") score += 12;
+  else if (performance.cplStatus === "above_target") {
+    score += 4;
+    riskReasons.push(`CPL ${performance.cpl} above $${performance.cplBenchmark} target (-8)`);
+  } else {
+    score += 6;
+  }
+  if (performance.bookingStatus === "ok") score += 12;
+  else if (performance.bookingStatus === "below_target") {
+    score += 4;
+    riskReasons.push(`Booking rate ${performance.bookingRate}% below 30% target (-8)`);
+  } else {
+    score += 6;
+  }
+  if (performance.showRateStatus === "ok") score += 6;
+  else if (performance.showRateStatus === "below_target") {
+    score += 2;
+    riskReasons.push(`Show rate ${performance.showRate} below 65% target (-4)`);
+  } else {
+    score += 3;
+  }
+
+  // Intelligence — 10 pts
+  if (intelligence) score += 10;
+  else riskReasons.push("Client intelligence not extracted (-10)");
+
+  // Creative readiness — 10 pts
+  if (approvedAssets.length > 0) score += 10;
+  else riskReasons.push("No approved creative assets (-10)");
+
+  // Campaign / approval readiness — 10 pts
+  const hasDraftReady = drafts.some(
+    (d) => d.status === "ready_for_meta" || d.status === "approved"
+  );
+  if (hasDraftReady) score += 5;
+  else riskReasons.push("No approved campaign draft (-5)");
+  const highPriorityApprovals = pendingApprovals.filter((a) => a.priority === "high");
+  if (highPriorityApprovals.length === 0) score += 5;
+  else riskReasons.push(`${highPriorityApprovals.length} high-priority approval(s) pending (-5)`);
+
+  // Report freshness — 10 pts (only penalizes active clients)
+  if (clientStatus === "active") {
+    if (recentReports.length > 0) score += 10;
+    else riskReasons.push("No reports on file for active client (-10)");
+  } else {
+    score += 10; // Not applicable for non-active clients
+  }
+
+  // Status thresholds
+  let status: ClientHealthScore["status"];
+  if (score >= 80) status = "healthy";
+  else if (score >= 60) status = "watch";
+  else if (score >= 40) status = "at_risk";
+  else status = "blocked";
+
+  // Top blocker: prefer highest-severity diagnostic signal
+  const criticals = diagnostics.filter((d) => d.severity === "critical");
+  const topBlockerStr =
+    criticals.length > 0
+      ? criticals[0].signal
+      : riskReasons.length > 0
+      ? riskReasons[0].replace(/ \(-\d+\)$/, "")
+      : null;
+
+  // Next best action
+  const nextBestAction =
+    criticals.length > 0
+      ? criticals[0].recommendation
+      : !integrations.metaConnected
+      ? "Connect Meta Ad Account in Settings → Integrations"
+      : !integrations.ghlConnected
+      ? "Connect GHL Location in Settings → Integrations"
+      : approvedAssets.length === 0
+      ? "Upload and approve creative assets in Creative Library"
+      : !hasDraftReady
+      ? "Generate and approve a campaign draft in Campaign Builder"
+      : !intelligence
+      ? "Extract client intelligence from the client record"
+      : "Review active diagnostics and performance metrics";
+
+  return { score, status, topBlocker: topBlockerStr, nextBestAction, riskReasons };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Part 2 — Classify the primary bottleneck for one client
+// ─────────────────────────────────────────────────────────────
+
+function classifyBottleneck(data: {
+  integrations: ClientBrain["integrations"];
+  performance: ClientBrain["performance"];
+  intelligence: ClientIntelligence | null;
+  approvedAssets: CreativeAsset[];
+  diagnostics: DiagnosticFinding[];
+  launchReadiness: LaunchReadinessCheck;
+}): BottleneckDiagnosis {
+  const { integrations, performance, intelligence, approvedAssets, diagnostics, launchReadiness } =
+    data;
+
+  // Priority 1 — Setup bottleneck
+  // For clients already running active campaigns, asset/intelligence gaps are data-load
+  // artifacts (per-client data not fetched in global queries) — not true setup blockers.
+  const activelyRunning = integrations.hasActiveMetaCampaigns || integrations.activeCampaignCount > 0;
+  const setupGaps: string[] = [];
+  if (!integrations.metaConnected) setupGaps.push("Meta Ad Account");
+  if (!integrations.pixelInstalled) setupGaps.push("Meta Pixel");
+  if (!integrations.fbPageConnected) setupGaps.push("Facebook Page");
+  if (!integrations.ghlConnected) setupGaps.push("GHL Location");
+  if (approvedAssets.length === 0 && !activelyRunning) setupGaps.push("approved creative");
+  if (!intelligence && !activelyRunning) setupGaps.push("client intelligence");
+
+  if (setupGaps.length > 0) {
+    return {
+      type: "setup",
+      label: "Setup Bottleneck",
+      proofData: `Missing: ${setupGaps.join(", ")}. Launch readiness: ${launchReadiness.score}/${launchReadiness.maxScore}.`,
+      likelyMeaning:
+        "Client onboarding is incomplete. Ads cannot run effectively — or at all — without these items in place.",
+      nextAction: `Complete setup for: ${setupGaps.slice(0, 2).join(" and ")}. Use Settings → Integrations for credentials, Creative Library for assets.`,
+      notToDo:
+        "Do not generate campaign drafts for Meta submission until integrations are connected. Do not run ads without an approved creative.",
+      dataConfidence: "high",
+    };
+  }
+
+  // Priority 2 — Ad bottleneck
+  const hasCreativeFatigue = diagnostics.some((d) =>
+    d.signal.includes("30+ days old")
+  );
+  const isAdBottleneck =
+    performance.cplStatus === "above_target" ||
+    (integrations.hasActiveMetaCampaigns &&
+      performance.leads === 0 &&
+      performance.cplStatus === "unknown") ||
+    hasCreativeFatigue;
+
+  if (isAdBottleneck) {
+    const cplNote =
+      performance.cplStatus === "above_target"
+        ? `CPL ${performance.cpl} vs $${performance.cplBenchmark} target.`
+        : "";
+    const leadsNote =
+      performance.leads === 0
+        ? "0 leads despite active campaigns."
+        : `${performance.leads} leads recorded.`;
+    return {
+      type: "ad",
+      label: "Ad Performance Bottleneck",
+      proofData: `${cplNote} ${leadsNote} Active campaigns: ${integrations.activeCampaignCount}. Approved creatives: ${approvedAssets.length}.`.trim(),
+      likelyMeaning:
+        "The ads themselves are the weak point. Creative may be fatigued, targeting may have decayed, or the campaign angle is not converting the right audience.",
+      nextAction:
+        "Review active creatives for hook strength and run duration. Generate a new campaign draft with a different angle. Flag for creative refresh if all assets are 30+ days old.",
+      notToDo:
+        "Do not pause campaigns or change budgets without human approval. Do not increase spend while CPL is above target.",
+      dataConfidence: performance.leads > 10 ? "high" : "medium",
+    };
+  }
+
+  // Priority 3 — Follow-up bottleneck
+  const isFollowupBottleneck =
+    (performance.leads > 0 && performance.booked === 0) ||
+    (performance.bookingStatus === "below_target" &&
+      performance.bookingRate < 30 &&
+      integrations.ghlConnected);
+
+  if (isFollowupBottleneck) {
+    const proofData =
+      performance.leads > 0 && performance.booked === 0
+        ? `${performance.leads} leads, 0 booked appointments. GHL: ${integrations.ghlConnected ? "connected" : "not connected"}.`
+        : `${performance.leads} leads, ${performance.booked} booked (${performance.bookingRate}% — below 30% target). GHL: connected.`;
+    return {
+      type: "followup",
+      label: "Follow-Up Bottleneck",
+      proofData,
+      likelyMeaning:
+        "Leads are entering the system but not converting to appointments. First contact within 5 minutes is the most critical conversion variable in home services.",
+      nextAction:
+        "Audit GHL workflow: verify immediate SMS fires within 60 seconds, setter task created within 1 minute, first call placed within 5 minutes, AI voice triggers at 10 minutes if no call logged.",
+      notToDo:
+        "Do not change ad targeting or pause campaigns — the problem is post-lead. Do not increase ad spend while this issue exists.",
+      dataConfidence: performance.leads > 5 ? "high" : "medium",
+    };
+  }
+
+  // Priority 4 — Sales/Show bottleneck
+  const showRateNum = parseFloat(performance.showRate.replace(/[^0-9.]/g, "")) || 0;
+  if (performance.booked > 0 && showRateNum > 0 && showRateNum < 65) {
+    return {
+      type: "sales_show",
+      label: "Sales / Show Rate Bottleneck",
+      proofData: `${performance.booked} appointments booked. Show rate: ${performance.showRate} (target: 65%+). Pipeline: ${performance.pipeline}.`,
+      likelyMeaning:
+        "Appointments are booking but not showing up. Likely a weak confirmation sequence, too much time between booking and appointment, or the setter did not build commitment on the call.",
+      nextAction:
+        "Review the appointment confirmation SMS/email sequence in GHL. Check average days from booking to appointment — flag if over 3 days. Flag for setter coaching on commitment-building.",
+      notToDo:
+        "Do not change ad targeting or creative — the issue is post-booking, not lead quality.",
+      dataConfidence: performance.booked > 3 ? "high" : "medium",
+    };
+  }
+
+  // Priority 5 — Reporting/Data bottleneck
+  const hasDataConflictDiag = diagnostics.some((d) =>
+    d.signal.includes("data mismatch")
+  );
+  const hasNoReportDiag = diagnostics.some((d) =>
+    d.signal.includes("No reports on file")
+  );
+
+  if (hasDataConflictDiag || hasNoReportDiag) {
+    const conflictNote = hasDataConflictDiag
+      ? "Data mismatch detected between integration connections and client profile. "
+      : "";
+    const reportNote = hasNoReportDiag
+      ? "No reports on file for active client. "
+      : "";
+    return {
+      type: "reporting_data",
+      label: "Reporting / Data Bottleneck",
+      proofData: `${conflictNote}${reportNote}Active diagnostics: ${diagnostics.filter((d) => d.severity !== "info").length}.`,
+      likelyMeaning:
+        "Visibility is limited. Missing or conflicting data makes accurate diagnosis and reliable optimization decisions impossible.",
+      nextAction: hasDataConflictDiag
+        ? "Verify integration credentials in Settings → Integrations. Reconcile any mismatched IDs before assuming the data is correct."
+        : "Generate a weekly report draft to establish a performance baseline for this client.",
+      notToDo:
+        "Do not make ad performance decisions based on conflicting or missing data.",
+      dataConfidence: "low",
+    };
+  }
+
+  // No bottleneck
+  return {
+    type: "none",
+    label: "No Bottleneck Detected",
+    proofData: `Launch readiness: ${launchReadiness.score}/${launchReadiness.maxScore}. Active diagnostics: ${diagnostics.filter((d) => d.severity !== "info").length}.`,
+    likelyMeaning:
+      "No critical bottleneck detected based on available data. Client appears to be operating within acceptable parameters.",
+    nextAction: launchReadiness.isReady
+      ? "Monitor performance metrics. Look for optimization opportunities — creative refresh, audience expansion, or report updates."
+      : `Complete remaining launch requirements: ${launchReadiness.missing.slice(0, 2).join(", ")}.`,
+    notToDo:
+      "Do not scale ad spend without consistent 30+ day performance data showing CPL and booking rate on target.",
+    dataConfidence:
+      performance.leads > 20 ? "high" : performance.leads > 5 ? "medium" : "low",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Build a full brain for one client using available ctx data
 // ─────────────────────────────────────────────────────────────
 
@@ -558,8 +1046,38 @@ export function buildClientBrain(
   };
 
   const intelligence = clientIntelligence ?? null;
-  const launchReadiness = checkLaunchReadiness(client, approvedAssets, drafts, intelligence);
-  const diagnostics = runDiagnosticsForClient(client, performance, {
+
+  const integrations = {
+    metaConnected: !!client.metaAccountId && !isValuePending(client.metaAccountId),
+    pixelInstalled: !!client.pixelId && !isValuePending(client.pixelId),
+    fbPageConnected: !!client.fbPageId && !isValuePending(client.fbPageId),
+    ghlConnected: !!client.ghlLocationId && !isValuePending(client.ghlLocationId),
+    hasActiveMetaCampaigns,
+    activeCampaignCount: activeCampaigns.length,
+  };
+
+  // Detect data conflicts before computing launch readiness (feeds hasDataConflicts)
+  const conflictFindings = detectAdditionalDataConflicts(
+    client,
+    drafts,
+    recentReports,
+    assets,
+    ctx.integrationConnections ?? []
+  );
+  const hasDataConflicts = conflictFindings.length > 0;
+
+  const launchReadiness = checkLaunchReadiness(
+    client,
+    approvedAssets,
+    drafts,
+    intelligence,
+    pendingApprovals,
+    ctx.integrationConnections ?? [],
+    recentReports,
+    hasDataConflicts
+  );
+
+  const baseDiagnostics = runDiagnosticsForClient(client, performance, {
     approvedAssets,
     pendingAssets,
     drafts,
@@ -569,6 +1087,29 @@ export function buildClientBrain(
     hasActiveMetaCampaigns,
     isRoofing,
     integrationConnections: ctx.integrationConnections,
+  });
+
+  const diagnostics = [...baseDiagnostics, ...conflictFindings];
+
+  const healthScore = computeClientHealthScore({
+    integrations,
+    performance,
+    intelligence,
+    approvedAssets,
+    drafts,
+    pendingApprovals,
+    recentReports,
+    diagnostics,
+    clientStatus: client.status,
+  });
+
+  const bottleneck = classifyBottleneck({
+    integrations,
+    performance,
+    intelligence,
+    approvedAssets,
+    diagnostics,
+    launchReadiness,
   });
 
   return {
@@ -584,16 +1125,7 @@ export function buildClientBrain(
       offer: client.offer,
       notes: client.notes,
     },
-    integrations: {
-      metaConnected:
-        !!client.metaAccountId && !isValuePending(client.metaAccountId),
-      pixelInstalled: !!client.pixelId && !isValuePending(client.pixelId),
-      fbPageConnected: !!client.fbPageId && !isValuePending(client.fbPageId),
-      ghlConnected:
-        !!client.ghlLocationId && !isValuePending(client.ghlLocationId),
-      hasActiveMetaCampaigns,
-      activeCampaignCount: activeCampaigns.length,
-    },
+    integrations,
     performance,
     intelligence,
     approvedAssets,
@@ -603,6 +1135,8 @@ export function buildClientBrain(
     recentReports,
     launchReadiness,
     diagnostics,
+    healthScore,
+    bottleneck,
   };
 }
 
@@ -617,9 +1151,13 @@ function buildAllDiagnosticSummary(ctx: VeronicaPortalContext): string {
     const brain = buildClientBrain(client, ctx);
     const { launchReadiness: lr, performance: p, diagnostics } = brain;
 
+    const { healthScore: hs, bottleneck: bn } = brain;
     summary += `\n### ${client.name} (${client.status})\n`;
+    summary += `Health: ${hs.score}/100 [${hs.status.toUpperCase()}] | Bottleneck type: ${bn.type} | Status: ${lr.launchStatus}\n`;
+    if (hs.topBlocker) summary += `Top blocker: ${hs.topBlocker}\n`;
     summary += `Launch readiness: ${lr.score}/${lr.maxScore}${lr.isReady ? " ✓ READY" : " — NOT READY"}\n`;
-    if (lr.missing.length > 0) summary += `Missing: ${lr.missing.join(", ")}\n`;
+    if (lr.blockingItems.length > 0) summary += `Blocking items: ${lr.blockingItems.join(", ")}\n`;
+    else if (lr.missing.length > 0) summary += `Missing (non-blocking): ${lr.missing.join(", ")}\n`;
 
     if (p.leads > 0 || client.status === "active") {
       const cplLabel =
@@ -846,16 +1384,63 @@ ${JSON.stringify(reportSummaries, null, 2)}`;
 6. Client intelligence extracted
 7. Campaign draft approved (ready_for_meta or approved status)
 
+## Bottleneck Classification — Use These Types in Every Diagnosis
+Every client bottleneck must be classified as one of these five types. The pre-computed diagnostics include a bottleneck type per client — use it.
+
+- **setup**: Missing Meta, GHL, pixel, no approved creatives, no intelligence — client cannot launch
+- **ad**: High CPL, low leads despite active campaigns, stale creative, ad fatigue
+- **followup**: Good lead volume but low booked appointments, GHL connected but 0 bookings, speed-to-lead failure
+- **sales_show**: Booked appointments but show rate below 65% — post-booking conversion problem
+- **reporting_data**: Stale/missing reports, conflicting data between integration_connections and client profile
+- **none**: No significant bottleneck detected
+
+For every bottleneck, explain:
+1. What the bottleneck type is and why
+2. What data proves it (specific numbers)
+3. What it likely means (root cause)
+4. What Vault Co should do next (one safe action)
+5. What NOT to do yet
+
+When a conflict is detected (signal starts with "This is a data mismatch"), say so explicitly before diagnosing performance.
+
+## Weekly Priority Grouping
+When asked about this week's priorities, group work into these four buckets:
+
+**Critical today** — actively losing money or blocking live spend
+- Active clients with zero bookings despite leads
+- Active clients with CPL above 2x benchmark
+- Active clients with show rate below 50%
+- High-priority approvals blocking launch
+
+**This week** — important but not immediately burning
+- Pending campaign draft approvals
+- Active clients with no reports
+- Clients with launchStatus=blocked (missing credentials/creative)
+- Active clients with booking rate below 30%
+
+**Monitor** — watch but no immediate action needed
+- Warning-level diagnostics
+- Creative fatigue (30+ days old, still running)
+- Missing intelligence for non-active clients
+- GHL pipeline or sync warnings
+
+**Can wait** — low urgency
+- Info-level items
+- Non-active client onboarding advancement
+- Optimization opportunities with no current waste
+
 ## Reasoning Format for Strategy and Performance Questions
 When answering strategy, bottleneck, performance, or "what should we do" questions, structure your reply like this:
 
 1. Direct answer — one sentence
 2. What the data shows — specific numbers from the portal
-3. What it likely means — cause diagnosis based on the rules above
+3. What it likely means — cause diagnosis using the bottleneck types above
 4. Recommended next action — one specific, safe, actionable step
 5. What NOT to do — what would be unsafe or premature
+6. Data confidence: high / medium / low — be explicit
+7. Data sources used — list only sources actually consulted
 
-This format applies to questions like: "What is the bottleneck?", "Should we scale?", "Why are there leads but no bookings?", "What should we fix first?", "What do we do next this week?"
+For simple factual questions, keep it short. The full format is for strategy, diagnosis, and "what should we do" questions only.
 
 ## What Veronica Can Recommend (Safe Actions)
 - Generate campaign draft (for human approval)
@@ -908,13 +1493,17 @@ function formatReasoningReply(
   dataShows: string,
   likelyMeans: string,
   recommendedAction: string,
-  notToDo?: string
+  notToDo?: string,
+  dataConfidence?: "high" | "medium" | "low",
+  dataSources?: string[]
 ): string {
   let reply = `${directAnswer}\n\n`;
   reply += `What the data shows:\n${dataShows}\n\n`;
   reply += `What it likely means:\n${likelyMeans}\n\n`;
   reply += `Recommended next action:\n${recommendedAction}`;
   if (notToDo) reply += `\n\nDo not:\n${notToDo}`;
+  if (dataConfidence) reply += `\n\nData confidence: ${dataConfidence.toUpperCase()}`;
+  if (dataSources && dataSources.length > 0) reply += `\nData sources: ${dataSources.join(", ")}`;
   return reply;
 }
 
@@ -993,6 +1582,23 @@ export function mockVeronicaResponse(
   const isThisWeek =
     (msg.includes("this week") || msg.includes("next week") || msg.includes("today")) &&
     (msg.includes("do") || msg.includes("focus") || msg.includes("priorit") || msg.includes("what should"));
+  const isAtRisk =
+    msg.includes("at risk") ||
+    (msg.includes("which client") && msg.includes("risk")) ||
+    msg.includes("risk this week");
+  const isFocusFirst =
+    msg.includes("focus on first") ||
+    msg.includes("focus first") ||
+    msg.includes("highest priority client") ||
+    (msg.includes("which client") && (msg.includes("first") || msg.includes("should we focus")));
+  const isFollowupIssue =
+    (msg.includes("follow-up") || msg.includes("follow up") || msg.includes("followup")) &&
+    (msg.includes("bottleneck") || msg.includes("issue") || msg.includes("problem") ||
+      msg.includes("which client"));
+  const isMissingReports =
+    msg.includes("missing report") ||
+    msg.includes("no report") ||
+    (msg.includes("which client") && msg.includes("report") && !msg.includes("generate"));
 
   // ────────────────────────────────────────────────────────────
   // Handler: Ad spend / scaling decision
@@ -1047,6 +1653,195 @@ export function mockVeronicaResponse(
         { label: "Analytics Dashboard", href: "/analytics" },
         { label: "Campaign Builder", href: "/ai-agent" },
       ],
+      mockMode: true,
+      provider: "mock",
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Handler: Which clients are at risk
+  // ────────────────────────────────────────────────────────────
+  if (isAtRisk && !mentionedClient) {
+    const allBrains = clients.map((c) => buildClientBrain(c, ctx));
+    const atRisk = allBrains.filter(
+      (b) => b.healthScore.status === "at_risk" || b.healthScore.status === "blocked"
+    );
+    const watching = allBrains.filter((b) => b.healthScore.status === "watch");
+    const healthy = allBrains.filter((b) => b.healthScore.status === "healthy");
+
+    let reply = "Client Risk Assessment\n\n";
+
+    if (atRisk.length > 0) {
+      reply += `At Risk / Blocked (${atRisk.length}):\n`;
+      atRisk.forEach((b) => {
+        reply += `- ${b.profile.name} — Health: ${b.healthScore.score}/100 [${b.healthScore.status.toUpperCase()}] | Bottleneck: ${b.bottleneck.label}\n`;
+        if (b.healthScore.topBlocker) reply += `  Top blocker: ${b.healthScore.topBlocker}\n`;
+        reply += `  Next action: ${b.bottleneck.type !== "none" ? b.bottleneck.nextAction : b.healthScore.nextBestAction}\n`;
+      });
+      reply += "\n";
+    }
+    if (watching.length > 0) {
+      reply += `Watch (${watching.length}):\n`;
+      watching.forEach((b) => {
+        reply += `- ${b.profile.name} — Health: ${b.healthScore.score}/100 | Bottleneck: ${b.bottleneck.label}\n`;
+        if (b.healthScore.riskReasons.length > 0)
+          reply += `  Risks: ${b.healthScore.riskReasons.slice(0, 2).join("; ")}\n`;
+      });
+      reply += "\n";
+    }
+    if (healthy.length > 0) {
+      reply += `Healthy (${healthy.length}): ${healthy.map((b) => b.profile.name).join(", ")}\n`;
+    }
+    if (atRisk.length === 0 && watching.length === 0) {
+      reply += "No clients are currently at risk. All clients show healthy or watch-level health scores.";
+    }
+
+    return {
+      reply,
+      dataSources: ["clients", "campaign_drafts", "reports", "creative_assets", "client_intelligence"],
+      relatedLinks: [
+        { label: "All Clients", href: "/clients" },
+        { label: "Approvals Queue", href: "/approvals" },
+      ],
+      mockMode: true,
+      provider: "mock",
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Handler: Which client should we focus on first
+  // ────────────────────────────────────────────────────────────
+  if (isFocusFirst && !mentionedClient) {
+    const allBrains = clients.map((c) => buildClientBrain(c, ctx));
+    // Sort by health score ascending (lowest = most urgent)
+    const ranked = [...allBrains].sort((a, b) => a.healthScore.score - b.healthScore.score);
+    const top = ranked[0];
+
+    if (!top) {
+      return {
+        reply: "No client data available to rank priorities.",
+        dataSources: ["clients"],
+        mockMode: true,
+        provider: "mock",
+      };
+    }
+
+    let reply = formatReasoningReply(
+      `Focus on ${top.profile.name} first — Health: ${top.healthScore.score}/100 [${top.healthScore.status.toUpperCase()}], Bottleneck: ${top.bottleneck.label}.`,
+      `${top.profile.name} health breakdown:\n${top.healthScore.riskReasons.slice(0, 4).map((r) => `- ${r}`).join("\n") || "- No risk reasons recorded"}\n\nOther clients by priority:\n${ranked
+        .slice(1, 4)
+        .map((b) => `- ${b.profile.name}: ${b.healthScore.score}/100 [${b.healthScore.status}] | ${b.bottleneck.label}`)
+        .join("\n")}`,
+      top.bottleneck.likelyMeaning,
+      top.healthScore.nextBestAction,
+      top.bottleneck.notToDo,
+      top.bottleneck.dataConfidence,
+      ["clients", "campaign_drafts", "reports", "creative_assets"]
+    );
+
+    return {
+      reply,
+      dataSources: ["clients", "campaign_drafts", "reports", "creative_assets", "client_intelligence"],
+      relatedLinks: [
+        { label: `View ${top.profile.name}`, href: `/clients/${top.profile.id}` },
+        { label: "All Clients", href: "/clients" },
+      ],
+      actionSuggested: top.launchReadiness.missing.includes("Campaign draft approved or ready")
+        ? { label: `Build Campaign for ${top.profile.name}`, href: "/ai-agent" }
+        : undefined,
+      mockMode: true,
+      provider: "mock",
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Handler: Which clients have follow-up bottlenecks
+  // ────────────────────────────────────────────────────────────
+  if (isFollowupIssue && !mentionedClient) {
+    const allBrains = clients.map((c) => buildClientBrain(c, ctx));
+    const followupClients = allBrains.filter((b) => b.bottleneck.type === "followup");
+    const noBookingClients = allBrains.filter(
+      (b) => b.performance.leads > 0 && b.performance.booked === 0 && b.bottleneck.type !== "followup"
+    );
+
+    let reply = "Follow-Up Bottleneck Analysis\n\n";
+    if (followupClients.length > 0) {
+      reply += `Clients with confirmed follow-up bottleneck (${followupClients.length}):\n\n`;
+      followupClients.forEach((b) => {
+        reply += `${b.profile.name}\n`;
+        reply += `- ${b.bottleneck.proofData}\n`;
+        reply += `- Likely cause: ${b.bottleneck.likelyMeaning}\n`;
+        reply += `- Next action: ${b.bottleneck.nextAction}\n`;
+        reply += `- Do not: ${b.bottleneck.notToDo}\n\n`;
+      });
+    }
+    if (noBookingClients.length > 0) {
+      reply += `Also flagged — leads but zero bookings (may be setup or data issue):\n`;
+      noBookingClients.forEach((b) => {
+        reply += `- ${b.profile.name}: ${b.performance.leads} leads, 0 booked | Bottleneck type: ${b.bottleneck.type}\n`;
+      });
+      reply += "\n";
+    }
+    if (followupClients.length === 0 && noBookingClients.length === 0) {
+      reply += "No clients currently show follow-up bottleneck signals. All clients with leads have positive booking activity.";
+    }
+
+    return {
+      reply,
+      dataSources: ["clients", "integration_connections", "reports"],
+      relatedLinks: [
+        { label: "Settings & Integrations", href: "/settings" },
+        { label: "Analytics Dashboard", href: "/analytics" },
+      ],
+      mockMode: true,
+      provider: "mock",
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Handler: Which clients are missing reports
+  // ────────────────────────────────────────────────────────────
+  if (isMissingReports && !mentionedClient) {
+    const activeClients = clients.filter((c) => c.status === "active");
+    const missingReports = activeClients.filter(
+      (c) => !reports.some((r) => r.clientId === c.id)
+    );
+    const hasReports = activeClients.filter((c) =>
+      reports.some((r) => r.clientId === c.id)
+    );
+
+    let reply = "Report Coverage — Active Clients\n\n";
+    if (missingReports.length > 0) {
+      reply += `Missing reports (${missingReports.length} active clients):\n`;
+      missingReports.forEach((c) => {
+        const brain = buildClientBrain(c, ctx);
+        reply += `- ${c.name} (${c.market}) | Health: ${brain.healthScore.score}/100 | Leads: ${c.stats.leads} | CPL: ${c.stats.cpl}\n`;
+      });
+      reply += `\nRecommendation: Generate a weekly report draft for each of these clients. Active clients should receive weekly reporting.\n`;
+    }
+    if (hasReports.length > 0) {
+      const withReports = hasReports.map((c) => {
+        const r = reports.filter((r) => r.clientId === c.id).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )[0];
+        return `- ${c.name}: last report ${r?.reportPeriod ?? "unknown period"}`;
+      });
+      reply += `\nReports on file (${hasReports.length}):\n${withReports.join("\n")}`;
+    }
+    if (activeClients.length === 0) {
+      reply += "No active clients found.";
+    }
+
+    return {
+      reply,
+      dataSources: ["clients", "reports"],
+      relatedLinks: [
+        { label: "Reports", href: "/reports" },
+        { label: "All Clients", href: "/clients" },
+      ],
+      actionSuggested: missingReports.length > 0
+        ? { label: "Generate Report Draft", href: "/reports" }
+        : undefined,
       mockMode: true,
       provider: "mock",
     };
@@ -1150,13 +1945,11 @@ export function mockVeronicaResponse(
   }
 
   // ────────────────────────────────────────────────────────────
-  // Handler: This week priorities (weekly ops)
+  // Handler: This week priorities — 4 groups
   // ────────────────────────────────────────────────────────────
   if (isThisWeek) {
     const allBrains = clients.map((c) => buildClientBrain(c, ctx));
     const allDiagnostics = allBrains.flatMap((b) => b.diagnostics);
-    const criticals = allDiagnostics.filter((d) => d.severity === "critical");
-    const warnings = allDiagnostics.filter((d) => d.severity === "warning");
     const pendingDrafts = campaignDrafts.filter(
       (d) => d.status === "needs_review" || d.approvalStatus === "needs_review"
     );
@@ -1164,54 +1957,129 @@ export function mockVeronicaResponse(
       .filter((c) => c.status === "active")
       .filter((c) => !reports.some((r) => r.clientId === c.id));
 
-    let reply = "Vault Co — This Week's Priority Actions\n\n";
-    let priority = 1;
-
-    if (criticals.length > 0) {
-      const uniqueCriticals = criticals.filter(
-        (d, i, arr) => arr.findIndex((x) => x.signal === d.signal) === i
+    // ── Critical today ──
+    const criticalTodayItems: string[] = [];
+    // Active clients with zero bookings despite leads
+    allBrains.forEach((b) => {
+      if (b.profile.status === "active" && b.performance.leads > 0 && b.performance.booked === 0)
+        criticalTodayItems.push(
+          `⚠ ${b.profile.name}: ${b.performance.leads} leads, 0 booked — speed-to-lead or GHL failure`
+        );
+    });
+    // Active clients with CPL above 2x benchmark
+    allBrains.forEach((b) => {
+      const cplNum = parseFloat(b.performance.cpl.replace(/[^0-9.]/g, "")) || 0;
+      if (b.profile.status === "active" && b.performance.cplStatus === "above_target" && cplNum > b.performance.cplBenchmark * 2)
+        criticalTodayItems.push(
+          `⚠ ${b.profile.name}: CPL ${b.performance.cpl} — above 2x $${b.performance.cplBenchmark} threshold`
+        );
+    });
+    // Active clients with show rate < 50%
+    allBrains.forEach((b) => {
+      const showNum = parseFloat(b.performance.showRate.replace(/[^0-9.]/g, "")) || 0;
+      if (b.profile.status === "active" && showNum > 0 && showNum < 50)
+        criticalTodayItems.push(
+          `⚠ ${b.profile.name}: Show rate ${b.performance.showRate} — below 50% critical threshold`
+        );
+    });
+    // High-priority approvals
+    const highPriorityApprovals = approvals.filter((a) => a.priority === "high");
+    if (highPriorityApprovals.length > 0)
+      criticalTodayItems.push(
+        `⚠ ${highPriorityApprovals.length} high-priority approval(s) pending: ${highPriorityApprovals
+          .slice(0, 2)
+          .map((a) => `${a.item} (${a.clientName})`)
+          .join(", ")}`
       );
-      reply += `${priority++}. Resolve ${uniqueCriticals.length} critical issue(s)\n`;
-      uniqueCriticals.slice(0, 4).forEach((d) => {
-        reply += `   ⚠ ${d.clientName}: ${d.signal}\n   → ${d.recommendation}\n`;
-      });
+
+    // ── This week ──
+    const thisWeekItems: string[] = [];
+    if (pendingDrafts.length > 0)
+      thisWeekItems.push(
+        `Review ${pendingDrafts.length} campaign draft(s): ${pendingDrafts
+          .slice(0, 2)
+          .map((d) => `${d.campaignName} (${d.clientName || d.clientId})`)
+          .join(", ")}`
+      );
+    if (activeNoReports.length > 0)
+      thisWeekItems.push(
+        `Generate weekly reports for: ${activeNoReports.map((c) => c.name).join(", ")}`
+      );
+    allBrains.forEach((b) => {
+      if (b.launchReadiness.launchStatus === "blocked" && b.profile.status !== "active")
+        thisWeekItems.push(
+          `${b.profile.name}: Launch blocked — missing ${b.launchReadiness.blockingItems.slice(0, 2).join(", ")}`
+        );
+    });
+    allBrains.forEach((b) => {
+      if (
+        b.profile.status === "active" &&
+        b.performance.bookingStatus === "below_target" &&
+        b.performance.bookingRate >= 15 &&
+        b.performance.booked > 0
+      )
+        thisWeekItems.push(
+          `${b.profile.name}: Booking rate ${b.performance.bookingRate}% — below 30% target, audit GHL follow-up speed`
+        );
+    });
+
+    // ── Monitor ──
+    const monitorItems: string[] = [];
+    const uniqueWarnings = allDiagnostics
+      .filter((d) => d.severity === "warning")
+      .filter((d, i, arr) => arr.findIndex((x) => x.signal === d.signal) === i)
+      .slice(0, 4);
+    uniqueWarnings.forEach((d) =>
+      monitorItems.push(`${d.clientName}: ${d.signal}`)
+    );
+    allBrains.forEach((b) => {
+      if (!b.intelligence && b.profile.status !== "active")
+        monitorItems.push(`${b.profile.name}: Client intelligence not extracted`);
+    });
+
+    // ── Can wait ──
+    const canWaitItems: string[] = [];
+    allDiagnostics
+      .filter((d) => d.severity === "info")
+      .filter((d, i, arr) => arr.findIndex((x) => x.signal === d.signal) === i)
+      .slice(0, 3)
+      .forEach((d) => canWaitItems.push(`${d.clientName}: ${d.signal}`));
+    allBrains.forEach((b) => {
+      if (
+        b.launchReadiness.launchStatus === "almost_ready" &&
+        b.profile.status !== "active"
+      )
+        canWaitItems.push(
+          `${b.profile.name}: Almost launch-ready — missing ${b.launchReadiness.missing.slice(0, 2).join(", ")}`
+        );
+    });
+
+    let reply = "Vault Co — This Week's Priorities\n\n";
+
+    if (criticalTodayItems.length > 0) {
+      reply += "CRITICAL TODAY\n";
+      criticalTodayItems.forEach((item) => (reply += `- ${item}\n`));
       reply += "\n";
     }
-
-    if (pendingDrafts.length > 0) {
-      reply += `${priority++}. Review ${pendingDrafts.length} campaign draft(s) in the approval queue\n`;
-      pendingDrafts.slice(0, 3).forEach((d) => {
-        reply += `   - ${d.campaignName} (${d.clientName || d.clientId})\n`;
-      });
+    if (thisWeekItems.length > 0) {
+      reply += "THIS WEEK\n";
+      thisWeekItems.forEach((item) => (reply += `- ${item}\n`));
       reply += "\n";
     }
-
-    if (activeNoReports.length > 0) {
-      reply += `${priority++}. Generate weekly reports for ${activeNoReports.length} active client(s)\n`;
-      activeNoReports.forEach((c) => (reply += `   - ${c.name} (${c.market})\n`));
+    if (monitorItems.length > 0) {
+      reply += "MONITOR\n";
+      monitorItems.forEach((item) => (reply += `- ${item}\n`));
       reply += "\n";
     }
-
-    if (warnings.length > 0) {
-      const uniqueWarnings = warnings
-        .filter((d, i, arr) => arr.findIndex((x) => x.signal === d.signal) === i)
-        .slice(0, 3);
-      reply += `${priority++}. Address ${warnings.length} warning(s)\n`;
-      uniqueWarnings.forEach((d) => {
-        reply += `   • ${d.clientName}: ${d.signal}\n`;
-      });
-      reply += "\n";
+    if (canWaitItems.length > 0) {
+      reply += "CAN WAIT\n";
+      canWaitItems.forEach((item) => (reply += `- ${item}\n`));
     }
-
-    const notReady = allBrains.filter((b) => !b.launchReadiness.isReady && b.profile.status !== "active");
-    if (notReady.length > 0) {
-      reply += `${priority++}. Advance onboarding for ${notReady.length} client(s)\n`;
-      notReady.forEach((b) => {
-        reply += `   - ${b.profile.name}: missing ${b.launchReadiness.missing.slice(0, 2).join(", ")}\n`;
-      });
-    }
-
-    if (priority === 1) {
+    if (
+      criticalTodayItems.length === 0 &&
+      thisWeekItems.length === 0 &&
+      monitorItems.length === 0
+    ) {
       reply += "No urgent actions this week. All clients are in good standing.";
     }
 
@@ -1353,42 +2221,44 @@ export function mockVeronicaResponse(
   if (mentionedClient) {
     const c = mentionedClient;
     const brain = buildClientBrain(c, ctx);
-    const { performance: p, launchReadiness: lr, diagnostics, integrations, approvedAssets, pendingAssets } = brain;
+    const { performance: p, launchReadiness: lr, diagnostics, integrations, approvedAssets, pendingAssets, bottleneck: bn, healthScore: hs } = brain;
 
     // Bottleneck / issue / performance question → structured reasoning format
     if (isBottleneck || isPerformance || isScaling) {
       const criticals = diagnostics.filter((d) => d.severity === "critical");
       const warnings = diagnostics.filter((d) => d.severity === "warning");
-      const topIssue = criticals[0] ?? warnings[0];
 
-      const directAnswer = topIssue
-        ? `The primary bottleneck for ${c.name} is: ${topIssue.signal}.`
-        : `${c.name} has no critical issues at this time. The main focus should be advancing to launch-readiness (${lr.score}/${lr.maxScore}).`;
+      const directAnswer = bn.type !== "none"
+        ? `The primary bottleneck for ${c.name} is a ${bn.label} — Health: ${hs.score}/100 [${hs.status.toUpperCase()}].`
+        : `${c.name} has no critical bottleneck detected — Health: ${hs.score}/100 [${hs.status.toUpperCase()}]. Launch readiness: ${lr.score}/${lr.maxScore}.`;
 
-      let dataShows = `Status: ${c.status} | Market: ${c.market}\n`;
+      let dataShows = `Status: ${c.status} | Market: ${c.market} | Health: ${hs.score}/100 [${hs.status}]\n`;
       dataShows += `Leads: ${p.leads} | Booked: ${p.booked} (${p.bookingRate}% booking rate) | CPL: ${p.cpl} | Show Rate: ${p.showRate}\n`;
       dataShows += `Spend: ${p.spend} | Pipeline: ${p.pipeline} | Revenue: ${p.revenue}\n`;
       dataShows += `Meta: ${integrations.metaConnected ? "connected" : "NOT connected"} | Pixel: ${integrations.pixelInstalled ? "installed" : "NOT installed"} | GHL: ${integrations.ghlConnected ? "connected" : "NOT connected"}\n`;
-      dataShows += `Active campaigns: ${integrations.activeCampaignCount} | Approved creatives: ${approvedAssets.length} | Intelligence: ${brain.intelligence ? "extracted" : "missing"}`;
+      dataShows += `Active campaigns: ${integrations.activeCampaignCount} | Approved creatives: ${approvedAssets.length} | Intelligence: ${brain.intelligence ? "extracted" : "missing"}\n`;
+      if (bn.type !== "none") dataShows += `Bottleneck proof: ${bn.proofData}`;
 
-      const likelyMeans = topIssue
-        ? topIssue.likelyCause
-        : `${c.name} is in ${c.status} phase and missing ${lr.missing.length} of 7 launch requirements. No live campaign means no performance data yet.`;
+      const likelyMeans = bn.type !== "none"
+        ? bn.likelyMeaning
+        : `${c.name} is in ${c.status} phase. ${lr.missing.length > 0 ? `Still missing ${lr.missing.length} of ${lr.maxScore} launch requirements.` : "All launch requirements met."}`;
 
-      const recommendedAction = topIssue
-        ? topIssue.recommendation
+      const recommendedAction = bn.type !== "none"
+        ? bn.nextAction
         : lr.missing.length > 0
-        ? `Complete the missing setup items: ${lr.missing.slice(0, 3).join(", ")}. Use Settings → Integrations for credentials and Creative Library for assets.`
-        : "All launch requirements met. Generate a campaign draft and submit for approval.";
+        ? `Complete: ${lr.missing.slice(0, 3).join(", ")}. Use Settings → Integrations for credentials and Creative Library for assets.`
+        : "All requirements met. Generate a campaign draft and submit for approval.";
 
-      const notToDo = topIssue ? topIssue.blocked : undefined;
+      const notToDo = bn.type !== "none" ? bn.notToDo : (criticals[0]?.blocked ?? warnings[0]?.blocked);
 
       const reply = formatReasoningReply(
         directAnswer,
         dataShows,
         likelyMeans,
         recommendedAction,
-        notToDo
+        notToDo,
+        bn.dataConfidence,
+        ["clients", "campaign_drafts", "reports", "creative_assets", "client_intelligence"]
       );
 
       const links: VeronicaRelatedLink[] = [

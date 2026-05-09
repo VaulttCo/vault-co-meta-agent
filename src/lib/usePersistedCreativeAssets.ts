@@ -77,6 +77,11 @@ export interface UsePersistedCreativeAssetsResult {
   /** Add a new asset and persist it */
   addAsset: (asset: CreativeAsset) => Promise<void>;
   /**
+   * Prepend an asset to local state only — no DB write.
+   * Use this after saveFile() has already written the DB row.
+   */
+  prependAsset: (asset: CreativeAsset) => void;
+  /**
    * Optimistically update a persisted asset in local state.
    * Used after approve/needs-review API calls succeed.
    */
@@ -270,5 +275,14 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     ),
   ];
 
-  return { allAssets, uploadedAssets, addAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults };
+  // ── Prepend asset (local state only, no DB write) ────────────────────────────
+  const prependAsset = useCallback((asset: CreativeAsset) => {
+    setUploadedAssets((prev) => {
+      const next = [asset, ...prev];
+      if (!usingSupabase) saveToLocalStorage(next);
+      return next;
+    });
+  }, [usingSupabase]);
+
+  return { allAssets, uploadedAssets, addAsset, prependAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults };
 }

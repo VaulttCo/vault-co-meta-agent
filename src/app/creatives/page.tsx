@@ -52,6 +52,8 @@ import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
 import { useAuth } from "@/components/AuthProvider";
 import type { CreativeAnalysis } from "@/lib/agents/creativeAnalysis";
+import { getStorageProvider } from "@/lib/storage/storage-provider";
+import { type ClientFile, mimeToFileType } from "@/lib/storage/types";
 
 // ─────────────────────────────────────────────────────────────
 // Extended analysis type (Anthropic adds quality score etc.)
@@ -352,7 +354,16 @@ function AssetDetailModal({
             <div className="p-5 space-y-4 border-b md:border-b-0 md:border-r border-[rgba(0,129,242,0.15)]">
               {/* Preview */}
               <div className="h-48 bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
-                <AssetThumbnail asset={asset} />
+                {asset.fileType === "video" && asset.storageUrl ? (
+                  <video
+                    controls
+                    src={asset.storageUrl}
+                    className="w-full h-full object-contain bg-black"
+                    preload="metadata"
+                  />
+                ) : (
+                  <AssetThumbnail asset={asset} />
+                )}
               </div>
 
               {/* Status badges */}
@@ -535,9 +546,14 @@ function UploadModal({
   usingSupabase: boolean;
   clients: Client[];
 }) {
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pickedFileName, setPickedFileName] = useState<string | null>(null);
+  const [selectedBlob, setSelectedBlob] = useState<File | null>(null);
+  const [fileSize, setFileSize] = useState(0);
+  const [mimeType, setMimeType] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [form, setForm] = useState({
     fileName: "",
     fileType: "video" as "image" | "video",
@@ -552,11 +568,16 @@ function UploadModal({
     approvedForAds: false,
   });
   const selectedClient = clients.find((c) => c.id === form.clientId);
+  const storageProvider = getStorageProvider();
+  const isRealStorage = storageProvider.name === "supabase";
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedBlob(file);
       setPickedFileName(file.name);
+      setFileSize(file.size);
+      setMimeType(file.type || "application/octet-stream");
       setForm((prev) => ({
         ...prev,
         fileName: file.name,
@@ -569,26 +590,62 @@ function UploadModal({
     if (!form.fileName || !form.clientId) return;
     const client = clients.find((c) => c.id === form.clientId);
     setSaving(true);
-    await onAdd({
-      id: `ca-new-${Date.now()}`,
-      clientId: form.clientId,
-      clientName: client?.name ?? form.clientId,
-      fileName: form.fileName,
-      fileType: form.fileType,
-      assetType: form.assetType,
-      category: form.category,
-      thumbnailUrl: null,
-      uploadDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      service: form.service || selectedClient?.services[0] || "",
-      market: form.market || selectedClient?.market || "",
-      campaignUseCase: form.campaignUseCase,
-      notes: form.notes,
-      status: form.status,
-      tags: [],
-      approvedForAds: form.approvedForAds,
-    });
-    setSaving(false);
-    onClose();
+    setSaveError(null);
+    try {
+      const uploadDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const assetId = `ca-new-${Date.now()}`;
+
+      // Build the ClientFile payload for the storage provider
+      const newFile: ClientFile & { _blob?: File } = {
+        id: assetId,
+        clientId: form.clientId,
+        fileName: form.fileName,
+        fileType: mimeType ? mimeToFileType(mimeType) : (form.fileType === "image" ? "image" : "video"),
+        fileSize,
+        mimeType: mimeType || (form.fileType === "image" ? "image/jpeg" : "video/mp4"),
+        category: "creative_asset",
+        storageUrl: isRealStorage ? "" : `/mock/files/${form.fileName}`,
+        thumbnailUrl: null,
+        uploadedBy: user?.name ?? user?.email ?? "Veronica",
+        uploadedAt: uploadDate,
+        notes: form.notes,
+        status: "active",
+        _blob: selectedBlob ?? undefined,
+      };
+
+      // Upload blob + upsert DB row via storage provider
+      const saved = await storageProvider.saveFile(newFile);
+
+      // Map returned ClientFile back to CreativeAsset for local state
+      const mappedAsset: CreativeAsset = {
+        id: saved.id,
+        clientId: saved.clientId,
+        clientName: client?.name ?? saved.clientId,
+        fileName: saved.fileName,
+        fileType: (saved.fileType === "image" || saved.fileType === "video") ? saved.fileType : form.fileType,
+        assetType: form.assetType,
+        category: form.category,
+        thumbnailUrl: saved.thumbnailUrl,
+        storageUrl: saved.storageUrl || undefined,
+        uploadDate,
+        service: form.service || selectedClient?.services[0] || "",
+        market: form.market || selectedClient?.market || "",
+        campaignUseCase: form.campaignUseCase,
+        notes: form.notes,
+        status: form.status,
+        tags: [],
+        approvedForAds: form.approvedForAds,
+      };
+
+      // onAdd updates local React state only (DB row already written by saveFile)
+      await onAdd(mappedAsset);
+      onClose();
+    } catch (err) {
+      console.error("[UploadModal] handleSubmit error:", err);
+      setSaveError(err instanceof Error ? err.message : "Upload failed — please try again");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const labelCls = "text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-1 block";
@@ -617,12 +674,19 @@ function UploadModal({
             )}
             <p className="text-[11px] text-[#6b7a99]">
               {usingSupabase ? (
-                <><span className="text-[#22c55e] font-semibold">Supabase connected. </span>Asset metadata will be saved to the database.</>
+                <><span className="text-[#22c55e] font-semibold">Supabase connected. </span>File will be uploaded to Supabase Storage and metadata saved to the database.</>
               ) : (
                 <><span className="text-[#f8f8f7] font-semibold">Local storage mode. </span>Asset metadata is saved in your browser and persists across refreshes.</>
               )}
             </p>
           </div>
+          {/* Upload error */}
+          {saveError && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-[#ef4444]/08 border border-[#ef4444]/25 rounded-lg">
+              <AlertCircle size={11} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-[#ef4444]">{saveError}</p>
+            </div>
+          )}
           {/* Drop zone */}
           <input
             ref={fileInputRef}
@@ -790,7 +854,7 @@ function UploadModal({
             disabled={!form.fileName || !form.clientId || saving}
             className="px-4 py-2 text-[12px] font-semibold vc-orange-gradient text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {saving ? "Saving…" : "Add Asset"}
+            {saving ? (usingSupabase && selectedBlob ? "Uploading…" : "Saving…") : "Add Asset"}
           </button>
         </div>
       </div>
@@ -1072,7 +1136,7 @@ function AssetCard({
 // ─────────────────────────────────────────────────────────────
 export default function CreativesPage() {
   const { can } = useAuth();
-  const { allAssets, addAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
+  const { allAssets, addAsset, prependAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
@@ -1571,7 +1635,7 @@ export default function CreativesPage() {
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onAdd={addAsset}
+          onAdd={async (asset) => { prependAsset(asset); }}
           usingSupabase={usingSupabase}
           clients={clients}
         />

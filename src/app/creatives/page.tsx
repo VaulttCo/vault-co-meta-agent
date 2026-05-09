@@ -594,21 +594,48 @@ function UploadModal({
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedBlob(file);
-      setPickedFileName(file.name);
-      setFileSize(file.size);
-      setMimeType(file.type || "application/octet-stream");
-      setForm((prev) => ({
-        ...prev,
-        fileName: file.name,
-        fileType: file.type.startsWith("image/") ? "image" : "video",
-      }));
+    if (!file) return;
+
+    // Resolve MIME type — iOS/macOS .MOV files often have file.type === ""
+    let resolvedMime = file.type;
+    if (!resolvedMime || resolvedMime === "application/octet-stream") {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const extMap: Record<string, string> = {
+        mov: "video/quicktime",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        avi: "video/x-msvideo",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        webp: "image/webp",
+      };
+      resolvedMime = extMap[ext] ?? (ext ? `video/${ext}` : "application/octet-stream");
     }
+
+    // Client-side size check — Supabase free tier default limit is 50 MB
+    const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+    if (file.size > MAX_BYTES) {
+      setSaveError(`File is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum allowed size is 100 MB.`);
+      return;
+    }
+
+    setSaveError(null);
+    setSelectedBlob(file);
+    setPickedFileName(file.name);
+    setFileSize(file.size);
+    setMimeType(resolvedMime);
+    setForm((prev) => ({
+      ...prev,
+      fileName: file.name,
+      fileType: resolvedMime.startsWith("image/") ? "image" : "video",
+    }));
   }
 
   async function handleSubmit() {
     if (!form.fileName || !form.clientId) return;
+    if (saving) return; // prevent double-submit
     const client = clients.find((c) => c.id === form.clientId);
     setSaving(true);
     setSaveError(null);
@@ -616,14 +643,17 @@ function UploadModal({
       const uploadDate = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       const assetId = `ca-new-${Date.now()}`;
 
+      // Resolve MIME — defensive fallback in case handleFileChange was skipped
+      const resolvedMime = mimeType || (form.fileType === "image" ? "image/jpeg" : "video/mp4");
+
       // Build the ClientFile payload for the storage provider
       const newFile: ClientFile & { _blob?: File } = {
         id: assetId,
         clientId: form.clientId,
         fileName: form.fileName,
-        fileType: mimeType ? mimeToFileType(mimeType) : (form.fileType === "image" ? "image" : "video"),
+        fileType: mimeToFileType(resolvedMime),
         fileSize,
-        mimeType: mimeType || (form.fileType === "image" ? "image/jpeg" : "video/mp4"),
+        mimeType: resolvedMime,
         category: "creative_asset",
         storageUrl: isRealStorage ? "" : `/mock/files/${form.fileName}`,
         thumbnailUrl: null,
@@ -635,15 +665,24 @@ function UploadModal({
       };
 
       // Upload blob + upsert DB row via storage provider
+      // saveFile() may silently swallow errors — we check the result
       const saved = await storageProvider.saveFile(newFile);
 
+      // If we sent a blob but got back no storageUrl, the upload silently failed
+      if (selectedBlob && isRealStorage && !saved.storageUrl) {
+        throw new Error("File upload failed — the file may be too large or the storage bucket may not be configured. Check the browser console for details.");
+      }
+
       // Map returned ClientFile back to CreativeAsset for local state
+      const resolvedFileType: "image" | "video" =
+        (saved.fileType === "image" || saved.fileType === "video") ? saved.fileType : form.fileType;
+
       const mappedAsset: CreativeAsset = {
         id: saved.id,
         clientId: saved.clientId,
         clientName: client?.name ?? saved.clientId,
         fileName: saved.fileName,
-        fileType: (saved.fileType === "image" || saved.fileType === "video") ? saved.fileType : form.fileType,
+        fileType: resolvedFileType,
         assetType: form.assetType,
         category: form.category,
         thumbnailUrl: saved.thumbnailUrl,
@@ -664,7 +703,10 @@ function UploadModal({
     } catch (err) {
       console.error("[UploadModal] handleSubmit error:", err);
       setSaveError(err instanceof Error ? err.message : "Upload failed — please try again");
+      setSaving(false); // ensure button re-enables on error
     } finally {
+      // setSaving(false) is called in catch; only call here if no error path
+      // (finally always runs, so we set it false here too for the success path)
       setSaving(false);
     }
   }
@@ -674,14 +716,14 @@ function UploadModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={saving ? undefined : onClose} />
       <div className="relative w-full max-w-lg bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0,129,242,0.15)]">
           <div className="flex items-center gap-2">
             <Film size={14} className="text-[#ff8400]" />
             <span className="text-[13px] font-semibold text-[#f8f8f7]">Upload Creative Asset</span>
           </div>
-          <button onClick={onClose} className="text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
+          <button onClick={saving ? undefined : onClose} disabled={saving} className="text-[#6b7a99] hover:text-[#f8f8f7] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             <X size={15} />
           </button>
         </div>
@@ -867,15 +909,26 @@ function UploadModal({
           </div>
         </div>
         <div className="px-5 py-4 border-t border-[rgba(0,129,242,0.15)] flex items-center justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-[12px] text-[#6b7a99] border border-[rgba(0,129,242,0.15)] rounded-lg hover:text-[#f8f8f7] transition-colors">
+          <button
+            onClick={saving ? undefined : onClose}
+            disabled={saving}
+            className="px-4 py-2 text-[12px] text-[#6b7a99] border border-[rgba(0,129,242,0.15)] rounded-lg hover:text-[#f8f8f7] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={!form.fileName || !form.clientId || saving}
-            className="px-4 py-2 text-[12px] font-semibold vc-orange-gradient text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 text-[12px] font-semibold vc-orange-gradient text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed min-w-[110px] justify-center"
           >
-            {saving ? (usingSupabase && selectedBlob ? "Uploading…" : "Saving…") : "Add Asset"}
+            {saving ? (
+              <>
+                <Loader2 size={12} className="animate-spin flex-shrink-0" />
+                <span>{usingSupabase && selectedBlob ? "Uploading…" : "Saving…"}</span>
+              </>
+            ) : (
+              "Add Asset"
+            )}
           </button>
         </div>
       </div>

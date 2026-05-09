@@ -16,6 +16,9 @@
 // AI analysis persistence path.
 //
 // Schema: creative_assets table has real storage_url text and thumbnail_url text columns.
+//
+// Error handling: saveFile() THROWS on upload failure so the caller (UploadModal)
+// can catch and display the error to the user instead of silently swallowing it.
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { StorageProvider } from "./storage-provider";
@@ -28,6 +31,25 @@ const META_SEPARATOR = "\n__META__:";
 
 // 1 year in seconds — long-lived signed URL for private video assets
 const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
+
+// Normalise MIME type — MOV files from iOS often arrive as "" or "application/octet-stream"
+function normaliseMime(mime: string, fileName: string): string {
+  if (mime && mime !== "application/octet-stream") return mime;
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const extMap: Record<string, string> = {
+    mov: "video/quicktime",
+    mp4: "video/mp4",
+    webm: "video/webm",
+    avi: "video/x-msvideo",
+    m4v: "video/x-m4v",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  return extMap[ext] ?? (ext ? `video/${ext}` : "application/octet-stream");
+}
 
 // Build a deterministic storage path: {clientId}/{timestamp}-{sanitisedFileName}
 function storagePath(clientId: string, fileName: string): string {
@@ -66,12 +88,6 @@ function toFileCategory(val: unknown): FileCategory {
     return val as FileCategory;
   }
   return "creative_asset";
-}
-
-// Check whether a URL looks like an expired Supabase signed URL
-// (token= param is present but the URL is a signed URL, not a public URL)
-function isSignedUrl(url: string): boolean {
-  return url.includes("/sign/") || url.includes("token=");
 }
 
 export class SupabaseStorageProvider implements StorageProvider {
@@ -163,10 +179,17 @@ export class SupabaseStorageProvider implements StorageProvider {
   // ── Upload + save file ────────────────────────────────────
   // The `_blob` property on ClientFile is a transient browser File object
   // attached by the upload modal before calling saveFile.
+  //
+  // THROWS on upload failure so the caller can show an error to the user.
 
   async saveFile(fileRecord: ClientFile & { _blob?: File }): Promise<ClientFile> {
     const supabase = this.db;
-    if (!supabase) return fileRecord;
+    if (!supabase) {
+      throw new Error("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    }
+
+    // Normalise MIME type — handles MOV files from iOS with empty file.type
+    const resolvedMime = normaliseMime(fileRecord.mimeType, fileRecord.fileName);
 
     let storageUrl = fileRecord.storageUrl;
     let thumbnailUrl = fileRecord.thumbnailUrl;
@@ -174,8 +197,8 @@ export class SupabaseStorageProvider implements StorageProvider {
     // If a real browser File blob is attached, upload it to Supabase Storage
     const blob = fileRecord._blob;
     if (blob) {
-      const isImage = fileRecord.mimeType.startsWith("image/");
-      const isVideo = fileRecord.mimeType.startsWith("video/");
+      const isImage = resolvedMime.startsWith("image/");
+      const isVideo = resolvedMime.startsWith("video/");
 
       if (isImage) {
         // ── Images: upload to public creative-thumbnails bucket ──────────────
@@ -186,32 +209,38 @@ export class SupabaseStorageProvider implements StorageProvider {
         const { data: thumbUpload, error: thumbError } = await (supabase as any).storage
           .from(THUMBS_BUCKET)
           .upload(thumbPath, blob, {
-            contentType: fileRecord.mimeType,
+            contentType: resolvedMime,
             upsert: true,
           });
 
         if (thumbError) {
-          console.error("[SupabaseStorageProvider] thumbnail upload:", thumbError.message);
-        } else {
-          const { data: pubData } = (supabase as any).storage
-            .from(THUMBS_BUCKET)
-            .getPublicUrl(thumbUpload?.path ?? thumbPath);
-
-          const publicUrl: string = pubData?.publicUrl ?? "";
-          if (publicUrl) {
-            storageUrl = publicUrl;
-            thumbnailUrl = publicUrl;
-          }
+          // Throw so the modal shows the error instead of silently failing
+          throw new Error(`Image upload failed: ${thumbError.message}`);
         }
 
-        // Also upload original to private creative-assets bucket for archival
+        const { data: pubData } = (supabase as any).storage
+          .from(THUMBS_BUCKET)
+          .getPublicUrl(thumbUpload?.path ?? thumbPath);
+
+        const publicUrl: string = pubData?.publicUrl ?? "";
+        if (publicUrl) {
+          storageUrl = publicUrl;
+          thumbnailUrl = publicUrl;
+        } else {
+          // Bucket may be private — fall back to signed URL
+          const { data: signed } = await (supabase as any).storage
+            .from(THUMBS_BUCKET)
+            .createSignedUrl(thumbUpload?.path ?? thumbPath, SIGNED_URL_TTL);
+          storageUrl = signed?.signedUrl ?? storageUrl;
+          thumbnailUrl = storageUrl;
+        }
+
+        // Also upload original to private creative-assets bucket for archival (non-blocking)
         const assetPath = storagePath(fileRecord.clientId, `original_${fileRecord.fileName}`);
-        await (supabase as any).storage
+        (supabase as any).storage
           .from(ASSETS_BUCKET)
-          .upload(assetPath, blob, {
-            contentType: fileRecord.mimeType,
-            upsert: true,
-          });
+          .upload(assetPath, blob, { contentType: resolvedMime, upsert: true })
+          .catch((e: Error) => console.warn("[SupabaseStorageProvider] archival upload:", e.message));
 
       } else if (isVideo) {
         // ── Videos: upload to private creative-assets bucket, get long-lived signed URL ──
@@ -220,24 +249,25 @@ export class SupabaseStorageProvider implements StorageProvider {
         const { data: uploadData, error: uploadError } = await (supabase as any).storage
           .from(ASSETS_BUCKET)
           .upload(path, blob, {
-            contentType: fileRecord.mimeType,
+            contentType: resolvedMime,
             upsert: true,
           });
 
         if (uploadError) {
-          console.error("[SupabaseStorageProvider] video upload:", uploadError.message);
-        } else {
-          // 1-year signed URL so video doesn't break after a week
-          const { data: signed, error: signError } = await (supabase as any).storage
-            .from(ASSETS_BUCKET)
-            .createSignedUrl(uploadData?.path ?? path, SIGNED_URL_TTL);
-
-          if (signError) {
-            console.error("[SupabaseStorageProvider] createSignedUrl:", signError.message);
-          } else {
-            storageUrl = signed?.signedUrl ?? storageUrl;
-          }
+          throw new Error(`Video upload failed: ${uploadError.message}`);
         }
+
+        // 1-year signed URL so video doesn't break after a week
+        const { data: signed, error: signError } = await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .createSignedUrl(uploadData?.path ?? path, SIGNED_URL_TTL);
+
+        if (signError) {
+          throw new Error(`Failed to generate video URL: ${signError.message}`);
+        }
+
+        storageUrl = signed?.signedUrl ?? storageUrl;
+
       } else {
         // ── Other file types: upload to private bucket, get signed URL ────────
         const path = storagePath(fileRecord.clientId, fileRecord.fileName);
@@ -245,23 +275,25 @@ export class SupabaseStorageProvider implements StorageProvider {
         const { data: uploadData, error: uploadError } = await (supabase as any).storage
           .from(ASSETS_BUCKET)
           .upload(path, blob, {
-            contentType: fileRecord.mimeType,
+            contentType: resolvedMime,
             upsert: true,
           });
 
-        if (!uploadError && uploadData) {
-          const { data: signed } = await (supabase as any).storage
-            .from(ASSETS_BUCKET)
-            .createSignedUrl(uploadData.path, SIGNED_URL_TTL);
-          storageUrl = signed?.signedUrl ?? storageUrl;
+        if (uploadError) {
+          throw new Error(`File upload failed: ${uploadError.message}`);
         }
+
+        const { data: signed } = await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .createSignedUrl(uploadData?.path ?? path, SIGNED_URL_TTL);
+        storageUrl = signed?.signedUrl ?? storageUrl;
       }
     }
 
     // Encode extra metadata into notes for backward compatibility with the
     // AI analysis persistence path (which reads/writes __META__ in notes).
     const encodedNotes = encodeNotes(fileRecord.notes ?? "", {
-      mime_type: fileRecord.mimeType,
+      mime_type: resolvedMime,
       file_size: fileRecord.fileSize,
       category: fileRecord.category,
       storage_url: storageUrl,
@@ -271,15 +303,19 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     // Persist metadata — write storage_url and thumbnail_url to real DB columns
     // (the table has these columns per database-schema.md and types.ts)
+    const resolvedFileType = resolvedMime.startsWith("image/")
+      ? "image"
+      : resolvedMime.startsWith("video/")
+      ? "video"
+      : "image"; // default for DB check constraint
+
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")
       .upsert({
         id: fileRecord.id,
         client_id: fileRecord.clientId,
         file_name: fileRecord.fileName,
-        file_type: fileRecord.fileType === "image" || fileRecord.fileType === "video"
-          ? fileRecord.fileType
-          : "image",
+        file_type: resolvedFileType,
         asset_type: "image",
         upload_date: fileRecord.uploadedAt,
         notes: encodedNotes,
@@ -293,9 +329,17 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     if (dbError) {
       console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
+      // Don't throw here — the file is already uploaded; a metadata write failure
+      // is recoverable on next load via the backfill effect.
     }
 
-    return { ...fileRecord, storageUrl, thumbnailUrl };
+    return {
+      ...fileRecord,
+      mimeType: resolvedMime,
+      fileType: mimeToFileType(resolvedMime),
+      storageUrl,
+      thumbnailUrl,
+    };
   }
 
   // ── Delete file ───────────────────────────────────────────

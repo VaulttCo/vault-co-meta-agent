@@ -263,6 +263,20 @@ export class SupabaseStorageProvider implements StorageProvider {
       throw new Error("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
     }
 
+    // ── Auth: retrieve session token early, with refresh fallback ────────────
+    // getSession() reads from in-memory cache which may be empty on first call
+    // (especially in Safari). If null, we call refreshSession() to force a
+    // server round-trip and populate the cache.
+    let { data: sessionData } = await (supabase as any).auth.getSession();
+    if (!sessionData?.session) {
+      const { data: refreshed } = await (supabase as any).auth.refreshSession();
+      sessionData = refreshed;
+    }
+    const accessToken: string = sessionData?.session?.access_token ?? "";
+    if (!accessToken) {
+      throw new Error("Not authenticated. Please log in and try again.");
+    }
+
     // Normalise MIME type — handles MOV files from iOS with empty file.type
     const resolvedMime = normaliseMime(fileRecord.mimeType, fileRecord.fileName);
 
@@ -323,13 +337,7 @@ export class SupabaseStorageProvider implements StorageProvider {
 
         if (isLargeVideo) {
           // ── Large video (>100 MB): TUS resumable upload ───────────────────
-          // Get the current session access token for TUS auth headers
-          const { data: sessionData } = await (supabase as any).auth.getSession();
-          const accessToken: string = sessionData?.session?.access_token ?? "";
-          if (!accessToken) {
-            throw new Error("Not authenticated. Please log in and try again.");
-          }
-
+          // accessToken already retrieved at top of saveFile()
           const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
           if (!supabaseUrl) {
             throw new Error("Supabase URL is not configured.");

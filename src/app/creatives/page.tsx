@@ -55,6 +55,7 @@ import type { CreativeAnalysis } from "@/lib/agents/creativeAnalysis";
 import { getStorageProvider } from "@/lib/storage/storage-provider";
 import { type ClientFile, mimeToFileType, formatFileSize } from "@/lib/storage/types";
 import type { SaveFileOptions } from "@/lib/storage/supabase-storage-provider";
+import { getSupabaseSSRBrowserClient } from "@/lib/supabase/ssr-client";
 
 // ─────────────────────────────────────────────────────────────
 // Extended analysis type (Anthropic adds quality score etc.)
@@ -690,12 +691,23 @@ function UploadModal({
         _blob: selectedBlob ?? undefined,
       };
 
-      // Upload blob + upsert DB row via storage provider
-      // For large videos, pass onProgress so the UI shows a progress bar.
-      // saveFile() on SupabaseStorageProvider accepts an options object;
-      // the base StorageProvider interface doesn't — cast when available.
+      // Upload blob + upsert DB row via storage provider.
+      // Retrieve the access token from the AuthProvider SSR client — this is
+      // the same singleton that AuthProvider uses, so its session is always
+      // populated when the user is logged in. Passing it explicitly means
+      // saveFile() never needs to call getSession() itself, which can return
+      // null on first call in Safari / Next.js environments.
+      // The token is passed only in the Authorization header to Supabase Storage
+      // and is never logged or exposed in the UI.
+      const ssrClient = getSupabaseSSRBrowserClient();
+      const { data: sessionData } = ssrClient
+        ? await (ssrClient as any).auth.getSession()
+        : { data: null };
+      const accessToken: string = sessionData?.session?.access_token ?? "";
+
       const saveOptions: SaveFileOptions = {
         onProgress: (pct) => setUploadProgress(pct),
+        accessToken,
       };
       const saved = await (storageProvider as any).saveFile(newFile, saveOptions);
 

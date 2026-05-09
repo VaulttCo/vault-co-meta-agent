@@ -25,7 +25,10 @@
 // Progress callback: pass onProgress(percent: number) in the options to receive
 // upload progress updates (0–100). Used by UploadModal for the progress bar.
 
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+// Use the SSR browser client — same singleton as AuthProvider.
+// createBrowserClient() from @supabase/ssr reads session from cookies,
+// so getSession() always returns the active session even on first call.
+import { getSupabaseSSRBrowserClient } from "@/lib/supabase/ssr-client";
 import type { StorageProvider } from "./storage-provider";
 import type { ClientFile, FileCategory } from "./types";
 import { mimeToFileType } from "./types";
@@ -158,13 +161,21 @@ async function tusUpload(
 export interface SaveFileOptions {
   /** Called with upload progress 0–100 during large video TUS uploads */
   onProgress?: (percent: number) => void;
+  /**
+   * Supabase JWT access token from the active session.
+   * Pass this from the AuthProvider/useAuth context so the storage provider
+   * does not need to call getSession() itself (which may return null on first
+   * call in Safari / Next.js SSR environments).
+   * If omitted, saveFile() falls back to getSession() then refreshSession().
+   */
+  accessToken?: string;
 }
 
 export class SupabaseStorageProvider implements StorageProvider {
   readonly name = "supabase" as const;
 
   private get db() {
-    return getSupabaseBrowserClient();
+    return getSupabaseSSRBrowserClient();
   }
 
   // ── List files ────────────────────────────────────────────
@@ -263,18 +274,21 @@ export class SupabaseStorageProvider implements StorageProvider {
       throw new Error("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
     }
 
-    // ── Auth: retrieve session token early, with refresh fallback ────────────
-    // getSession() reads from in-memory cache which may be empty on first call
-    // (especially in Safari). If null, we call refreshSession() to force a
-    // server round-trip and populate the cache.
-    let { data: sessionData } = await (supabase as any).auth.getSession();
-    if (!sessionData?.session) {
-      const { data: refreshed } = await (supabase as any).auth.refreshSession();
-      sessionData = refreshed;
-    }
-    const accessToken: string = sessionData?.session?.access_token ?? "";
+    // ── Auth: resolve access token ────────────────────────────────────────────
+    // Primary source: token passed explicitly by the caller (UploadModal reads
+    // it from the AuthProvider SSR client which always has the session).
+    // Fallback: getSession() then refreshSession() for callers that don't pass it.
+    let accessToken: string = options?.accessToken ?? "";
     if (!accessToken) {
-      throw new Error("Not authenticated. Please log in and try again.");
+      let { data: sessionData } = await (supabase as any).auth.getSession();
+      if (!sessionData?.session) {
+        const { data: refreshed } = await (supabase as any).auth.refreshSession();
+        sessionData = refreshed;
+      }
+      accessToken = sessionData?.session?.access_token ?? "";
+    }
+    if (!accessToken) {
+      throw new Error("Your session expired. Please log in again.");
     }
 
     // Normalise MIME type — handles MOV files from iOS with empty file.type

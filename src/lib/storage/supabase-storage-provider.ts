@@ -8,17 +8,22 @@
 // URL strategy:
 //   Images  → thumbnailUrl = public URL from creative-thumbnails (permanent, never expires)
 //             storageUrl   = public URL from creative-thumbnails (same, for full-size view)
+//             Fallback: if bucket is private, uses 1-year signed URL
 //   Videos  → storageUrl   = signed URL from creative-assets (1 year TTL)
 //             thumbnailUrl = null (no thumbnail generated server-side)
 //
-// Both storage_url and thumbnail_url are written to the real DB columns AND
-// encoded in __META__ inside notes for backward compatibility with the
-// AI analysis persistence path.
+// Upload strategy:
+//   Files ≤ LARGE_VIDEO_THRESHOLD (100 MB) → standard fetch-based upload
+//   Files >  LARGE_VIDEO_THRESHOLD         → TUS resumable upload via tus-js-client
 //
-// Schema: creative_assets table has real storage_url text and thumbnail_url text columns.
+// Both storage_url and thumbnail_url are written to the real DB columns AND
+// encoded in __META__ inside notes for backward compatibility.
 //
 // Error handling: saveFile() THROWS on upload failure so the caller (UploadModal)
 // can catch and display the error to the user instead of silently swallowing it.
+//
+// Progress callback: pass onProgress(percent: number) in the options to receive
+// upload progress updates (0–100). Used by UploadModal for the progress bar.
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { StorageProvider } from "./storage-provider";
@@ -29,8 +34,13 @@ const ASSETS_BUCKET = "creative-assets";
 const THUMBS_BUCKET = "creative-thumbnails";
 const META_SEPARATOR = "\n__META__:";
 
+// Files larger than this threshold use TUS resumable upload
+const LARGE_VIDEO_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+
 // 1 year in seconds — long-lived signed URL for private video assets
 const SIGNED_URL_TTL = 60 * 60 * 24 * 365;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Normalise MIME type — MOV files from iOS often arrive as "" or "application/octet-stream"
 function normaliseMime(mime: string, fileName: string): string {
@@ -88,6 +98,66 @@ function toFileCategory(val: unknown): FileCategory {
     return val as FileCategory;
   }
   return "creative_asset";
+}
+
+// TUS resumable upload — used for videos > LARGE_VIDEO_THRESHOLD
+// Returns the storage path of the uploaded file.
+async function tusUpload(
+  blob: File,
+  bucket: string,
+  path: string,
+  mimeType: string,
+  supabaseUrl: string,
+  accessToken: string,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  // Dynamic import so tus-js-client is only loaded when needed
+  const tus = await import("tus-js-client");
+
+  return new Promise<string>((resolve, reject) => {
+    const upload = new tus.Upload(blob, {
+      endpoint: `${supabaseUrl}/storage/v1/upload/resumable`,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "x-upsert": "true",
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      metadata: {
+        bucketName: bucket,
+        objectName: path,
+        contentType: mimeType,
+        cacheControl: "3600",
+      },
+      chunkSize: 6 * 1024 * 1024, // 6 MB chunks (Supabase recommended)
+      onError(error) {
+        reject(new Error(`Resumable upload failed: ${error.message}`));
+      },
+      onProgress(bytesUploaded, bytesTotal) {
+        if (onProgress && bytesTotal > 0) {
+          onProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+        }
+      },
+      onSuccess() {
+        resolve(path);
+      },
+    });
+
+    upload.findPreviousUploads().then((previousUploads) => {
+      if (previousUploads.length > 0) {
+        upload.resumeFromPreviousUpload(previousUploads[0]);
+      }
+      upload.start();
+    });
+  });
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
+export interface SaveFileOptions {
+  /** Called with upload progress 0–100 during large video TUS uploads */
+  onProgress?: (percent: number) => void;
 }
 
 export class SupabaseStorageProvider implements StorageProvider {
@@ -181,8 +251,13 @@ export class SupabaseStorageProvider implements StorageProvider {
   // attached by the upload modal before calling saveFile.
   //
   // THROWS on upload failure so the caller can show an error to the user.
+  //
+  // For videos > 100 MB, uses TUS resumable upload with progress callback.
 
-  async saveFile(fileRecord: ClientFile & { _blob?: File }): Promise<ClientFile> {
+  async saveFile(
+    fileRecord: ClientFile & { _blob?: File },
+    options?: SaveFileOptions
+  ): Promise<ClientFile> {
     const supabase = this.db;
     if (!supabase) {
       throw new Error("Supabase is not configured. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
@@ -199,11 +274,12 @@ export class SupabaseStorageProvider implements StorageProvider {
     if (blob) {
       const isImage = resolvedMime.startsWith("image/");
       const isVideo = resolvedMime.startsWith("video/");
+      const isLargeVideo = isVideo && blob.size > LARGE_VIDEO_THRESHOLD;
 
       if (isImage) {
         // ── Images: upload to public creative-thumbnails bucket ──────────────
-        // Using the public bucket means the URL never expires and no signed URL
-        // refresh is needed. We store the same URL in both storageUrl and thumbnailUrl.
+        // Using the public bucket means the URL never expires.
+        // We store the same URL in both storageUrl and thumbnailUrl.
         const thumbPath = storagePath(fileRecord.clientId, fileRecord.fileName);
 
         const { data: thumbUpload, error: thumbError } = await (supabase as any).storage
@@ -214,7 +290,6 @@ export class SupabaseStorageProvider implements StorageProvider {
           });
 
         if (thumbError) {
-          // Throw so the modal shows the error instead of silently failing
           throw new Error(`Image upload failed: ${thumbError.message}`);
         }
 
@@ -243,30 +318,71 @@ export class SupabaseStorageProvider implements StorageProvider {
           .catch((e: Error) => console.warn("[SupabaseStorageProvider] archival upload:", e.message));
 
       } else if (isVideo) {
-        // ── Videos: upload to private creative-assets bucket, get long-lived signed URL ──
+        // ── Videos: upload to private creative-assets bucket ─────────────────
         const path = storagePath(fileRecord.clientId, fileRecord.fileName);
 
-        const { data: uploadData, error: uploadError } = await (supabase as any).storage
-          .from(ASSETS_BUCKET)
-          .upload(path, blob, {
-            contentType: resolvedMime,
-            upsert: true,
-          });
+        if (isLargeVideo) {
+          // ── Large video (>100 MB): TUS resumable upload ───────────────────
+          // Get the current session access token for TUS auth headers
+          const { data: sessionData } = await (supabase as any).auth.getSession();
+          const accessToken: string = sessionData?.session?.access_token ?? "";
+          if (!accessToken) {
+            throw new Error("Not authenticated. Please log in and try again.");
+          }
 
-        if (uploadError) {
-          throw new Error(`Video upload failed: ${uploadError.message}`);
+          const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+          if (!supabaseUrl) {
+            throw new Error("Supabase URL is not configured.");
+          }
+
+          // TUS upload — progress callback forwarded to UI
+          await tusUpload(
+            blob,
+            ASSETS_BUCKET,
+            path,
+            resolvedMime,
+            supabaseUrl,
+            accessToken,
+            options?.onProgress
+          );
+
+        } else {
+          // ── Standard video upload (≤100 MB) ──────────────────────────────
+          const { data: uploadData, error: uploadError } = await (supabase as any).storage
+            .from(ASSETS_BUCKET)
+            .upload(path, blob, {
+              contentType: resolvedMime,
+              upsert: true,
+            });
+
+          if (uploadError) {
+            throw new Error(`Video upload failed: ${uploadError.message}`);
+          }
+
+          // Use uploadData.path for the signed URL
+          const uploadedPath = uploadData?.path ?? path;
+          const { data: signed, error: signError } = await (supabase as any).storage
+            .from(ASSETS_BUCKET)
+            .createSignedUrl(uploadedPath, SIGNED_URL_TTL);
+
+          if (signError) {
+            throw new Error(`Failed to generate video URL: ${signError.message}`);
+          }
+
+          storageUrl = signed?.signedUrl ?? storageUrl;
         }
 
-        // 1-year signed URL so video doesn't break after a week
-        const { data: signed, error: signError } = await (supabase as any).storage
-          .from(ASSETS_BUCKET)
-          .createSignedUrl(uploadData?.path ?? path, SIGNED_URL_TTL);
+        // For large video TUS uploads, generate signed URL after upload
+        if (isLargeVideo) {
+          const { data: signed, error: signError } = await (supabase as any).storage
+            .from(ASSETS_BUCKET)
+            .createSignedUrl(path, SIGNED_URL_TTL);
 
-        if (signError) {
-          throw new Error(`Failed to generate video URL: ${signError.message}`);
+          if (signError) {
+            throw new Error(`Failed to generate video URL after upload: ${signError.message}`);
+          }
+          storageUrl = signed?.signedUrl ?? storageUrl;
         }
-
-        storageUrl = signed?.signedUrl ?? storageUrl;
 
       } else {
         // ── Other file types: upload to private bucket, get signed URL ────────
@@ -290,8 +406,7 @@ export class SupabaseStorageProvider implements StorageProvider {
       }
     }
 
-    // Encode extra metadata into notes for backward compatibility with the
-    // AI analysis persistence path (which reads/writes __META__ in notes).
+    // Encode extra metadata into notes for backward compatibility
     const encodedNotes = encodeNotes(fileRecord.notes ?? "", {
       mime_type: resolvedMime,
       file_size: fileRecord.fileSize,
@@ -302,7 +417,6 @@ export class SupabaseStorageProvider implements StorageProvider {
     });
 
     // Persist metadata — write storage_url and thumbnail_url to real DB columns
-    // (the table has these columns per database-schema.md and types.ts)
     const resolvedFileType = resolvedMime.startsWith("image/")
       ? "image"
       : resolvedMime.startsWith("video/")
@@ -320,7 +434,7 @@ export class SupabaseStorageProvider implements StorageProvider {
         upload_date: fileRecord.uploadedAt,
         notes: encodedNotes,
         status: fileRecord.status,
-        // Write to real columns — this is the primary fix
+        // Write to real columns
         storage_url: storageUrl || null,
         thumbnail_url: thumbnailUrl || null,
         tags: [],
@@ -329,8 +443,7 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     if (dbError) {
       console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
-      // Don't throw here — the file is already uploaded; a metadata write failure
-      // is recoverable on next load via the backfill effect.
+      // Don't throw — file is already uploaded; metadata failure is recoverable
     }
 
     return {
@@ -348,13 +461,11 @@ export class SupabaseStorageProvider implements StorageProvider {
     const supabase = this.db;
     if (!supabase) return;
 
-    // Get the record first to find the storage path
     const file = await this.getFile(id);
 
     if (file?.storageUrl) {
       try {
         const url = new URL(file.storageUrl);
-        // Determine which bucket from the URL path
         if (url.pathname.includes(`/${ASSETS_BUCKET}/`)) {
           const pathParts = url.pathname.split(`/${ASSETS_BUCKET}/`);
           if (pathParts.length > 1) {
@@ -367,7 +478,7 @@ export class SupabaseStorageProvider implements StorageProvider {
           }
         }
       } catch {
-        // URL parsing failed — skip storage deletion, still remove metadata
+        // URL parsing failed — skip storage deletion
       }
     }
 

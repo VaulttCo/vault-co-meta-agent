@@ -53,7 +53,8 @@ import type { Client } from "@/lib/data";
 import { useAuth } from "@/components/AuthProvider";
 import type { CreativeAnalysis } from "@/lib/agents/creativeAnalysis";
 import { getStorageProvider } from "@/lib/storage/storage-provider";
-import { type ClientFile, mimeToFileType } from "@/lib/storage/types";
+import { type ClientFile, mimeToFileType, formatFileSize } from "@/lib/storage/types";
+import type { SaveFileOptions } from "@/lib/storage/supabase-storage-provider";
 
 // ─────────────────────────────────────────────────────────────
 // Extended analysis type (Anthropic adds quality score etc.)
@@ -574,7 +575,20 @@ function UploadModal({
   const [fileSize, setFileSize] = useState(0);
   const [mimeType, setMimeType] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const LARGE_VIDEO_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+  const IMAGE_MAX = 50 * 1024 * 1024; // 50 MB
+  const VIDEO_MAX = 2 * 1024 * 1024 * 1024; // 2 GB (Supabase Pro)
+  const isLargeVideo = !!selectedBlob && mimeType.startsWith("video/") && selectedBlob.size > LARGE_VIDEO_THRESHOLD;
+  const uploadTypeLabel = !selectedBlob
+    ? null
+    : isLargeVideo
+    ? "Large video upload (resumable)"
+    : mimeType.startsWith("video/")
+    ? "Standard video upload"
+    : "Standard upload";
   const [form, setForm] = useState({
     fileName: "",
     fileType: "video" as "image" | "video",
@@ -605,6 +619,7 @@ function UploadModal({
         mp4: "video/mp4",
         webm: "video/webm",
         avi: "video/x-msvideo",
+        m4v: "video/x-m4v",
         jpg: "image/jpeg",
         jpeg: "image/jpeg",
         png: "image/png",
@@ -614,14 +629,25 @@ function UploadModal({
       resolvedMime = extMap[ext] ?? (ext ? `video/${ext}` : "application/octet-stream");
     }
 
-    // Client-side size check — Supabase free tier default limit is 50 MB
-    const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
-    if (file.size > MAX_BYTES) {
-      setSaveError(`File is too large (${(file.size / 1048576).toFixed(1)} MB). Maximum allowed size is 100 MB.`);
+    const isImg = resolvedMime.startsWith("image/");
+    const isVid = resolvedMime.startsWith("video/");
+
+    // Client-side size checks
+    if (isImg && file.size > IMAGE_MAX) {
+      setSaveError(`Image is too large (${formatFileSize(file.size)}). Maximum image size is 50 MB.`);
+      return;
+    }
+    if (isVid && file.size > VIDEO_MAX) {
+      setSaveError(`Video is too large (${formatFileSize(file.size)}). Maximum video size is 2 GB.`);
+      return;
+    }
+    if (!isImg && !isVid) {
+      setSaveError(`Unsupported file type: ${resolvedMime}. Supported types: JPG, PNG, WEBP, MP4, MOV, M4V, WEBM.`);
       return;
     }
 
     setSaveError(null);
+    setUploadProgress(null);
     setSelectedBlob(file);
     setPickedFileName(file.name);
     setFileSize(file.size);
@@ -629,7 +655,7 @@ function UploadModal({
     setForm((prev) => ({
       ...prev,
       fileName: file.name,
-      fileType: resolvedMime.startsWith("image/") ? "image" : "video",
+      fileType: isImg ? "image" : "video",
     }));
   }
 
@@ -665,8 +691,13 @@ function UploadModal({
       };
 
       // Upload blob + upsert DB row via storage provider
-      // saveFile() may silently swallow errors — we check the result
-      const saved = await storageProvider.saveFile(newFile);
+      // For large videos, pass onProgress so the UI shows a progress bar.
+      // saveFile() on SupabaseStorageProvider accepts an options object;
+      // the base StorageProvider interface doesn't — cast when available.
+      const saveOptions: SaveFileOptions = {
+        onProgress: (pct) => setUploadProgress(pct),
+      };
+      const saved = await (storageProvider as any).saveFile(newFile, saveOptions);
 
       // If we sent a blob but got back no storageUrl, the upload silently failed
       if (selectedBlob && isRealStorage && !saved.storageUrl) {
@@ -699,14 +730,14 @@ function UploadModal({
 
       // onAdd updates local React state only (DB row already written by saveFile)
       await onAdd(mappedAsset);
+      setUploadProgress(null);
       onClose();
     } catch (err) {
       console.error("[UploadModal] handleSubmit error:", err);
       setSaveError(err instanceof Error ? err.message : "Upload failed — please try again");
-      setSaving(false); // ensure button re-enables on error
+      setUploadProgress(null);
+      setSaving(false);
     } finally {
-      // setSaving(false) is called in catch; only call here if no error path
-      // (finally always runs, so we set it false here too for the success path)
       setSaving(false);
     }
   }
@@ -754,19 +785,35 @@ function UploadModal({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi,.webm"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.m4v,.avi,.webm"
             onChange={handleFileChange}
             className="hidden"
           />
           <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[rgba(0,129,242,0.15)] rounded-xl p-8 text-center hover:border-[rgba(0,129,242,0.25)] transition-colors cursor-pointer"
+            onClick={saving ? undefined : () => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+              saving
+                ? "border-[rgba(0,129,242,0.08)] cursor-not-allowed"
+                : "border-[rgba(0,129,242,0.15)] hover:border-[rgba(0,129,242,0.25)] cursor-pointer"
+            }`}
           >
             {pickedFileName ? (
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <Upload size={18} className="text-[#ff8400] mx-auto" />
                 <div className="text-[12px] font-semibold text-[#f8f8f7]">{pickedFileName}</div>
-                <div className="text-[10px] text-[#6b7a99]">Click to change file</div>
+                <div className="text-[10px] text-[#6b7a99]">
+                  {formatFileSize(fileSize)}
+                  {uploadTypeLabel && (
+                    <span className={`ml-2 px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                      isLargeVideo
+                        ? "bg-[#ff8400]/15 text-[#ff8400]"
+                        : "bg-[#0081f2]/10 text-[#0081f2]"
+                    }`}>
+                      {uploadTypeLabel}
+                    </span>
+                  )}
+                </div>
+                {!saving && <div className="text-[10px] text-[#3d4f6e]">Click to change file</div>}
               </div>
             ) : (
               <>
@@ -776,10 +823,39 @@ function UploadModal({
                 <div className="text-[12px] text-[#6b7a99]">
                   Drop file here or <span className="text-[#0081f2]">browse</span>
                 </div>
-                <div className="text-[10px] text-[#3d4f6e] mt-1">JPG, PNG, MP4, MOV · Max 100MB</div>
+                <div className="text-[10px] text-[#3d4f6e] mt-1">JPG, PNG, WEBP, MP4, MOV, M4V, WEBM · Images up to 50 MB · Videos up to 2 GB</div>
               </>
             )}
           </div>
+
+          {/* Upload progress bar — shown during large video TUS upload */}
+          {saving && (
+            <div className="space-y-1.5">
+              {isLargeVideo ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[#ff8400] font-semibold">Uploading large video… do not close this window</span>
+                    {uploadProgress !== null && (
+                      <span className="text-[11px] text-[#f8f8f7] font-mono">{uploadProgress}%</span>
+                    )}
+                  </div>
+                  <div className="w-full h-1.5 bg-[#0f1a28] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#ff8400] rounded-full transition-all duration-300"
+                      style={{ width: uploadProgress !== null ? `${uploadProgress}%` : "0%" }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Loader2 size={11} className="animate-spin text-[#0081f2] flex-shrink-0" />
+                  <span className="text-[11px] text-[#6b7a99]">
+                    {mimeType.startsWith("image/") ? "Uploading image…" : "Uploading video…"}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>File Name *</label>
@@ -924,7 +1000,15 @@ function UploadModal({
             {saving ? (
               <>
                 <Loader2 size={12} className="animate-spin flex-shrink-0" />
-                <span>{usingSupabase && selectedBlob ? "Uploading…" : "Saving…"}</span>
+                <span>
+                  {usingSupabase && selectedBlob
+                    ? isLargeVideo
+                      ? uploadProgress !== null
+                        ? `Uploading ${uploadProgress}%`
+                        : "Starting upload…"
+                      : "Uploading…"
+                    : "Saving…"}
+                </span>
               </>
             ) : (
               "Add Asset"

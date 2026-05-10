@@ -77,21 +77,23 @@ export default function CampaignsPage() {
           <input
             type="text"
             placeholder="Search campaigns..."
-            className="w-full pl-8 pr-3 py-2 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[13px] text-[#f8f8f7] placeholder-[#6b7a99] focus:outline-none focus:border-[#0081f2]/40 transition-colors"
+            className="w-full pl-8 pr-3 py-2 rounded-lg text-[13px] focus:outline-none transition-colors"
+          style={{ backgroundColor: "var(--t-input-bg)", border: "1px solid var(--t-border)", color: "var(--t-text)" }}
           />
         </div>
-        <button className="flex items-center gap-2 px-3 py-2 bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-lg text-[13px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors">
+        <button className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] transition-colors" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", color: "var(--t-muted)" }}>
           <Filter size={13} />
           Filter by Client
         </button>
         {["All", "Active", "Paused", "Draft"].map((f) => (
           <button
             key={f}
-            className={`px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+            className="px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
+            style={
               f === "All"
-                ? "bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.25)] text-[#f8f8f7]"
-                : "text-[#6b7a99] hover:text-[#f8f8f7]"
-            }`}
+                ? { backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)", color: "var(--t-text)" }
+                : { color: "var(--t-muted)", backgroundColor: "transparent", border: "1px solid transparent" }
+            }
           >
             {f}
           </button>
@@ -99,30 +101,31 @@ export default function CampaignsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
         {loading && (
-          <div className="px-5 py-12 text-center text-[12px]" style={{ color: "#3d4f6e" }}>Loading campaigns…</div>
+          <div className="px-5 py-12 text-center text-[12px]" style={{ color: "var(--t-dim)" }}>Loading campaigns…</div>
         )}
         {!loading && allCampaigns.length === 0 && (
           <div className="px-5 py-12 text-center">
-            <p className="text-[13px] font-medium" style={{ color: "#6b7a99" }}>No campaigns yet</p>
-            <p className="text-[11px] mt-1" style={{ color: "#3d4f6e" }}>Campaign data is pulled from client records in Supabase.</p>
+            <p className="text-[13px] font-medium" style={{ color: "var(--t-muted)" }}>No campaigns yet</p>
+            <p className="text-[11px] mt-1" style={{ color: "var(--t-dim)" }}>Campaign data is pulled from client records in Supabase.</p>
           </div>
         )}
         {!loading && allCampaigns.length > 0 && <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-[rgba(0, 129, 242, 0.15)]">
+            <tr className="border-b" style={{ borderColor: "var(--t-border-subtle)" }}>
               {["Client", "Campaign", "Market", "Status", "Spend", "Leads", "CPL", "Booked", "CPBA", "Next Action", ""].map(
                 (h, i) => (
                   <th
                     key={`${h}-${i}`}
-                    className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${
+                    className={`px-4 py-3.5 text-[9px] font-bold uppercase tracking-widest ${
                       h === "Client" || h === "Campaign" || h === "Market" || h === "Next Action"
                         ? "text-left"
                         : h === ""
                         ? ""
                         : "text-right"
                     }`}
+                    style={{ color: "var(--t-dim)" }}
                   >
                     {h}
                   </th>
@@ -137,28 +140,28 @@ export default function CampaignsPage() {
               return (
                 <tr
                   key={c.id}
-                  className={`border-b border-[rgba(0, 129, 242, 0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors group ${
+                  className={`border-b transition-colors group ${
                     i === allCampaigns.length - 1 ? "border-b-0" : ""
                   }`}
                 >
                   <td className="px-4 py-3.5">
-                    <div className="font-semibold text-[#f8f8f7]">{c.clientName}</div>
+                    <div className="font-semibold" style={{ color: "var(--t-text)" }}>{c.clientName}</div>
                     <Badge label={c.clientStatus} variant={clientStatusVariant[c.clientStatus as keyof typeof clientStatusVariant] ?? "neutral"} />
                   </td>
-                  <td className="px-4 py-3.5 text-[#6b7a99]">{c.name}</td>
-                  <td className="px-4 py-3.5 text-[#6b7a99]">{c.market}</td>
+                  <td className="px-4 py-3.5" style={{ color: "var(--t-muted)" }}>{c.name}</td>
+                  <td className="px-4 py-3.5" style={{ color: "var(--t-muted)" }}>{c.market}</td>
                   <td className="px-4 py-3.5">
                     <Badge label={c.status} variant={campaignStatusVariant[c.status]} />
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{c.spend !== "$0" ? c.spend : "—"}</td>
-                  <td className="px-4 py-3.5 text-right text-[#0081f2] font-semibold">
+                  <td className="px-4 py-3.5 text-right" style={{ color: "var(--t-text)" }}>{c.spend !== "$0" ? c.spend : "—"}</td>
+                  <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#0081f2" }}>
                     {c.leads > 0 ? c.leads : "—"}
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{c.cpl}</td>
-                  <td className="px-4 py-3.5 text-right text-[#22c55e] font-semibold">
+                  <td className="px-4 py-3.5 text-right" style={{ color: "var(--t-text)" }}>{c.cpl}</td>
+                  <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#22c55e" }}>
                     {c.booked > 0 ? c.booked : "—"}
                   </td>
-                  <td className="px-4 py-3.5 text-right text-[#a78bfa] font-semibold">{cpba}</td>
+                  <td className="px-4 py-3.5 text-right font-semibold" style={{ color: "#a78bfa" }}>{cpba}</td>
                   <td className="px-4 py-3.5">
                     <span
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold"

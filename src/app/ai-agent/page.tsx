@@ -433,13 +433,7 @@ const sectionTabs: {
 // Static data
 // ─────────────────────────────────────────────────────────────
 
-const agentActions = [
-  { time: "14 min ago", action: "Generated roof inspection campaign draft for JJ Roofing Group — ready for review", reason: "New campaign requested for Tempe, AZ market", type: "blue" },
-  { time: "1 hr ago", action: "Flagged low booking rate for Open Forge Construction — Bathroom Remodeling at 20%", reason: "Booking rate fell below 25% floor for 14 days", type: "warning" },
-  { time: "2 hrs ago", action: "Recommended storm damage creative for Acorns Roofing — storm season window active", reason: "Weather event detected in Georgia service area", type: "orange" },
-  { time: "3 hrs ago", action: "Detected high CPL on Kaczmar Builders remodeling campaign — $339 vs $200 target", reason: "CPL exceeded 2x threshold for 8 consecutive days", type: "warning" },
-  { time: "Yesterday", action: "Prepared weekly report draft for JJ Roofing Group — awaiting approval", reason: "Automated Monday 7am report generation", type: "success" },
-];
+const agentActions: { time: string; action: string; reason: string; type: string }[] = [];
 
 const automationRules = [
   { label: "Auto-scale budget", description: "Recommend +20% when leads exceed 1.4x monthly pace for 5+ days — requires human approval", enabled: true },
@@ -451,14 +445,14 @@ const automationRules = [
 ];
 
 const agentSuggestions = [
-  "What is blocking Kaczmar from launch?",
-  "Which clients are at risk this week?",
-  "Which client should we focus on first?",
-  "Should we increase ad spend anywhere?",
-  "Which clients have follow-up bottlenecks?",
-  "Which clients are missing reports?",
-  "Which approvals are blocking launch?",
   "What should Vault Co do today?",
+  "Which clients are blocked from launch?",
+  "Which clients are at risk this week?",
+  "What is blocking Kaczmar?",
+  "Which clients need reports?",
+  "Which clients have follow-up bottlenecks?",
+  "Should we increase ad spend anywhere?",
+  "What should we fix before scaling?",
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -1969,7 +1963,14 @@ function AICampaignBuilderContent() {
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[rgba(0, 129, 242, 0.15)]">
               <Bot size={14} className="text-[#0081f2]" />
               <span className="text-[13px] font-semibold text-[#f8f8f7]">Veronica Console</span>
-              <span className="ml-auto text-[10px] text-[#3d4f6e]">Veronica by Vault Co · 4 clients · Meta + GHL connected</span>
+              <span
+                className="ml-3 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                style={{ color: "#f59e0b", backgroundColor: "rgba(245, 158, 11, 0.10)", border: "1px solid rgba(245, 158, 11, 0.22)" }}
+              >
+                <ShieldCheck size={9} />
+                Recommendation only
+              </span>
+              <span className="ml-auto text-[10px] text-[#3d4f6e]">Veronica by Vault Co</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chat.map((msg, i) => (
@@ -2049,22 +2050,10 @@ function AICampaignBuilderContent() {
               <Zap size={13} className="text-[#ff8400]" />
               <span className="text-[13px] font-semibold text-[#f8f8f7]">Recent Actions</span>
             </div>
-            <div className="p-3 space-y-2">
-              {agentActions.map((a, i) => (
-                <div key={i} className="flex gap-2.5 p-2.5 rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)]/60">
-                  <div className="mt-0.5 flex-shrink-0">
-                    {a.type === "success" && <Zap size={11} className="text-[#22c55e]" />}
-                    {a.type === "warning" && <AlertCircle size={11} className="text-[#f59e0b]" />}
-                    {a.type === "blue" && <Sparkles size={11} className="text-[#0081f2]" />}
-                    {a.type === "orange" && <AlertCircle size={11} className="text-[#ff8400]" />}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-[#f8f8f7] font-medium leading-snug">{a.action}</p>
-                    <p className="text-[10px] text-[#6b7a99] mt-0.5 leading-snug">{a.reason}</p>
-                    <p className="text-[10px] text-[#3d4f6e] mt-0.5">{a.time}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="p-4 flex flex-col items-center justify-center text-center gap-2" style={{ minHeight: "120px" }}>
+              <Sparkles size={14} className="text-[#3d4f6e]" />
+              <p className="text-[12px] font-medium" style={{ color: "#6b7a99" }}>No recent actions yet</p>
+              <p className="text-[11px] leading-snug" style={{ color: "#3d4f6e" }}>Veronica is ready. Ask a question or generate a campaign draft.</p>
             </div>
           </div>
         </div>

@@ -58,6 +58,15 @@ interface IntegrationSnapshot {
   ghl?: { contacts: number; appointments: number; bookedAppointments: number; pipelineValue: number; closedRevenue: number } | null;
 }
 
+function currentReportPeriod(): string {
+  const now = new Date();
+  const month = now.toLocaleString("en-US", { month: "long" });
+  const year = now.getFullYear();
+  const day = now.getDate();
+  const week = Math.ceil(day / 7);
+  return `${month} ${year} — Week ${week}`;
+}
+
 function buildReportInput(client: Client, integration?: IntegrationSnapshot): WeeklyReportInput {
   // Prefer synced Meta/GHL data over client.stats when available
   const spendVal = integration?.meta?.totalSpend != null
@@ -85,7 +94,7 @@ function buildReportInput(client: Client, integration?: IntegrationSnapshot): We
   return {
     clientId: client.id,
     clientName: client.name,
-    reportPeriod: "May 2026 — Week 1",
+    reportPeriod: currentReportPeriod(),
     spend: typeof spendVal === "number" ? `$${spendVal}` : String(spendVal),
     leads: typeof leadsVal === "number" ? leadsVal : Number(leadsVal) || 0,
     booked: typeof bookedVal === "number" ? bookedVal : Number(bookedVal) || 0,
@@ -614,7 +623,7 @@ export default function ReportsPage() {
             </span>
             <button className="flex items-center gap-2 px-3 py-2 bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-lg text-[13px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.25)] transition-colors">
               <Calendar size={13} />
-              May 2026
+              {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
             </button>
             {clients.length > 0 && (
               <button

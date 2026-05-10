@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, Filter, Search, MoreHorizontal, Play, Pause } from "lucide-react";
+import { Plus, Filter, Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { clientStatusVariant, campaignStatusVariant, type CampaignStatus } from "@/lib/data";
@@ -172,19 +172,18 @@ export default function CampaignsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {c.status === "active" ? (
-                        <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#f59e0b] hover:border-[#f59e0b]/40 transition-colors">
-                          <Pause size={11} />
-                        </button>
-                      ) : (
-                        <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#22c55e] hover:border-[#22c55e]/40 transition-colors">
-                          <Play size={11} />
-                        </button>
-                      )}
-                      <button className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors">
-                        <MoreHorizontal size={13} />
-                      </button>
+                    <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span
+                        className="text-[10px] px-2 py-1 rounded-md whitespace-nowrap"
+                        style={{
+                          color: "#3d4f6e",
+                          backgroundColor: "rgba(61, 79, 110, 0.10)",
+                          border: "1px solid rgba(61, 79, 110, 0.18)",
+                        }}
+                        title="Campaign status is managed in Meta Ads Manager"
+                      >
+                        Managed in Meta
+                      </span>
                     </div>
                   </td>
                 </tr>

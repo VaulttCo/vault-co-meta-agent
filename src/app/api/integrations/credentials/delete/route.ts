@@ -73,10 +73,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Failed to delete credentials." }, { status: 500 });
   }
 
-  console.log(
-    `[credentials/delete] Deleted ${provider} credentials for client ${clientId} by user ${user.id}`
-  );
-
   return NextResponse.json({
     success: true,
     clientId,

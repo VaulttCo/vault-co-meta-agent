@@ -180,10 +180,6 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 8. Return success (never return the raw credentials) ──────────────────
-  console.log(
-    `[credentials/save] Saved ${provider} credentials for client ${clientId} by user ${user.id}`
-  );
-
   return NextResponse.json({
     success: true,
     clientId,

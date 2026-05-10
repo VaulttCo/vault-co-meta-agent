@@ -1303,16 +1303,53 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       {/* Integrations tab */}
       {activeTab === "integrations" && <IntegrationsTab clientId={client.id} clientName={client.name} />}
 
-      {/* Placeholder for other tabs */}
-      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && activeTab !== "integrations" && (
+      {/* Tabs that redirect to global pages */}
+      {(activeTab === "ai-builder" || activeTab === "reports" || activeTab === "approvals") && (() => {
+        const map: Record<string, { label: string; detail: string; href: string; cta: string }> = {
+          "ai-builder": {
+            label: "Build with Veronica",
+            detail: `Generate a full campaign draft for ${client.name} in the AI Campaign Builder.`,
+            href: "/ai-agent",
+            cta: "Open AI Campaign Builder",
+          },
+          "reports": {
+            label: "Reports",
+            detail: `View and generate weekly performance reports for ${client.name}.`,
+            href: "/reports",
+            cta: "Open Reports",
+          },
+          "approvals": {
+            label: "Approvals",
+            detail: "Review and approve campaign drafts submitted for this client.",
+            href: "/approvals",
+            cta: "Open Approvals Queue",
+          },
+        };
+        const info = map[activeTab];
+        return (
+          <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
+            <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
+              <Zap size={20} className="text-[#0081f2]" />
+            </div>
+            <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">{info.label}</div>
+            <p className="text-[12px] text-[#6b7a99] mb-4 max-w-sm mx-auto">{info.detail}</p>
+            <Link href={info.href} className="inline-flex items-center gap-2 px-4 py-2 text-[12px] font-semibold rounded-lg transition-opacity hover:opacity-90" style={{ backgroundColor: "rgba(0, 129, 242, 0.12)", border: "1px solid rgba(0, 129, 242, 0.28)", color: "#0081f2" }}>
+              {info.cta} →
+            </Link>
+          </div>
+        );
+      })()}
+
+      {/* Tabs still being built */}
+      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && activeTab !== "integrations" && activeTab !== "ai-builder" && activeTab !== "reports" && activeTab !== "approvals" && (
         <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
           <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
             <Zap size={20} className="text-[#0081f2]" />
           </div>
           <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">
-            {tabs.find((t) => t.id === activeTab)?.label} — Coming Soon
+            {tabs.find((t) => t.id === activeTab)?.label} — In Progress
           </div>
-          <p className="text-[12px] text-[#6b7a99]">This section is being built for {client.name}.</p>
+          <p className="text-[12px] text-[#6b7a99]">This section is being built. Check back soon.</p>
         </div>
       )}
     </div>

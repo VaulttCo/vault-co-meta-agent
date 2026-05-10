@@ -221,7 +221,6 @@ Only include wins, issues, recommendations, and next actions that are directly s
     const FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 
     async function callAnthropic(model: string): Promise<string> {
-      console.log(`[performance-intelligence] Calling Anthropic model: ${model}, apiKey prefix: ${apiKey.substring(0, 20)}`);
       let response: Response;
       try {
         response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -241,7 +240,6 @@ Only include wins, issues, recommendations, and next actions that are directly s
         console.error(`[performance-intelligence] Fetch failed for model ${model}:`, fetchErr);
         throw fetchErr;
       }
-      console.log(`[performance-intelligence] Anthropic response status: ${response.status} for model: ${model}`);
       if (!response.ok) {
         const errBody = await response.text();
         console.error(`[performance-intelligence] Anthropic error body: ${errBody.substring(0, 400)}`);
@@ -249,7 +247,6 @@ Only include wins, issues, recommendations, and next actions that are directly s
       }
       const message = await response.json();
       const rawText = message.content?.[0]?.type === "text" ? message.content[0].text : "";
-      console.log(`[performance-intelligence] Raw AI response length: ${rawText.length}, first 100 chars: ${rawText.substring(0, 100)}`);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         console.error(`[performance-intelligence] No JSON in response. Full text: ${rawText.substring(0, 500)}`);
@@ -262,11 +259,9 @@ Only include wins, issues, recommendations, and next actions that are directly s
       let jsonText: string;
       try {
         jsonText = await callAnthropic(PRIMARY_MODEL);
-        console.log(`[performance-intelligence] Used primary model: ${PRIMARY_MODEL}`);
       } catch (primaryErr) {
-        console.warn(`[performance-intelligence] Primary model failed, trying fallback:`, primaryErr);
+        console.error(`[performance-intelligence] Primary model failed, trying fallback:`, primaryErr);
         jsonText = await callAnthropic(FALLBACK_MODEL);
-        console.log(`[performance-intelligence] Used fallback model: ${FALLBACK_MODEL}`);
       }
       intelligence = JSON.parse(jsonText);
     } catch (err) {

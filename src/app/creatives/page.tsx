@@ -1113,6 +1113,7 @@ function AssetCard({
   onNeedsReview,
   onDelete,
   actionLoading,
+  isSample,
 }: {
   asset: CreativeAsset;
   resolveClientName: (a: CreativeAsset) => string;
@@ -1127,6 +1128,7 @@ function AssetCard({
   onNeedsReview: (asset: CreativeAsset) => void;
   onDelete: (asset: CreativeAsset) => void;
   actionLoading: string | null;
+  isSample?: boolean;
 }) {
   const color = assetTypeColors[asset.assetType] ?? "#6b7a99";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1170,6 +1172,15 @@ function AssetCard({
               <Square size={16} className="text-[#3d4f6e] opacity-0 group-hover:opacity-100 transition-opacity" />
             )}
           </button>
+        )}
+
+        {/* Sample label — shown for mock library assets not yet in Supabase */}
+        {isSample && (
+          <div className="absolute top-2.5 left-2.5 z-10">
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider" style={{ color: "#6b7a99", backgroundColor: "rgba(13,21,32,0.85)", border: "1px solid rgba(61,79,110,0.45)" }}>
+              Sample
+            </span>
+          </div>
         )}
 
         {/* Status badges — shift down when action menu is present to avoid overlap */}
@@ -1306,7 +1317,7 @@ function AssetCard({
 // ─────────────────────────────────────────────────────────────
 export default function CreativesPage() {
   const { can } = useAuth();
-  const { allAssets, addAsset, prependAsset, updateAsset, removeAsset, refetch, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
+  const { allAssets, uploadedAssets, addAsset, prependAsset, updateAsset, removeAsset, refetch, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
@@ -1837,6 +1848,7 @@ export default function CreativesPage() {
               onNeedsReview={handleNeedsReview}
               onDelete={handleDelete}
               actionLoading={actionLoading}
+              isSample={!uploadedAssets.some((u) => u.id === a.id)}
             />
           ))}
         </div>

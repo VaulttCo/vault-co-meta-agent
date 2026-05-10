@@ -45,7 +45,7 @@ const integrationSections = [
     icon: Key,
     color: "#ff8400",
     items: [
-      { label: "Anthropic API", description: "claude-haiku-4-5 · Live AI generation active", status: "connected" },
+      { label: "Anthropic API", description: "claude-sonnet-4-6 · Live AI generation active", status: "connected" },
     ],
   },
   {

@@ -150,15 +150,16 @@ function ExportBar({ report }: { report: PersistedReport }) {
     "flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-colors";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 p-4 bg-[#0a1220] border-t border-[rgba(0,129,242,0.15)] rounded-b-2xl">
+    <div className="flex flex-wrap items-center gap-2 p-4 rounded-b-2xl" style={{ backgroundColor: "var(--t-surface-2)", borderTop: "1px solid var(--t-border)" }}>
       {/* Copy client narrative */}
       <button
         onClick={handleCopyNarrative}
         className={`${btnBase} ${
           copied === "narrative"
             ? "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/25"
-            : "text-[#c8d4e8] bg-[#0f1a28] border-[rgba(0,129,242,0.2)] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.35)]"
+            : "border-[rgba(0,129,242,0.2)] hover:border-[rgba(0,129,242,0.35)]"
         }`}
+        style={copied === "narrative" ? {} : { color: "var(--t-text-body)", backgroundColor: "var(--t-surface)" }}
         title="Copy client-ready narrative (Executive Summary, Wins, Issues, Next Actions, Client Update)"
       >
         {copied === "narrative" ? (
@@ -175,8 +176,9 @@ function ExportBar({ report }: { report: PersistedReport }) {
         className={`${btnBase} ${
           copied === "full"
             ? "text-[#22c55e] bg-[#22c55e]/10 border-[#22c55e]/25"
-            : "text-[#c8d4e8] bg-[#0f1a28] border-[rgba(0,129,242,0.2)] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.35)]"
+            : "border-[rgba(0,129,242,0.2)] hover:border-[rgba(0,129,242,0.35)]"
         }`}
+        style={copied === "full" ? {} : { color: "var(--t-text-body)", backgroundColor: "var(--t-surface)" }}
         title="Copy full internal report including KPIs, Veronica recommendations, and approval note"
       >
         {copied === "full" ? (
@@ -271,17 +273,18 @@ function QuickExportDropdown({ report }: { report: PersistedReport }) {
         className={`w-7 h-7 flex items-center justify-center rounded-lg border transition-colors ${
           copied
             ? "bg-[#22c55e]/10 border-[#22c55e]/25 text-[#22c55e]"
-            : "bg-[#0f1a28] border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7]"
+            : "border-[rgba(0,129,242,0.15)]"
         }`}
+        style={copied ? {} : { backgroundColor: "var(--t-surface-2)", color: "var(--t-muted)" }}
         title="Export options"
       >
         {copied ? <CheckCircle size={12} /> : <Download size={12} />}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-xl shadow-2xl overflow-hidden">
-          <div className="px-3 py-2 border-b border-[rgba(0,129,242,0.12)]">
-            <span className="text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+        <div className="absolute right-0 top-full mt-1 z-30 w-48 rounded-xl shadow-2xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-dropdown-shadow)" }}>
+          <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
+            <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
               Export Report
             </span>
           </div>
@@ -314,7 +317,8 @@ function QuickExportDropdown({ report }: { report: PersistedReport }) {
             <button
               key={label}
               onClick={action}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] text-[#c8d4e8] hover:bg-[#0f1a28] transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[12px] transition-colors text-left hover:opacity-80"
+              style={{ color: "var(--t-text-body)" }}
             >
               <Icon size={12} style={{ color }} />
               {label}
@@ -337,9 +341,9 @@ function ViewReportModal({
   const gc = report.generatedContent;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.2)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col rounded-2xl" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}>
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-[rgba(0,129,242,0.15)] sticky top-0 bg-[#0D1520] z-10">
+        <div className="flex items-start justify-between p-6 border-b sticky top-0 z-10" style={{ borderColor: "var(--t-border-nav)", backgroundColor: "var(--t-surface)" }}>
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={13} className="text-[#ff8400]" />
@@ -347,11 +351,11 @@ function ViewReportModal({
                 Prepared by Veronica
               </span>
             </div>
-            <h2 className="text-[18px] font-bold text-[#f8f8f7] leading-tight">
+            <h2 className="text-[18px] font-bold leading-tight" style={{ color: "var(--t-text)" }}>
               {gc?.reportTitle ?? `${report.clientName ?? report.clientId} — Report`}
             </h2>
             <div className="flex items-center gap-3 mt-1.5">
-              <span className="text-[12px] text-[#6b7a99]">{report.reportPeriod}</span>
+              <span className="text-[12px]" style={{ color: "var(--t-muted)" }}>{report.reportPeriod}</span>
               <Badge
                 label={report.status === "published" ? "Published" : "Draft"}
                 variant={report.status === "published" ? "success" : "neutral"}
@@ -360,7 +364,8 @@ function ViewReportModal({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-lg border transition-colors"
+            style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)", color: "var(--t-muted)" }}
           >
             <X size={14} />
           </button>
@@ -377,22 +382,22 @@ function ViewReportModal({
             ].map((k) => (
               <div
                 key={k.label}
-                className="bg-[#0a1220] border border-[rgba(0,129,242,0.12)] rounded-xl p-3 text-center"
+                className="rounded-xl p-3 text-center" style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}
               >
                 <div className="text-[16px] font-bold" style={{ color: k.color }}>
                   {k.value}
                 </div>
-                <div className="text-[10px] text-[#6b7a99] mt-0.5">{k.label}</div>
+                <div className="text-[10px] mt-0.5" style={{ color: "var(--t-muted)" }}>{k.label}</div>
               </div>
             ))}
           </div>
 
           {gc?.executiveSummary && (
             <div>
-              <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest mb-2" style={{ color: "var(--t-dim)" }}>
                 Executive Summary
               </h3>
-              <p className="text-[13px] text-[#c8d4e8] leading-relaxed">{gc.executiveSummary}</p>
+              <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{gc.executiveSummary}</p>
             </div>
           )}
 
@@ -404,7 +409,7 @@ function ViewReportModal({
                   Wins
                 </h3>
               </div>
-              <p className="text-[13px] text-[#c8d4e8] leading-relaxed">{gc.winsSection}</p>
+              <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{gc.winsSection}</p>
             </div>
           )}
 
@@ -416,7 +421,7 @@ function ViewReportModal({
                   Issues
                 </h3>
               </div>
-              <p className="text-[13px] text-[#c8d4e8] leading-relaxed">{gc.issuesSection}</p>
+              <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{gc.issuesSection}</p>
             </div>
           )}
 
@@ -428,18 +433,18 @@ function ViewReportModal({
                   Next Actions
                 </h3>
               </div>
-              <p className="text-[13px] text-[#c8d4e8] leading-relaxed">{gc.nextActionsSection}</p>
+              <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{gc.nextActionsSection}</p>
             </div>
           )}
 
           {gc?.agentRecommendations && gc.agentRecommendations.length > 0 && (
             <div>
-              <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-2">
+              <h3 className="text-[11px] font-bold uppercase tracking-widest mb-2" style={{ color: "var(--t-dim)" }}>
                 Veronica&apos;s Recommendations
               </h3>
               <ul className="space-y-1.5">
                 {gc.agentRecommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[12px] text-[#c8d4e8]">
+                  <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: "var(--t-text-body)" }}>
                     <span className="text-[#ff8400] mt-0.5 shrink-0">→</span>
                     <span>{rec}</span>
                   </li>
@@ -449,11 +454,11 @@ function ViewReportModal({
           )}
 
           {gc?.clientReadyNarrative && (
-            <div className="bg-[#0a1220] border border-[rgba(0,129,242,0.12)] rounded-xl p-4">
-              <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-3">
+            <div className="rounded-xl p-4" style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+              <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "var(--t-dim)" }}>
                 Client-Ready Narrative
               </h3>
-              <div className="text-[12px] text-[#c8d4e8] leading-relaxed whitespace-pre-wrap">
+              <div className="text-[12px] leading-relaxed whitespace-pre-wrap" style={{ color: "var(--t-text-body)" }}>
                 {gc.clientReadyNarrative}
               </div>
             </div>
@@ -621,7 +626,7 @@ export default function ReportsPage() {
             >
               {usingSupabase ? "Supabase" : "Local"}
             </span>
-            <button className="flex items-center gap-2 px-3 py-2 bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-lg text-[13px] text-[#6b7a99] hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.25)] transition-colors">
+            <button className="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] transition-colors" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", color: "var(--t-muted)" }}>
               <Calendar size={13} />
               {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
             </button>
@@ -653,7 +658,8 @@ export default function ReportsPage() {
         ].map((s) => (
           <div
             key={s.label}
-            className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-4"
+            className="rounded-xl p-4"
+            style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
           >
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
@@ -661,8 +667,8 @@ export default function ReportsPage() {
             >
               <s.icon size={14} style={{ color: s.color }} />
             </div>
-            <div className="text-[18px] font-bold text-[#f8f8f7] tracking-tight">{s.value}</div>
-            <div className="text-[11px] text-[#6b7a99] mt-0.5">{s.label}</div>
+            <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--t-text)" }}>{s.value}</div>
+            <div className="text-[11px] mt-0.5" style={{ color: "var(--t-muted)" }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -682,9 +688,9 @@ export default function ReportsPage() {
       )}
 
       {/* Reports table */}
-      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
         {isLoading && (
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[rgba(0,129,242,0.15)] text-[12px] text-[#6b7a99]">
+          <div className="flex items-center gap-2 px-4 py-3 text-[12px]" style={{ borderBottom: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }}>
             <Loader2 size={12} className="animate-spin" />
             Loading clients and reports…
           </div>
@@ -692,11 +698,11 @@ export default function ReportsPage() {
 
         {!isLoading && clients.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-            <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] flex items-center justify-center mb-4">
-              <FileText size={18} className="text-[#3d4f6e]" />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}>
+              <FileText size={18} style={{ color: "var(--t-dim)" }} />
             </div>
-            <div className="text-[14px] font-semibold text-[#f8f8f7] mb-2">No clients found</div>
-            <p className="text-[12px] text-[#6b7a99] max-w-sm">
+            <div className="text-[14px] font-semibold mb-2" style={{ color: "var(--t-text)" }}>No clients found</div>
+            <p className="text-[12px] max-w-sm" style={{ color: "var(--t-muted)" }}>
               Add clients in the Clients section to start generating weekly performance reports.
             </p>
           </div>
@@ -705,18 +711,19 @@ export default function ReportsPage() {
         {!isLoading && clients.length > 0 && (
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-[rgba(0,129,242,0.15)]">
+              <tr style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
                 {["Client", "Report Period", "Status", "Leads", "Booked", "CPL", "Spend", ""].map(
                   (h, i) => (
                     <th
                       key={`${h}-${i}`}
-                      className={`px-4 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${
+                      className={`px-4 py-3.5 text-[9px] font-bold uppercase tracking-widest ${
                         h === "Client" || h === "Report Period"
                           ? "text-left"
                           : h === ""
                           ? ""
                           : "text-right"
                       }`}
+                      style={{ color: "var(--t-dim)" }}
                     >
                       {h}
                     </th>
@@ -737,19 +744,18 @@ export default function ReportsPage() {
                 return (
                   <tr
                     key={client.id}
-                    className={`border-b border-[rgba(0,129,242,0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors group ${
-                      i === clients.length - 1 ? "border-b-0" : ""
-                    }`}
+                    className="transition-colors group"
+                    style={i < clients.length - 1 ? { borderBottom: "1px solid var(--t-border-subtle)" } : {}}
                   >
                     <td className="px-4 py-3.5">
-                      <div className="font-semibold text-[#f8f8f7]">{client.name}</div>
+                      <div className="font-semibold" style={{ color: "var(--t-text)" }}>{client.name}</div>
                       {client.status !== "active" && (
-                        <div className="text-[10px] text-[#6b7a99] mt-0.5 capitalize">
+                        <div className="text-[10px] mt-0.5 capitalize" style={{ color: "var(--t-muted)" }}>
                           {client.status} — {hasReport ? "report generated" : "no data yet"}
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-[#6b7a99]">
+                    <td className="px-4 py-3.5" style={{ color: "var(--t-muted)" }}>
                       {persisted?.reportPeriod ?? "—"}
                     </td>
                     <td className="px-4 py-3.5">
@@ -774,18 +780,18 @@ export default function ReportsPage() {
                       {leads > 0 ? (
                         <span className="text-[#0081f2] font-semibold">{leads}</span>
                       ) : (
-                        <span className="text-[#3d4f6e]">—</span>
+                        <span style={{ color: "var(--t-dim)" }}>—</span>
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right">
                       {booked > 0 ? (
                         <span className="text-[#22c55e] font-semibold">{booked}</span>
                       ) : (
-                        <span className="text-[#3d4f6e]">—</span>
+                        <span style={{ color: "var(--t-dim)" }}>—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-[#f8f8f7]">{cpl}</td>
-                    <td className="px-4 py-3.5 text-right text-[#f8f8f7]">
+                    <td className="px-4 py-3.5 text-right" style={{ color: "var(--t-text)" }}>{cpl}</td>
+                    <td className="px-4 py-3.5 text-right" style={{ color: "var(--t-text)" }}>
                       {spend !== "$0" ? spend : "—"}
                     </td>
                     <td className="px-4 py-3.5">

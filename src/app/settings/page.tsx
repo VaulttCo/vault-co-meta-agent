@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import {
   Link2,
   Key,
-  Bell,
   Shield,
   User,
   ChevronRight,
@@ -18,6 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -28,36 +28,12 @@ import { getDataProvider } from "@/lib/data/data-provider";
 
 const integrationSections = [
   {
-    id: "integrations",
-    title: "Platform Integrations",
-    icon: Link2,
-    color: "#0081f2",
-    items: [
-      { label: "Meta Business Manager", description: "Not connected — connect to enable ad performance reporting", status: "disconnected" },
-      { label: "Meta Marketing API", description: "Not connected — required for campaign analytics and spend data", status: "disconnected" },
-      { label: "GoHighLevel (GHL)", description: "Not connected — required for appointment and pipeline sync", status: "disconnected" },
-      { label: "Google Analytics 4", description: "Not connected", status: "disconnected" },
-    ],
-  },
-  {
     id: "api",
     title: "API Keys",
     icon: Key,
     color: "#ff8400",
     items: [
       { label: "Anthropic API", description: "claude-sonnet-4-6 · Live AI generation active", status: "connected" },
-    ],
-  },
-  {
-    id: "notifications",
-    title: "Notifications",
-    icon: Bell,
-    color: "#a78bfa",
-    items: [
-      { label: "Agent Action Alerts", description: "Notify when agent takes autonomous action", status: "enabled" },
-      { label: "Performance Alerts", description: "Notify when ROAS drops below threshold", status: "enabled" },
-      { label: "Weekly Report", description: "Email summary every Monday", status: "enabled" },
-      { label: "Budget Alerts", description: "Notify at 80% and 100% daily budget", status: "disabled" },
     ],
   },
 ];
@@ -124,7 +100,7 @@ export default function SettingsPage() {
             },
             {
               label: "AI Provider",
-              value: aiLive ? `Anthropic Live (claude-haiku-4-5)` : "Mock Mode",
+              value: aiLive ? `Anthropic Live (claude-sonnet-4-6)` : "Mock Mode",
               ok: aiLive,
             },
             {
@@ -327,7 +303,7 @@ export default function SettingsPage() {
               <p className="text-[12px] text-[#6b7a99] leading-snug">
                 <span className="text-[#22c55e] font-semibold">Veronica is live.</span>{" "}
                 Using{" "}
-                <span className="font-mono text-[#f8f8f7]">{aiProvider === "anthropic" ? "claude-haiku-4-5" : "gpt-4o"}</span>{" "}
+                <span className="font-mono text-[#f8f8f7]">{aiProvider === "anthropic" ? "claude-sonnet-4-6" : "gpt-4o"}</span>{" "}
                 for campaign generation, intelligence extraction, creative analysis, and report drafting.
               </p>
             </div>
@@ -351,7 +327,7 @@ export default function SettingsPage() {
               },
               {
                 label: "AI_PROVIDER=anthropic",
-                desc: "claude-haiku-4-5 via Anthropic API — requires ANTHROPIC_API_KEY",
+                desc: "claude-sonnet-4-6 via Anthropic API — requires ANTHROPIC_API_KEY",
                 active: aiProvider === "anthropic",
               },
               {
@@ -558,7 +534,7 @@ export default function SettingsPage() {
               <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0 mt-0.5" />
               <div className="text-[12px] text-[#6b7a99] leading-snug">
                 <span className="text-[#22c55e] font-semibold">Veronica AI is live. </span>
-                Using Anthropic claude-haiku-4-5 for campaign generation, intelligence extraction, creative analysis, and report drafting.
+                Using Anthropic claude-sonnet-4-6 for campaign generation, intelligence extraction, creative analysis, and report drafting.
               </div>
             </div>
           ) : (
@@ -622,7 +598,52 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Integrations / API Keys / Notifications */}
+      {/* Per-client integrations — Meta Ads & GoHighLevel */}
+      <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
+          <Link2 size={14} className="text-[#0081f2]" />
+          <span className="text-sm font-semibold text-[#f8f8f7]">Platform Integrations</span>
+          <span className="ml-auto text-[11px] text-[#6b7a99]">Configured per client</span>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-[12px] text-[#6b7a99] leading-relaxed">
+            Meta Ads and GoHighLevel are connected individually for each client. Open a client profile and go to the{" "}
+            <span className="text-[#f8f8f7] font-medium">Integrations</span> tab to add credentials for that client.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { label: "Meta Business Manager", desc: "Ad performance, spend, and campaign reporting" },
+              { label: "Meta Marketing API", desc: "Campaign analytics and lead data" },
+              { label: "GoHighLevel (GHL)", desc: "Appointment tracking and pipeline sync" },
+              { label: "Google Analytics 4", desc: "Website traffic and conversion tracking" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="flex items-start gap-2.5 px-3 py-2.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.10)] rounded-lg"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e] flex-shrink-0 mt-1" />
+                <div>
+                  <div className="text-[12px] font-medium text-[#6b7a99]">{item.label}</div>
+                  <div className="text-[11px] text-[#3d4f6e] mt-0.5">{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/clients"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+            style={{
+              backgroundColor: "rgba(0,129,242,0.10)",
+              border: "1px solid rgba(0,129,242,0.25)",
+              color: "#0081f2",
+            }}
+          >
+            Open Client Profiles →
+          </Link>
+        </div>
+      </div>
+
+      {/* API Keys */}
       {integrationSections.map((section) => (
         <div key={section.id} className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">

@@ -104,7 +104,7 @@ export default function AnalyticsPage() {
       <div className="flex items-start justify-between">
         <PageHeader
           title="Analytics"
-          description="Performance analytics across all clients"
+          description="All-client rollup — aggregated from each client's connected integrations"
         />
         <button
           onClick={() => loadData(true)}

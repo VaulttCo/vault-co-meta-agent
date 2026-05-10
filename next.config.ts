@@ -1,7 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // pdfjs-dist CMaps are loaded dynamically at runtime by filename.
+  // Next.js output file tracing cannot detect them statically, so we
+  // explicitly include them so Vercel bundles them in the serverless function.
+  outputFileTracingIncludes: {
+    "/api/extract-pdf-text": ["./node_modules/pdfjs-dist/cmaps/**"],
+  },
 };
 
 export default nextConfig;

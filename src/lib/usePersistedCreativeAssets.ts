@@ -157,9 +157,21 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
         fileName: row.file_name,
         fileType: (row.file_type === "image" ? "image" : "video") as "image" | "video",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        assetType: row.asset_type as any,
+        assetType: (() => {
+          const VALID_TYPES = ["Before/After","Testimonial","Inspection Day","Storm Damage","Project Reveal","Team Photo","Owner On Camera","Drone Footage","Jobsite Walkthrough","Warranty Explanation","Q&A Clip","UGC Style Video"];
+          const t = row.asset_type as string;
+          if (VALID_TYPES.includes(t)) return t as any;
+          // Unknown DB value: use neutral fallback keyed on file_type
+          return (row.file_type === "image" ? "Project Reveal" : "UGC Style Video") as any;
+        })(),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        category: ((row as any).category ?? "Creative Asset") as any,
+        category: (() => {
+          const c = ((row as any).category as string) ?? "";
+          if (c === "client_asset") return "Client Asset";
+          if (c === "creative_asset") return "Creative Asset";
+          if (c === "onboarding_summary") return "Onboarding Summary";
+          return (c || "Creative Asset");
+        })() as any,
         thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
         storageUrl: row.storage_url ?? (meta.storage_url as string | null) ?? null,
         uploadDate: row.upload_date,

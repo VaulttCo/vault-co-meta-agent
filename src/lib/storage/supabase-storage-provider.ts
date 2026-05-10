@@ -2,15 +2,15 @@
 // NEXT_PUBLIC_SUPABASE_ANON_KEY are set.
 //
 // Buckets used:
-//   creative-assets     — private, stores original uploaded files (images + videos)
-//   creative-thumbnails — public,  stores thumbnail/preview images (images only)
+//   creative-assets — private, stores all uploaded files (images + videos)
 //
 // URL strategy:
-//   Images  → thumbnailUrl = public URL from creative-thumbnails (permanent, never expires)
-//             storageUrl   = public URL from creative-thumbnails (same, for full-size view)
-//             Fallback: if bucket is private, uses 1-year signed URL
-//   Videos  → storageUrl   = signed URL from creative-assets (1 year TTL)
+//   Images  → storageUrl = thumbnailUrl = 1-year signed URL from creative-assets
+//   Videos  → storageUrl = signed URL from creative-assets (1 year TTL)
 //             thumbnailUrl = null (no thumbnail generated server-side)
+//
+// All metadata is saved via /api/creatives/save-metadata (service role, bypasses
+// table RLS) so uploads succeed regardless of user_profiles configuration.
 //
 // Upload strategy:
 //   Files ≤ LARGE_VIDEO_THRESHOLD (100 MB) → standard fetch-based upload
@@ -309,48 +309,35 @@ export class SupabaseStorageProvider implements StorageProvider {
       const isLargeVideo = isVideo && blob.size > LARGE_VIDEO_THRESHOLD;
 
       if (isImage) {
-        // ── Images: upload to public creative-thumbnails bucket ──────────────
-        // Using the public bucket means the URL never expires.
-        // We store the same URL in both storageUrl and thumbnailUrl.
-        const thumbPath = storagePath(fileRecord.clientId, fileRecord.fileName);
+        // ── Images: upload to private creative-assets bucket ─────────────────
+        // Avoids creative-thumbnails RLS (which blocks users without user_profiles rows).
+        // A 1-year signed URL is used for both storageUrl and thumbnailUrl.
+        const assetPath = storagePath(fileRecord.clientId, fileRecord.fileName);
 
-        const { data: thumbUpload, error: thumbError } = await (supabase as any).storage
-          .from(THUMBS_BUCKET)
-          .upload(thumbPath, blob, {
+        const { data: uploadData, error: uploadError } = await (supabase as any).storage
+          .from(ASSETS_BUCKET)
+          .upload(assetPath, blob, {
             contentType: resolvedMime,
             upsert: true,
           });
 
-        if (thumbError) {
-          throw new Error(`Image upload failed: ${thumbError.message}`);
+        if (uploadError) {
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
 
-        cleanupBucket = THUMBS_BUCKET;
-        cleanupPath = thumbUpload?.path ?? thumbPath;
+        cleanupBucket = ASSETS_BUCKET;
+        cleanupPath = uploadData?.path ?? assetPath;
 
-        const { data: pubData } = (supabase as any).storage
-          .from(THUMBS_BUCKET)
-          .getPublicUrl(thumbUpload?.path ?? thumbPath);
-
-        const publicUrl: string = pubData?.publicUrl ?? "";
-        if (publicUrl) {
-          storageUrl = publicUrl;
-          thumbnailUrl = publicUrl;
-        } else {
-          // Bucket may be private — fall back to signed URL
-          const { data: signed } = await (supabase as any).storage
-            .from(THUMBS_BUCKET)
-            .createSignedUrl(thumbUpload?.path ?? thumbPath, SIGNED_URL_TTL);
-          storageUrl = signed?.signedUrl ?? storageUrl;
-          thumbnailUrl = storageUrl;
-        }
-
-        // Also upload original to private creative-assets bucket for archival (non-blocking)
-        const assetPath = storagePath(fileRecord.clientId, `original_${fileRecord.fileName}`);
-        (supabase as any).storage
+        const { data: signed, error: signError } = await (supabase as any).storage
           .from(ASSETS_BUCKET)
-          .upload(assetPath, blob, { contentType: resolvedMime, upsert: true })
-          .catch((e: Error) => console.warn("[SupabaseStorageProvider] archival upload:", e.message));
+          .createSignedUrl(uploadData?.path ?? assetPath, SIGNED_URL_TTL);
+
+        if (signError) {
+          throw new Error(`Failed to generate image URL: ${signError.message}`);
+        }
+
+        storageUrl = signed?.signedUrl ?? storageUrl;
+        thumbnailUrl = storageUrl;
 
       } else if (isVideo) {
         // ── Videos: upload to private creative-assets bucket ─────────────────
@@ -457,39 +444,32 @@ export class SupabaseStorageProvider implements StorageProvider {
       ? "video"
       : "image"; // default for DB check constraint
 
-    // Map ClientFile status → creative_assets DB status.
-    // The actual DB constraint uses lowercase values ('uploaded','active','pending','archived').
-    // "active" = new upload not yet reviewed, "pending" = needs review, "archived" = archived.
-    const dbStatus =
-      fileRecord.status === "pending" ? "pending"
-      : fileRecord.status === "archived" ? "archived"
-      : "uploaded"; // "active" or unknown → "uploaded" for new assets
-
-    const { error: dbError } = await (supabase as any)
-      .from("creative_assets")
-      .upsert({
+    // Persist metadata via the server route — uses service role to bypass table RLS.
+    const metaResponse = await fetch("/api/creatives/save-metadata", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         id: fileRecord.id,
-        client_id: fileRecord.clientId,
-        file_name: fileRecord.fileName,
-        file_type: resolvedFileType,
-        asset_type: "Creative Asset",
-        upload_date: new Date().toISOString().split("T")[0], // ISO date required by Postgres date type
+        clientId: fileRecord.clientId,
+        fileName: fileRecord.fileName,
+        fileType: resolvedFileType,
+        uploadDate: new Date().toISOString().split("T")[0],
         notes: encodedNotes,
-        status: dbStatus,
-        // Write to real columns
-        storage_url: storageUrl || null,
-        thumbnail_url: thumbnailUrl || null,
-        tags: [],
-        approved_for_ads: false,
-      });
+        storageUrl: storageUrl || null,
+        thumbnailUrl: thumbnailUrl || null,
+      }),
+    });
 
-    if (dbError) {
-      console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
-      // Clean up the orphan storage object so we don't leak files
+    if (!metaResponse.ok) {
+      let errMsg = "Failed to save asset record";
+      try {
+        const errBody = await metaResponse.json();
+        errMsg = (errBody as { error?: string }).error ?? errMsg;
+      } catch { /* non-JSON body */ }
       if (cleanupBucket && cleanupPath) {
         (supabase as any).storage.from(cleanupBucket).remove([cleanupPath]).catch(() => {});
       }
-      throw new Error(`Upload succeeded but failed to save asset record: ${dbError.message}`);
+      throw new Error(`Upload succeeded but failed to save asset record: ${errMsg}`);
     }
 
     return {

@@ -288,7 +288,7 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[rgba(61,79,110,0.10)] border border-[rgba(61,79,110,0.20)] text-[#3d4f6e]">
                   <BarChart2 size={11} />
-                  Add META_ACCESS_TOKEN to Vercel env vars to enable
+                  Connect Meta Ads from a client profile → Integrations tab
                 </div>
               </div>
             )}

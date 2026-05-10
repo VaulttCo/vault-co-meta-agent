@@ -159,8 +159,8 @@ export class SupabaseDataProvider implements DataProvider {
       .select("*")
       .order("company_name");
 
-    if (error || !data?.length) {
-      if (error) console.warn("[SupabaseProvider] getClients:", error.message);
+    if (error) {
+      console.warn("[SupabaseProvider] getClients:", error.message);
       return this.mock.getClients();
     }
     return (data as ClientRow[]).map(rowToClient);
@@ -341,8 +341,8 @@ export class SupabaseDataProvider implements DataProvider {
 
     const { data, error } = await query;
 
-    if (error || !data?.length) {
-      if (error) console.warn("[SupabaseProvider] getCreativeAssets:", error.message);
+    if (error) {
+      console.warn("[SupabaseProvider] getCreativeAssets:", error.message);
       return this.mock.getCreativeAssets(clientId);
     }
     return (data as CreativeAssetRow[]).map(rowToAsset);
@@ -407,8 +407,8 @@ export class SupabaseDataProvider implements DataProvider {
 
     const { data, error } = await query;
 
-    if (error || !data?.length) {
-      if (error) console.warn("[SupabaseProvider] getCampaignDrafts:", error.message);
+    if (error) {
+      console.warn("[SupabaseProvider] getCampaignDrafts:", error.message);
       return this.mock.getCampaignDrafts(clientId);
     }
     return (data as CampaignDraftRow[]).map(rowToDraft);
@@ -505,7 +505,6 @@ export class SupabaseDataProvider implements DataProvider {
       console.warn("[SupabaseProvider] getReports:", error.message);
       return this.mock.getReports(clientId);
     }
-    if (!data?.length) return this.mock.getReports(clientId);
     return (data as ReportRow[]).map(rowToReport);
   }
 

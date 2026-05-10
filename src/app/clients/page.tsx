@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Search, ChevronRight, Phone, DollarSign, X, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -326,6 +327,7 @@ function AddClientModal({
 type FilterStatus = "All" | "Active" | "Setup" | "Onboarding" | "Paused";
 
 export default function ClientsPage() {
+  const router = useRouter();
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [search, setSearch] = useState("");
@@ -469,10 +471,11 @@ export default function ClientsPage() {
               {filtered.map((c, i) => (
                 <tr
                   key={c.id}
-                  className="border-b transition-colors group"
+                  className="border-b transition-colors group cursor-pointer"
                   style={{
                     borderColor: i === filtered.length - 1 ? "transparent" : "rgba(0, 129, 242, 0.08)",
                   }}
+                  onClick={() => router.push(`/clients/${c.id}`)}
                 >
                   <td className="px-4 py-4">
                     <div className="font-semibold" style={{ color: "#f8f8f7" }}>{c.name}</div>

@@ -1404,6 +1404,8 @@ export default function CreativesPage() {
 
   // Filtered assets
   const filtered = useMemo(() => {
+    const uploaded = allAssets.filter((a) => !["ca-001","ca-002","ca-003","ca-004","ca-005","ca-006","ca-007","ca-008","ca-009","ca-010"].includes(a.id));
+    console.log("[vc:page] allAssets:", allAssets.length, "non-mock:", uploaded.length, "filters:", { filterClient, filterType, filterStatus });
     return allAssets.filter((a) => {
       // Bug 3 fix: exact clientId match (mock asset IDs now aligned with canonical client IDs)
       if (filterClient !== "all" && a.clientId !== filterClient) return false;

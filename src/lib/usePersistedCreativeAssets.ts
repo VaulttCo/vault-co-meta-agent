@@ -166,9 +166,17 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
                   campaignUseCase: row.campaign_use_case ?? "",
                   // Strip __META__: suffix so the Notes field shows only user text
                   notes: userNotes,
-                  // Map Supabase lowercase status back to TypeScript display status
+                  // Map DB status to TypeScript display status.
+                  // Handles title case (schema-compliant) and legacy lowercase values.
                   status: (() => {
                     const s = row.status as string;
+                    // Title case (current schema)
+                    if (s === "Uploaded") return "Uploaded" as const;
+                    if (s === "Needs Review") return "Needs Review" as const;
+                    if (s === "Approved") return "Approved" as const;
+                    if (s === "Used in Campaign") return "Used in Campaign" as const;
+                    if (s === "Archived") return "Archived" as const;
+                    // Legacy lowercase
                     if (s === "uploaded") return "Uploaded" as const;
                     if (s === "active") return (row.approved_for_ads ? "Approved" as const : "Uploaded" as const);
                     if (s === "pending") return "Needs Review" as const;
@@ -221,12 +229,12 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
           notes: asset.notes,
           status: (() => {
             const s = asset.status as string;
-            if (s === "Uploaded") return "uploaded";
-            if (s === "Needs Review") return "pending";
-            if (s === "Approved") return "active";
-            if (s === "Used in Campaign") return "active";
-            if (s === "Archived") return "draft";
-            return "uploaded";
+            // Write title case values matching the DB CHECK constraint
+            if (s === "Needs Review") return "Needs Review";
+            if (s === "Approved") return "Approved";
+            if (s === "Used in Campaign") return "Used in Campaign";
+            if (s === "Archived") return "Archived";
+            return "Uploaded"; // default
           })(),
           tags: asset.tags,
           approved_for_ads: asset.approvedForAds,

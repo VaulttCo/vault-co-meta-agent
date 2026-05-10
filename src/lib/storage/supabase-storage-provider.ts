@@ -297,6 +297,10 @@ export class SupabaseStorageProvider implements StorageProvider {
     let storageUrl = fileRecord.storageUrl;
     let thumbnailUrl = fileRecord.thumbnailUrl;
 
+    // Track the uploaded storage path so we can clean up if the DB save fails
+    let cleanupBucket: string | null = null;
+    let cleanupPath: string | null = null;
+
     // If a real browser File blob is attached, upload it to Supabase Storage
     const blob = fileRecord._blob;
     if (blob) {
@@ -320,6 +324,9 @@ export class SupabaseStorageProvider implements StorageProvider {
         if (thumbError) {
           throw new Error(`Image upload failed: ${thumbError.message}`);
         }
+
+        cleanupBucket = THUMBS_BUCKET;
+        cleanupPath = thumbUpload?.path ?? thumbPath;
 
         const { data: pubData } = (supabase as any).storage
           .from(THUMBS_BUCKET)
@@ -367,6 +374,8 @@ export class SupabaseStorageProvider implements StorageProvider {
             accessToken,
             options?.onProgress
           );
+          cleanupBucket = ASSETS_BUCKET;
+          cleanupPath = path;
 
         } else {
           // ── Standard video upload (≤100 MB) ──────────────────────────────
@@ -380,6 +389,9 @@ export class SupabaseStorageProvider implements StorageProvider {
           if (uploadError) {
             throw new Error(`Video upload failed: ${uploadError.message}`);
           }
+
+          cleanupBucket = ASSETS_BUCKET;
+          cleanupPath = uploadData?.path ?? path;
 
           // Use uploadData.path for the signed URL
           const uploadedPath = uploadData?.path ?? path;
@@ -445,6 +457,13 @@ export class SupabaseStorageProvider implements StorageProvider {
       ? "video"
       : "image"; // default for DB check constraint
 
+    // Map ClientFile status → creative_assets DB status
+    // Schema CHECK constraint: ('Uploaded','Needs Review','Approved','Used in Campaign','Archived')
+    const dbStatus =
+      fileRecord.status === "pending" ? "Needs Review"
+      : fileRecord.status === "archived" ? "Archived"
+      : "Uploaded"; // "active" and any other → "Uploaded" for new uploads
+
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")
       .upsert({
@@ -452,10 +471,10 @@ export class SupabaseStorageProvider implements StorageProvider {
         client_id: fileRecord.clientId,
         file_name: fileRecord.fileName,
         file_type: resolvedFileType,
-        asset_type: "image",
-        upload_date: fileRecord.uploadedAt,
+        asset_type: "Creative Asset",
+        upload_date: new Date().toISOString().split("T")[0], // ISO date required by Postgres date type
         notes: encodedNotes,
-        status: fileRecord.status,
+        status: dbStatus,
         // Write to real columns
         storage_url: storageUrl || null,
         thumbnail_url: thumbnailUrl || null,
@@ -465,7 +484,11 @@ export class SupabaseStorageProvider implements StorageProvider {
 
     if (dbError) {
       console.error("[SupabaseStorageProvider] saveFile metadata:", dbError.message);
-      // Don't throw — file is already uploaded; metadata failure is recoverable
+      // Clean up the orphan storage object so we don't leak files
+      if (cleanupBucket && cleanupPath) {
+        (supabase as any).storage.from(cleanupBucket).remove([cleanupPath]).catch(() => {});
+      }
+      throw new Error(`Upload succeeded but failed to save asset record: ${dbError.message}`);
     }
 
     return {

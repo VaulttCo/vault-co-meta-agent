@@ -72,6 +72,20 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await fileObj.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    // Confirm we received real PDF bytes
+    const firstBytes = buffer.slice(0, 5).toString("hex").toUpperCase();
+    const isPdf = firstBytes.startsWith("255044462D"); // %PDF-
+    console.log(
+      `[extract-pdf-text] recv: name=${fileObj.name} size=${buffer.length}B type=${fileObj.type} first5bytes=${firstBytes} isPdf=${isPdf}`
+    );
+
+    if (!isPdf && buffer.length > 0) {
+      return NextResponse.json(
+        { error: "File does not appear to be a valid PDF (bad header). Please re-upload." },
+        { status: 422 }
+      );
+    }
+
     // Check for password-protected PDF (encrypted)
     const rawHeader = buffer.slice(0, 1024).toString("binary");
     if (rawHeader.includes("/Encrypt")) {
@@ -87,11 +101,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Extract text — pdfjs-dist primary, hand-rolled zlib fallback
-    const { text, pageCount, scanned, method } = await extractTextFromPdf(buffer);
+    const { text, pageCount, scanned, method, diagnostic } = await extractTextFromPdf(buffer);
 
-    // Safe diagnostic log: counts only, no content
+    // Safe diagnostic log — counts only, no text content
     console.log(
-      `[extract-pdf-text] file=${fileObj.name} size=${buffer.length}B pages=${pageCount} chars=${text.length} method=${method} scanned=${scanned}`
+      `[extract-pdf-text] result: pages=${pageCount} chars=${text.length} method=${method} scanned=${scanned} diag=${diagnostic ?? "none"}`
     );
 
     if (scanned) {
@@ -103,6 +117,7 @@ export async function POST(req: NextRequest) {
           text: "",
           pageCount,
           fileName: fileObj.name,
+          debug: { method, diagnostic: diagnostic ?? "none" },
         },
         { status: 422 }
       );

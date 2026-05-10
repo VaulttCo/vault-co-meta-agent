@@ -9,8 +9,10 @@
 //   Videos  → storageUrl = signed URL from creative-assets (1 year TTL)
 //             thumbnailUrl = null (no thumbnail generated server-side)
 //
-// All metadata is saved via /api/creatives/save-metadata (service role, bypasses
-// table RLS) so uploads succeed regardless of user_profiles configuration.
+// DB write strategy:
+//   creative_assets upsert runs with the caller's JWT set explicitly in the
+//   Authorization header (not the SSR client singleton). This guarantees
+//   auth.uid() resolves correctly under RLS so get_user_role() returns 'admin'.
 //
 // Upload strategy:
 //   Files ≤ LARGE_VIDEO_THRESHOLD (100 MB) → standard fetch-based upload
@@ -25,9 +27,7 @@
 // Progress callback: pass onProgress(percent: number) in the options to receive
 // upload progress updates (0–100). Used by UploadModal for the progress bar.
 
-// Use the SSR browser client — same singleton as AuthProvider.
-// createBrowserClient() from @supabase/ssr reads session from cookies,
-// so getSession() always returns the active session even on first call.
+import { createClient } from "@supabase/supabase-js";
 import { getSupabaseSSRBrowserClient } from "@/lib/supabase/ssr-client";
 import type { StorageProvider } from "./storage-provider";
 import type { ClientFile, FileCategory } from "./types";
@@ -444,32 +444,37 @@ export class SupabaseStorageProvider implements StorageProvider {
       ? "video"
       : "image"; // default for DB check constraint
 
-    // Persist metadata via the server route — uses service role to bypass table RLS.
-    const metaResponse = await fetch("/api/creatives/save-metadata", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: fileRecord.id,
-        clientId: fileRecord.clientId,
-        fileName: fileRecord.fileName,
-        fileType: resolvedFileType,
-        uploadDate: new Date().toISOString().split("T")[0],
-        notes: encodedNotes,
-        storageUrl: storageUrl || null,
-        thumbnailUrl: thumbnailUrl || null,
-      }),
+    // Write creative_assets row using the caller's JWT in the Authorization header.
+    // Creating a per-request client (not the SSR singleton) guarantees auth.uid()
+    // resolves to the logged-in user so the RLS policy get_user_role() IN
+    // ('admin','media_buyer') evaluates correctly.
+    const authedDb = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { global: { headers: { Authorization: `Bearer ${accessToken}` } } }
+    );
+
+    const { error: dbError } = await authedDb.from("creative_assets").upsert({
+      id: fileRecord.id,
+      client_id: fileRecord.clientId,
+      file_name: fileRecord.fileName,
+      file_type: resolvedFileType,
+      asset_type: "Creative Asset",
+      upload_date: new Date().toISOString().split("T")[0],
+      notes: encodedNotes,
+      status: "uploaded",
+      storage_url: storageUrl || null,
+      thumbnail_url: thumbnailUrl || null,
+      tags: [],
+      approved_for_ads: false,
     });
 
-    if (!metaResponse.ok) {
-      let errMsg = "Failed to save asset record";
-      try {
-        const errBody = await metaResponse.json();
-        errMsg = (errBody as { error?: string }).error ?? errMsg;
-      } catch { /* non-JSON body */ }
+    if (dbError) {
+      console.error("[SupabaseStorageProvider] saveFile upsert:", dbError.message);
       if (cleanupBucket && cleanupPath) {
         (supabase as any).storage.from(cleanupBucket).remove([cleanupPath]).catch(() => {});
       }
-      throw new Error(`Upload succeeded but failed to save asset record: ${errMsg}`);
+      throw new Error(`Upload succeeded but failed to save asset record: ${dbError.message}`);
     }
 
     return {

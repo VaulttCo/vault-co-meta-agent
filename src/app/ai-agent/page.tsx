@@ -635,7 +635,12 @@ function AICampaignBuilderContent() {
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [mockModeActive, setMockModeActive] = useState(true);
+  // NEXT_PUBLIC_ vars are baked in at build time — read directly to avoid
+  // showing the mock banner when Anthropic/OpenAI is already configured.
+  const _aiProvider = process.env.NEXT_PUBLIC_AI_PROVIDER ?? "mock";
+  const [mockModeActive, setMockModeActive] = useState(
+    _aiProvider !== "anthropic" && _aiProvider !== "openai"
+  );
   const [mockModeNotice, setMockModeNotice] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<string>("mock");
 

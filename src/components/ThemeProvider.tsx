@@ -19,10 +19,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const resolved: Theme = saved === "light" || saved === "dark" ? saved : DEFAULT_THEME;
-    setThemeState(resolved);
-    document.documentElement.setAttribute("data-theme", resolved);
+    // Light mode is not production-ready — clamp to dark regardless of any saved preference.
+    setThemeState("dark");
+    document.documentElement.setAttribute("data-theme", "dark");
+    try { localStorage.setItem(STORAGE_KEY, "dark"); } catch { /* quota */ }
   }, []);
 
   function setTheme(t: Theme) {

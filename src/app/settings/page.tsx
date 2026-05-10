@@ -114,16 +114,6 @@ export default function SettingsPage() {
               ok: !isDemoMode,
               warn: isDemoMode,
             },
-            {
-              label: "Meta Ads",
-              value: "Not Connected",
-              ok: false,
-            },
-            {
-              label: "GoHighLevel",
-              value: "Not Connected",
-              ok: false,
-            },
           ].map((row) => (
             <div
               key={row.label}

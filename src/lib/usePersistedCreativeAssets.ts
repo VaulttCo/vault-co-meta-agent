@@ -124,17 +124,20 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
   // correctly under RLS. Called on initial load and after each upload.
   const fetchAndSetAssets = useCallback(async () => {
     const supabase = getSupabaseSSRBrowserClient();
+    console.log("[vc:fetch] client?", !!supabase);
     if (!supabase) return;
 
     // Ensure the SSR client's session is loaded from cookies before the SELECT.
     // Without this, the first PostgREST call may race against cookie parsing and run as anon.
-    await (supabase as any).auth.getSession();
+    const { data: sd } = await (supabase as any).auth.getSession();
+    console.log("[vc:fetch] session?", !!sd?.session, "uid:", sd?.session?.user?.id ?? "none");
 
     const { data, error } = await supabase
       .from("creative_assets")
       .select("*")
       .order("created_at", { ascending: false });
 
+    console.log("[vc:fetch] rows:", data?.length ?? 0, "error:", error?.message ?? "none");
     if (error || !data) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,6 +200,7 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
         approvedForAds: row.approved_for_ads,
       };
     });
+    console.log("[vc:fetch] mapped:", mapped.length, "ids:", mapped.map((a) => a.id));
     setUploadedAssets(mapped);
     setInitialAnalysisResults(analysisMap);
   }, []); // stable — no reactive deps
@@ -206,6 +210,7 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     let cancelled = false;
 
     async function load() {
+      console.log("[vc:load] usingSupabase:", usingSupabase);
       if (usingSupabase) {
         await fetchAndSetAssets();
         if (!cancelled) setLoading(false);

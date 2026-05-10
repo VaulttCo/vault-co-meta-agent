@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   WifiOff, BarChart2, RefreshCw, TrendingUp, Users, DollarSign,
-  Target, Loader2, Calendar, AlertTriangle, Settings, ArrowRight,
+  Target, Loader2, Calendar, AlertTriangle, ArrowRight,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 
@@ -148,7 +148,7 @@ export default function AnalyticsPage() {
                 </p>
                 <p className="text-[12px] mt-1 leading-relaxed text-[#6b7a99]">
                   Connect Meta Ads and GoHighLevel to view live performance analytics.
-                  Both integrations are currently disconnected.
+                  Integrations are configured per client — open a client profile and go to the Integrations tab.
                 </p>
                 {timedOut && (
                   <p className="text-[11px] mt-1 text-[#ff8400]">
@@ -183,7 +183,7 @@ export default function AnalyticsPage() {
                 {/* Action links */}
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Link
-                    href="/settings"
+                    href="/clients"
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
                     style={{
                       backgroundColor: "rgba(0,129,242,0.10)",
@@ -191,20 +191,7 @@ export default function AnalyticsPage() {
                       color: "#0081f2",
                     }}
                   >
-                    <Settings size={11} />
-                    Go to Settings
-                    <ArrowRight size={10} />
-                  </Link>
-                  <Link
-                    href="/clients"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
-                    style={{
-                      backgroundColor: "rgba(61,79,110,0.10)",
-                      border: "1px solid rgba(61,79,110,0.20)",
-                      color: "#6b7a99",
-                    }}
-                  >
-                    Open Client Integrations
+                    Open Client Profiles
                     <ArrowRight size={10} />
                   </Link>
                 </div>

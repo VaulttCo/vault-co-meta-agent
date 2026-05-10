@@ -109,7 +109,8 @@ export default function AnalyticsPage() {
         <button
           onClick={() => loadData(true)}
           disabled={refreshing || loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#0D1520] border border-[rgba(0,129,242,0.15)] text-[#6b7a99] hover:text-[#f8f8f7] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors disabled:opacity-50"
+          style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", color: "var(--t-muted)" }}
         >
           {refreshing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
           Refresh
@@ -120,7 +121,7 @@ export default function AnalyticsPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <Loader2 size={24} className="animate-spin text-[#0081f2]" />
-          <p className="text-[12px] text-[#3d4f6e]">Loading analytics data…</p>
+          <p className="text-[12px]" style={{ color: "var(--t-dim)" }}>Loading analytics data…</p>
         </div>
       ) : (
         <>
@@ -143,10 +144,10 @@ export default function AnalyticsPage() {
                 <AlertTriangle size={18} style={{ color: "#ff8400" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-semibold text-[#f8f8f7]">
+                <p className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>
                   No integrations connected
                 </p>
-                <p className="text-[12px] mt-1 leading-relaxed text-[#6b7a99]">
+                <p className="text-[12px] mt-1 leading-relaxed" style={{ color: "var(--t-muted)" }}>
                   Connect Meta Ads and GoHighLevel to view live performance analytics.
                   Integrations are configured per client — open a client profile and go to the Integrations tab.
                 </p>
@@ -200,15 +201,15 @@ export default function AnalyticsPage() {
           )}
 
           {/* Meta Ads Section */}
-          <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(0,129,242,0.15)]">
+          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-[#1877f2]/20 flex items-center justify-center">
                   <span className="text-[10px] font-bold text-[#1877f2]">M</span>
                 </div>
-                <span className="text-[13px] font-semibold text-[#f8f8f7]">Meta Ads Performance</span>
+                <span className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>Meta Ads Performance</span>
                 {hasMetaData && meta?.lastSyncedAt && (
-                  <span className="text-[10px] text-[#3d4f6e]">
+                  <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>
                     · Last synced {new Date(meta.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -218,7 +219,7 @@ export default function AnalyticsPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" /> Live Data
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] text-[#3d4f6e]">
+                <span className="flex items-center gap-1 text-[10px]" style={{ color: "var(--t-dim)" }}>
                   <WifiOff size={10} /> Not Connected
                 </span>
               )}
@@ -233,10 +234,10 @@ export default function AnalyticsPage() {
                     { icon: Target, label: "Avg CPL", value: meta!.avgCpl != null ? "$" + meta!.avgCpl.toFixed(2) : "—", color: "#22c55e" },
                     { icon: TrendingUp, label: "Impressions", value: meta!.totalImpressions.toLocaleString(), color: "#a78bfa" },
                   ].map(({ icon: Icon, label, value, color }) => (
-                    <div key={label} className="bg-[#0f1a28] rounded-xl p-4">
+                    <div key={label} className="rounded-xl p-4" style={{ backgroundColor: "var(--t-surface-2)" }}>
                       <div className="flex items-center gap-1.5 mb-2">
                         <Icon size={11} style={{ color }} />
-                        <span className="text-[10px] text-[#3d4f6e]">{label}</span>
+                        <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>{label}</span>
                       </div>
                       <div className="text-[18px] font-bold" style={{ color }}>{value}</div>
                     </div>
@@ -244,25 +245,25 @@ export default function AnalyticsPage() {
                 </div>
                 {meta!.campaigns.length > 0 && (
                   <div>
-                    <div className="text-[11px] font-semibold text-[#3d4f6e] uppercase tracking-wider mb-2">Campaign Breakdown</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--t-dim)" }}>Campaign Breakdown</div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-[12px]">
                         <thead>
-                          <tr className="border-b border-[rgba(0,129,242,0.15)]">
+                          <tr style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
                             {["Client", "Campaign", "Spend", "Leads", "CPL", "Impressions"].map((h) => (
-                              <th key={h} className="text-left px-3 py-2 text-[10px] font-semibold text-[#3d4f6e] uppercase tracking-wider">{h}</th>
+                              <th key={h} className="text-left px-3 py-2 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--t-dim)" }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {meta!.campaigns.map((c, i) => (
-                            <tr key={i} className="border-b border-[rgba(0,129,242,0.08)] hover:bg-[#0f1a28]/60 transition-colors">
-                              <td className="px-3 py-2.5 text-[#6b7a99]">{c.clientName}</td>
-                              <td className="px-3 py-2.5 text-[#f8f8f7]">{c.campaignName}</td>
+                            <tr key={i} className="transition-colors" style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
+                              <td className="px-3 py-2.5" style={{ color: "var(--t-muted)" }}>{c.clientName}</td>
+                              <td className="px-3 py-2.5" style={{ color: "var(--t-text)" }}>{c.campaignName}</td>
                               <td className="px-3 py-2.5 text-[#ff8400] font-semibold">${c.spend.toFixed(2)}</td>
                               <td className="px-3 py-2.5 text-[#0081f2] font-semibold">{c.leads}</td>
                               <td className="px-3 py-2.5 text-[#22c55e]">{c.cpl != null ? "$" + c.cpl.toFixed(2) : "—"}</td>
-                              <td className="px-3 py-2.5 text-[#6b7a99]">{c.impressions.toLocaleString()}</td>
+                              <td className="px-3 py-2.5" style={{ color: "var(--t-muted)" }}>{c.impressions.toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -270,23 +271,23 @@ export default function AnalyticsPage() {
                     </div>
                   </div>
                 )}
-                <p className="text-[10px] text-[#3d4f6e]">
+                <p className="text-[10px]" style={{ color: "var(--t-dim)" }}>
                   Data source: Meta Marketing API · {meta!.clientsWithData} client{meta!.clientsWithData !== 1 ? "s" : ""} with synced data · Read-only
                 </p>
               </div>
             ) : (
               <div className="p-8 flex flex-col items-center justify-center text-center gap-3">
                 <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[rgba(61,79,110,0.15)] border border-[rgba(61,79,110,0.25)]">
-                  <WifiOff size={18} className="text-[#3d4f6e]" />
+                  <WifiOff size={18} style={{ color: "var(--t-dim)" }} />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold text-[#6b7a99]">Meta Ads not connected</p>
-                  <p className="text-[11px] mt-1 max-w-sm leading-relaxed text-[#3d4f6e]">
+                  <p className="text-[13px] font-semibold" style={{ color: "var(--t-muted)" }}>Meta Ads not connected</p>
+                  <p className="text-[11px] mt-1 max-w-sm leading-relaxed" style={{ color: "var(--t-dim)" }}>
                     Performance analytics will appear once Meta read-only reporting is connected.
                     Open a client profile and go to the Integrations tab to connect Meta Ads.
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[rgba(61,79,110,0.10)] border border-[rgba(61,79,110,0.20)] text-[#3d4f6e]">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[rgba(61,79,110,0.10)] border border-[rgba(61,79,110,0.20)]" style={{ color: "var(--t-dim)" }}>
                   <BarChart2 size={11} />
                   Connect Meta Ads from a client profile → Integrations tab
                 </div>
@@ -295,15 +296,15 @@ export default function AnalyticsPage() {
           </div>
 
           {/* GoHighLevel Section */}
-          <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[rgba(0,129,242,0.15)]">
+          <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "1px solid var(--t-border-subtle)" }}>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded bg-[#22c55e]/20 flex items-center justify-center">
                   <span className="text-[10px] font-bold text-[#22c55e]">G</span>
                 </div>
-                <span className="text-[13px] font-semibold text-[#f8f8f7]">GoHighLevel Pipeline</span>
+                <span className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>GoHighLevel Pipeline</span>
                 {hasGHLData && ghl?.lastSyncedAt && (
-                  <span className="text-[10px] text-[#3d4f6e]">
+                  <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>
                     · Last synced {new Date(ghl.lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
@@ -313,7 +314,7 @@ export default function AnalyticsPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" /> Live Data
                 </span>
               ) : (
-                <span className="flex items-center gap-1 text-[10px] text-[#3d4f6e]">
+                <span className="flex items-center gap-1 text-[10px]" style={{ color: "var(--t-dim)" }}>
                   <WifiOff size={10} /> Not Connected
                 </span>
               )}
@@ -328,25 +329,25 @@ export default function AnalyticsPage() {
                     { icon: Target, label: "Booked", value: ghl!.totalBooked.toLocaleString(), color: "#22c55e" },
                     { icon: DollarSign, label: "Pipeline Value", value: "$" + ghl!.totalPipelineValue.toLocaleString(), color: "#ff8400" },
                   ].map(({ icon: Icon, label, value, color }) => (
-                    <div key={label} className="bg-[#0f1a28] rounded-xl p-4">
+                    <div key={label} className="rounded-xl p-4" style={{ backgroundColor: "var(--t-surface-2)" }}>
                       <div className="flex items-center gap-1.5 mb-2">
                         <Icon size={11} style={{ color }} />
-                        <span className="text-[10px] text-[#3d4f6e]">{label}</span>
+                        <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>{label}</span>
                       </div>
                       <div className="text-[18px] font-bold" style={{ color }}>{value}</div>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-[#3d4f6e]">
+                <p className="text-[10px]" style={{ color: "var(--t-dim)" }}>
                   Data source: GoHighLevel API · {ghl!.clientsWithData} client{ghl!.clientsWithData !== 1 ? "s" : ""} with synced data · Read-only
                 </p>
               </div>
             ) : (
               <div className="p-6 flex flex-col sm:flex-row items-start gap-4">
-                <WifiOff size={16} className="flex-shrink-0 mt-0.5 text-[#3d4f6e]" />
+                <WifiOff size={16} className="flex-shrink-0 mt-0.5" style={{ color: "var(--t-dim)" }} />
                 <div>
-                  <p className="text-[13px] font-semibold text-[#6b7a99]">GoHighLevel not connected</p>
-                  <p className="text-[11px] mt-1 leading-snug text-[#3d4f6e]">
+                  <p className="text-[13px] font-semibold" style={{ color: "var(--t-muted)" }}>GoHighLevel not connected</p>
+                  <p className="text-[11px] mt-1 leading-snug" style={{ color: "var(--t-dim)" }}>
                     Appointment and pipeline data will appear once GHL sync is connected.
                     Open a client profile and go to the Integrations tab to connect GoHighLevel.
                   </p>

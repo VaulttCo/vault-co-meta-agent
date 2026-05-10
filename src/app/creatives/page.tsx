@@ -1306,7 +1306,7 @@ function AssetCard({
 // ─────────────────────────────────────────────────────────────
 export default function CreativesPage() {
   const { can } = useAuth();
-  const { allAssets, addAsset, prependAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
+  const { allAssets, addAsset, prependAsset, updateAsset, removeAsset, refetch, usingSupabase, loading, initialAnalysisResults } = usePersistedCreativeAssets();
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [filterClient, setFilterClient] = useState("all");
@@ -1351,8 +1351,8 @@ export default function CreativesPage() {
   // update the real columns so previews work after refresh.
   useEffect(() => {
     if (!usingSupabase || loading) return;
-    import("@/lib/supabase/client").then(({ getSupabaseBrowserClient }) => {
-      const supabase = getSupabaseBrowserClient();
+    import("@/lib/supabase/ssr-client").then(({ getSupabaseSSRBrowserClient }) => {
+      const supabase = getSupabaseSSRBrowserClient();
       if (!supabase) return;
       import("@/lib/usePersistedCreativeAssets").then(({ parseNotesAndMeta }) => {
         (supabase as any)
@@ -1847,7 +1847,7 @@ export default function CreativesPage() {
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onAdd={async (asset) => { prependAsset(asset); }}
+          onAdd={async (asset) => { prependAsset(asset); await refetch(); }}
           usingSupabase={usingSupabase}
           clients={clients}
         />

@@ -18,7 +18,8 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { MOCK_CREATIVE_ASSETS, type CreativeAsset } from "./creativeAssets";
-import { getSupabaseBrowserClient, isSupabaseConfigured } from "./supabase/client";
+import { isSupabaseConfigured } from "./supabase/client";
+import { getSupabaseSSRBrowserClient } from "./supabase/ssr-client";
 
 const LS_KEY = "vc_creative_assets";
 const META_SEPARATOR = "\n__META__:";
@@ -92,6 +93,11 @@ export interface UsePersistedCreativeAssetsResult {
    * Also removes from MOCK_CREATIVE_ASSETS view via the deletedIds set.
    */
   removeAsset: (id: string) => void;
+  /**
+   * Re-run the Supabase SELECT and refresh uploadedAssets from the DB.
+   * Call after saveFile() succeeds to sync local state with the persisted row.
+   */
+  refetch: () => Promise<void>;
   /** Whether Supabase is active (vs localStorage fallback) */
   usingSupabase: boolean;
   /** Whether the initial load is still in progress */
@@ -113,90 +119,82 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const usingSupabase = isSupabaseConfigured();
 
+  // ── Shared fetch: SELECT creative_assets and set state ────────────────────
+  // Uses the SSR browser client (cookie-based session) so auth.uid() resolves
+  // correctly under RLS. Called on initial load and after each upload.
+  const fetchAndSetAssets = useCallback(async () => {
+    const supabase = getSupabaseSSRBrowserClient();
+    if (!supabase) return;
+
+    const { data, error } = await supabase
+      .from("creative_assets")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const analysisMap = new Map<string, any>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapped: CreativeAsset[] = (data as any[]).map((row) => {
+      const { userNotes, meta } = parseNotesAndMeta(row.notes ?? "");
+      if (meta.ai_analysis) {
+        analysisMap.set(row.id, {
+          assetId: row.id,
+          analysis: meta.ai_analysis,
+          mockMode: meta.mock_mode ?? false,
+          savedToDb: true,
+        });
+      }
+      return {
+        id: row.id,
+        clientId: row.client_id,
+        clientName: row.client_id,
+        fileName: row.file_name,
+        fileType: (row.file_type === "image" ? "image" : "video") as "image" | "video",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        assetType: row.asset_type as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        category: ((row as any).category ?? "Creative Asset") as any,
+        thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
+        storageUrl: row.storage_url ?? (meta.storage_url as string | null) ?? null,
+        uploadDate: row.upload_date,
+        service: row.service ?? "",
+        market: row.market ?? "",
+        campaignUseCase: row.campaign_use_case ?? "",
+        notes: userNotes,
+        status: (() => {
+          const s = row.status as string;
+          if (s === "Uploaded") return "Uploaded" as const;
+          if (s === "Needs Review") return "Needs Review" as const;
+          if (s === "Approved") return "Approved" as const;
+          if (s === "Used in Campaign") return "Used in Campaign" as const;
+          if (s === "Archived") return "Archived" as const;
+          if (s === "uploaded") return "Uploaded" as const;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (s === "active") return ((row as any).approved_for_ads ? "Approved" as const : "Uploaded" as const);
+          if (s === "pending") return "Needs Review" as const;
+          if (s === "draft") return "Uploaded" as const;
+          return "Uploaded" as const;
+        })(),
+        tags: Array.isArray(row.tags) ? row.tags : [],
+        approvedForAds: row.approved_for_ads,
+      };
+    });
+    setUploadedAssets(mapped);
+    setInitialAnalysisResults(analysisMap);
+  }, []); // stable — no reactive deps
+
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       if (usingSupabase) {
-        const supabase = getSupabaseBrowserClient();
-        if (supabase) {
-          const { data, error } = await supabase
-            .from("creative_assets")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          if (!cancelled) {
-            if (!error && data) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const analysisMap = new Map<string, any>();
-
-              // Map Supabase snake_case rows to CreativeAsset interface
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const mapped: CreativeAsset[] = (data as any[]).map((row) => {
-                // Parse __META__: suffix from notes — extracts ai_analysis if present
-                const { userNotes, meta } = parseNotesAndMeta(row.notes ?? "");
-
-                // If this row has a persisted AI analysis, add it to the map
-                if (meta.ai_analysis) {
-                  analysisMap.set(row.id, {
-                    assetId: row.id,
-                    analysis: meta.ai_analysis,
-                    mockMode: meta.mock_mode ?? false,
-                    savedToDb: true,
-                  });
-                }
-
-                return {
-                  id: row.id,
-                  clientId: row.client_id,
-                  clientName: row.client_id, // will be enriched below if needed
-                  fileName: row.file_name,
-                  fileType: (row.file_type === "image" ? "image" : "video") as "image" | "video",
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  assetType: row.asset_type as any,
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  category: ((row as any).category ?? "Creative Asset") as any,
-                  // Prefer real DB columns; fall back to __META__ for rows written before the fix
-                  thumbnailUrl: row.thumbnail_url ?? (meta.thumbnail_url as string | null) ?? null,
-                  storageUrl: row.storage_url ?? (meta.storage_url as string | null) ?? null,
-                  uploadDate: row.upload_date,
-                  service: row.service ?? "",
-                  market: row.market ?? "",
-                  campaignUseCase: row.campaign_use_case ?? "",
-                  // Strip __META__: suffix so the Notes field shows only user text
-                  notes: userNotes,
-                  // Map DB status to TypeScript display status.
-                  // Handles title case (schema-compliant) and legacy lowercase values.
-                  status: (() => {
-                    const s = row.status as string;
-                    // Title case (current schema)
-                    if (s === "Uploaded") return "Uploaded" as const;
-                    if (s === "Needs Review") return "Needs Review" as const;
-                    if (s === "Approved") return "Approved" as const;
-                    if (s === "Used in Campaign") return "Used in Campaign" as const;
-                    if (s === "Archived") return "Archived" as const;
-                    // Legacy lowercase
-                    if (s === "uploaded") return "Uploaded" as const;
-                    if (s === "active") return (row.approved_for_ads ? "Approved" as const : "Uploaded" as const);
-                    if (s === "pending") return "Needs Review" as const;
-                    if (s === "draft") return "Uploaded" as const;
-                    return "Uploaded" as const;
-                  })(),
-                  tags: Array.isArray(row.tags) ? row.tags : [],
-                  approvedForAds: row.approved_for_ads,
-                };
-              });
-              setUploadedAssets(mapped);
-              setInitialAnalysisResults(analysisMap);
-            }
-            setLoading(false);
-          }
-          return;
-        }
+        await fetchAndSetAssets();
+        if (!cancelled) setLoading(false);
+        return;
       }
-
-      // localStorage fallback
       if (!cancelled) {
         setUploadedAssets(loadFromLocalStorage());
         setLoading(false);
@@ -205,12 +203,12 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
 
     load();
     return () => { cancelled = true; };
-  }, [usingSupabase]);
+  }, [usingSupabase, fetchAndSetAssets]);
 
   // ── Add asset ─────────────────────────────────────────────────────────────
   const addAsset = useCallback(async (asset: CreativeAsset) => {
     if (usingSupabase) {
-      const supabase = getSupabaseBrowserClient();
+      const supabase = getSupabaseSSRBrowserClient();
       if (supabase) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase.from("creative_assets") as any).insert({
@@ -291,5 +289,10 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     });
   }, [usingSupabase]);
 
-  return { allAssets, uploadedAssets, addAsset, prependAsset, updateAsset, removeAsset, usingSupabase, loading, initialAnalysisResults };
+  // ── Refetch from Supabase ─────────────────────────────────────────────────
+  const refetch = useCallback(async () => {
+    if (usingSupabase) await fetchAndSetAssets();
+  }, [usingSupabase, fetchAndSetAssets]);
+
+  return { allAssets, uploadedAssets, addAsset, prependAsset, updateAsset, removeAsset, refetch, usingSupabase, loading, initialAnalysisResults };
 }

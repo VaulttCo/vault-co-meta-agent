@@ -2,9 +2,8 @@
 
 import { useRef, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
+import { Bell, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
 import Link from "next/link";
-import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { usePlans } from "@/components/PlanProvider";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/auth/types";
@@ -27,7 +26,6 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick }: TopbarProps) {
   const pathname = usePathname();
-  const { theme, toggleTheme } = useTheme();
   const { user, signOut, can } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -36,7 +34,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     k === "/" ? pathname === "/" : pathname === k || pathname.startsWith(k + "/")
   ) ?? "/";
   const page = pageTitles[key];
-  const isLight = theme === "light";
 
   const { plans } = usePlans();
   const pendingCount = plans.filter((p) => p.status === "needs_review").length;
@@ -93,20 +90,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          title={isLight ? "Switch to dark mode" : "Switch to light mode"}
-          className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all"
-          style={{
-            border: "1px solid rgba(0, 129, 242, 0.15)",
-            backgroundColor: "var(--t-input-bg)",
-            color: "var(--t-muted)",
-          }}
-        >
-          {isLight ? <Moon size={13} /> : <Sun size={13} />}
-        </button>
-
         {/* Notifications — dot shown only when pending approvals exist */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all"

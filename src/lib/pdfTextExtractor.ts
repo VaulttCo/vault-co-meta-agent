@@ -122,9 +122,13 @@ async function extractWithPdfJs(buffer: Buffer): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs") as any;
 
-  // Empty string disables the worker thread (uses in-process GenericWorker).
-  // Do NOT set to a URL — that requires browser APIs not available in Node.js.
-  pdfjs.GlobalWorkerOptions.workerSrc = "";
+  // pdfjs-dist v4 requires a non-empty workerSrc even for in-process use.
+  // Setting "" causes "Setting up fake worker failed" in Vercel Node.js 20.
+  // Point to the bundled worker file via file:// so Node.js worker_threads
+  // can load it. The file is included in the Vercel bundle via next.config.ts
+  // outputFileTracingIncludes.
+  const workerPath = path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = `file://${workerPath}`;
 
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),

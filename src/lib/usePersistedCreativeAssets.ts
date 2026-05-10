@@ -291,9 +291,14 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
 
   const allAssets: CreativeAsset[] = [
     ...uploadedAssets.filter((a) => !deletedIds.has(a.id)),
-    ...MOCK_CREATIVE_ASSETS.filter(
-      (m) => !deletedIds.has(m.id) && !uploadedAssets.some((u) => u.id === m.id)
-    ),
+    // Sample mock assets are included only in local/dev (no Supabase) so the
+    // library is not empty during development. In production (Supabase active)
+    // only real uploaded assets are shown.
+    ...(usingSupabase
+      ? []
+      : MOCK_CREATIVE_ASSETS.filter(
+          (m) => !deletedIds.has(m.id) && !uploadedAssets.some((u) => u.id === m.id)
+        )),
   ];
 
   // ── Prepend asset (local state only, no DB write) ────────────────────────────

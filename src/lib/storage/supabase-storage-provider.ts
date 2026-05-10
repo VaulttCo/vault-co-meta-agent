@@ -457,12 +457,13 @@ export class SupabaseStorageProvider implements StorageProvider {
       ? "video"
       : "image"; // default for DB check constraint
 
-    // Map ClientFile status → creative_assets DB status
-    // Schema CHECK constraint: ('Uploaded','Needs Review','Approved','Used in Campaign','Archived')
+    // Map ClientFile status → creative_assets DB status.
+    // The actual DB constraint uses lowercase values ('uploaded','active','pending','archived').
+    // "active" = new upload not yet reviewed, "pending" = needs review, "archived" = archived.
     const dbStatus =
-      fileRecord.status === "pending" ? "Needs Review"
-      : fileRecord.status === "archived" ? "Archived"
-      : "Uploaded"; // "active" and any other → "Uploaded" for new uploads
+      fileRecord.status === "pending" ? "pending"
+      : fileRecord.status === "archived" ? "archived"
+      : "uploaded"; // "active" or unknown → "uploaded" for new assets
 
     const { error: dbError } = await (supabase as any)
       .from("creative_assets")

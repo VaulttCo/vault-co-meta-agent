@@ -228,13 +228,13 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
           campaign_use_case: asset.campaignUseCase,
           notes: asset.notes,
           status: (() => {
+            // Map display status → DB lowercase values (actual DB constraint uses lowercase)
             const s = asset.status as string;
-            // Write title case values matching the DB CHECK constraint
-            if (s === "Needs Review") return "Needs Review";
-            if (s === "Approved") return "Approved";
-            if (s === "Used in Campaign") return "Used in Campaign";
-            if (s === "Archived") return "Archived";
-            return "Uploaded"; // default
+            if (s === "Needs Review") return "pending";
+            if (s === "Approved") return "active";
+            if (s === "Used in Campaign") return "active";
+            if (s === "Archived") return "archived";
+            return "uploaded"; // "Uploaded" and default
           })(),
           tags: asset.tags,
           approved_for_ads: asset.approvedForAds,

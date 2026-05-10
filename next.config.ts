@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
   // Next.js output file tracing cannot detect them statically, so we
   // explicitly include them so Vercel bundles them in the serverless function.
   outputFileTracingIncludes: {
-    "/api/extract-pdf-text": ["./node_modules/pdfjs-dist/cmaps/**"],
+    "/api/extract-pdf-text": [
+      "./node_modules/pdfjs-dist/cmaps/**",
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+    ],
   },
 };
 

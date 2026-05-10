@@ -8,7 +8,6 @@ import {
   User,
   ChevronRight,
   CheckCircle2,
-  Sun,
   Moon,
   Bot,
   AlertCircle,
@@ -63,7 +62,7 @@ const PERMISSION_LABELS: { key: keyof Permissions; label: string }[] = [
 ];
 
 export default function SettingsPage() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
   const { user, permissions, signOut, can, isDemoMode } = useAuth();
   const [providerName, setProviderName] = useState<"mock" | "supabase">("mock");
   const supabaseConfigured = isSupabaseConfigured();
@@ -236,36 +235,20 @@ export default function SettingsPage() {
       {/* Appearance */}
       <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
-          {theme === "dark"
-            ? <Moon size={14} className="text-[#a78bfa]" />
-            : <Sun size={14} className="text-[#ff8400]" />
-          }
+          <Moon size={14} className="text-[#a78bfa]" />
           <span className="text-sm font-semibold text-[#f8f8f7]">Appearance</span>
         </div>
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
             <div className="text-sm text-[#f8f8f7] font-medium">Theme Mode</div>
             <div className="text-xs text-[#6b7a99] mt-0.5">
-              Currently:{" "}
-              <span className="text-[#f8f8f7]">
-                {theme === "dark" ? "Dark (Premium)" : "Light"}
-              </span>
+              Dark (Premium) — only mode available
             </div>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold border rounded-lg transition-colors"
-            style={{
-              color: theme === "dark" ? "#ff8400" : "#a78bfa",
-              borderColor: theme === "dark" ? "rgba(201,168,76,0.2)" : "rgba(167,139,250,0.2)",
-              backgroundColor: theme === "dark" ? "rgba(201,168,76,0.08)" : "rgba(167,139,250,0.08)",
-            }}
-          >
-            {theme === "dark"
-              ? <><Sun size={13} />Switch to Light</>
-              : <><Moon size={13} />Switch to Dark</>
-            }
-          </button>
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#a78bfa] bg-[#a78bfa]/8 border border-[#a78bfa]/20 rounded-full px-3 py-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#a78bfa]" />
+            Dark Mode Active
+          </span>
         </div>
       </div>
 

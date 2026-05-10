@@ -126,6 +126,10 @@ export function usePersistedCreativeAssets(): UsePersistedCreativeAssetsResult {
     const supabase = getSupabaseSSRBrowserClient();
     if (!supabase) return;
 
+    // Ensure the SSR client's session is loaded from cookies before the SELECT.
+    // Without this, the first PostgREST call may race against cookie parsing and run as anon.
+    await (supabase as any).auth.getSession();
+
     const { data, error } = await supabase
       .from("creative_assets")
       .select("*")

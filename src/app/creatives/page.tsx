@@ -1378,7 +1378,6 @@ export default function CreativesPage() {
                   .eq("id", row.id)
                   .then(({ error }: { error: any }) => {
                     if (error) console.warn("[backfill] update failed for", row.id, error.message);
-                    else console.log("[backfill] updated storage URLs for", row.id);
                   });
               }
             }

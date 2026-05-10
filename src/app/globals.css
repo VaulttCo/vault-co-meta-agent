@@ -57,6 +57,7 @@
   --t-border: rgba(0, 129, 242, 0.15);
   --t-border-2: rgba(0, 129, 242, 0.25);
   --t-border-nav: rgba(0, 129, 242, 0.12);
+  --t-border-subtle: rgba(0, 129, 242, 0.08);
   --t-text: #f8f8f7;
   --t-text-body: #e2e8f0;
   --t-muted: #6b7a99;
@@ -67,27 +68,34 @@
   --t-scrollbar-track: #0D1520;
   --t-scrollbar-thumb: rgba(0, 129, 242, 0.20);
   --t-scrollbar-hover: rgba(0, 129, 242, 0.35);
+  --t-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --t-dropdown-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 129, 242, 0.10);
 }
 
 [data-theme="light"] {
-  --t-bg: #f0f4f8;
-  --t-bg-page: #eef1f8;
+  /* Warm parchment base — premium, not cold SaaS blue-gray */
+  --t-bg: #f7f4f0;
+  --t-bg-page: #f5f2ee;
   --t-surface: #ffffff;
-  --t-surface-2: #f8fafc;
-  --t-surface-3: #eef1f8;
-  --t-border: #e2e8f0;
-  --t-border-2: #cbd5e1;
-  --t-border-nav: #e2e8f0;
-  --t-text: #0f172a;
-  --t-text-body: #1e293b;
-  --t-muted: #64748b;
-  --t-dim: #94a3b8;
-  --t-sidebar-bg: #1e293b;
-  --t-header-bg: #ffffff;
-  --t-input-bg: #f8fafc;
-  --t-scrollbar-track: #f0f2f7;
-  --t-scrollbar-thumb: #cbd5e1;
-  --t-scrollbar-hover: #94a3b8;
+  --t-surface-2: #f9f7f4;
+  --t-surface-3: #f1ede8;
+  --t-border: rgba(0, 0, 0, 0.09);
+  --t-border-2: rgba(0, 0, 0, 0.15);
+  --t-border-nav: rgba(0, 0, 0, 0.07);
+  --t-border-subtle: rgba(0, 0, 0, 0.05);
+  --t-text: #18140f;
+  --t-text-body: #2d2823;
+  --t-muted: #6b6055;
+  --t-dim: #a09385;
+  /* Sidebar stays dark in light mode — premium intentional contrast */
+  --t-sidebar-bg: #1a1d2a;
+  --t-header-bg: rgba(253, 251, 248, 0.97);
+  --t-input-bg: #f5f2ee;
+  --t-scrollbar-track: #f5f2ee;
+  --t-scrollbar-thumb: #d4cfc8;
+  --t-scrollbar-hover: #a09385;
+  --t-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --t-dropdown-shadow: 0 16px 48px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 * {
@@ -101,11 +109,10 @@ body {
 
 body {
   background-color: var(--t-bg-page);
-  /* Dual radial gradient matching the onboarding portal */
   background-image:
-    radial-gradient(circle at 15% 20%, rgba(0, 129, 242, 0.08), transparent 34%),
-    radial-gradient(circle at 85% 18%, rgba(255, 132, 0, 0.08), transparent 26%),
-    radial-gradient(circle at 50% 65%, rgba(18, 46, 94, 0.14), transparent 42%);
+    radial-gradient(circle at 15% 20%, rgba(0, 129, 242, 0.07), transparent 34%),
+    radial-gradient(circle at 85% 18%, rgba(255, 132, 0, 0.07), transparent 26%),
+    radial-gradient(circle at 50% 65%, rgba(18, 46, 94, 0.10), transparent 42%);
   background-attachment: fixed;
   color: var(--t-text-body);
   font-family: var(--font-manrope), Manrope, ui-sans-serif, system-ui, sans-serif;
@@ -162,11 +169,12 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 16px rgba(0, 129, 242, 0.30);
 }
 
-/* Card — matches onboarding portal feature cards */
+/* Card — theme-aware */
 .vc-card {
-  background-color: #0D1520;
-  border: 1px solid rgba(0, 129, 242, 0.15);
+  background-color: var(--t-surface);
+  border: 1px solid var(--t-border);
   border-radius: 10px;
+  box-shadow: var(--t-card-shadow);
 }
 
 /* Blue glow border */
@@ -211,51 +219,4 @@ h1, h2, h3, h4, h5, h6 {
 /* Blue gradient */
 .vc-blue-gradient {
   background: linear-gradient(135deg, #0070d4 0%, #0081f2 100%);
-}
-
-/* ─── Light mode overrides for hardcoded dark values ─── */
-[data-theme="light"] .bg-\[\#05070B\],
-[data-theme="light"] .bg-\[\#06080d\],
-[data-theme="light"] .bg-\[\#0d0e12\],
-[data-theme="light"] .bg-\[\#0c0f15\],
-[data-theme="light"] .bg-\[\#060a10\] {
-  background-color: #ffffff;
-}
-
-[data-theme="light"] .bg-\[\#0D1520\],
-[data-theme="light"] .bg-\[\#0f1a28\],
-[data-theme="light"] .bg-\[\#131720\] {
-  background-color: #f8fafc;
-}
-
-[data-theme="light"] .bg-\[\#152030\],
-[data-theme="light"] .bg-\[\#1a1e2c\],
-[data-theme="light"] .bg-\[\#1c2438\] {
-  background-color: #eef1f8;
-}
-
-[data-theme="light"] .text-\[\#f8f8f7\],
-[data-theme="light"] .text-\[\#eef1f8\],
-[data-theme="light"] .text-\[\#e8eaf0\],
-[data-theme="light"] .text-\[\#e2e8f0\] {
-  color: #0f172a;
-}
-
-[data-theme="light"] .text-\[\#6b7a99\],
-[data-theme="light"] .text-\[\#5a6278\] {
-  color: #64748b;
-}
-
-[data-theme="light"] .text-\[\#3d4f6e\],
-[data-theme="light"] .text-\[\#3d4460\] {
-  color: #94a3b8;
-}
-
-[data-theme="light"] .border-\[\#1c2438\] {
-  border-color: #e2e8f0;
-}
-
-[data-theme="light"] .hover\:bg-\[\#0f1a28\]:hover,
-[data-theme="light"] .hover\:bg-\[\#131720\]:hover {
-  background-color: #f0f2f7;
 }

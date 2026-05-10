@@ -2,8 +2,9 @@
 
 import { useRef, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
+import { Bell, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
 import Link from "next/link";
+import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { usePlans } from "@/components/PlanProvider";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/auth/types";
@@ -14,7 +15,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/campaigns": { title: "Campaigns", subtitle: "Active Meta campaigns across all clients" },
   "/analytics": { title: "Analytics", subtitle: "Lead generation & performance insights" },
   "/creatives": { title: "Creatives", subtitle: "Ad creative assets & templates" },
-  "/ai-agent": { title: "Veronica", subtitle: "AI Growth Operator — Campaign strategy, client intelligence, creative analysis, and approval-ready growth plans." },
+  "/ai-agent": { title: "Veronica Console", subtitle: "AI Growth Operator — Campaign strategy, client intelligence, creative analysis, and approval-ready growth plans." },
   "/reports": { title: "Reports", subtitle: "Monthly client performance reports — prepared by Veronica" },
   "/approvals": { title: "Approvals", subtitle: "Pending items awaiting human review" },
   "/settings": { title: "Settings", subtitle: "Account, integrations & AI provider settings" },
@@ -26,6 +27,7 @@ interface TopbarProps {
 
 export function Topbar({ onMenuClick }: TopbarProps) {
   const pathname = usePathname();
+  const { theme, toggleTheme } = useTheme();
   const { user, signOut, can } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -34,6 +36,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
     k === "/" ? pathname === "/" : pathname === k || pathname.startsWith(k + "/")
   ) ?? "/";
   const page = pageTitles[key];
+  const isLight = theme === "light";
 
   const { plans } = usePlans();
   const pendingCount = plans.filter((p) => p.status === "needs_review").length;
@@ -56,18 +59,17 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       className="h-[68px] flex items-center justify-between px-4 sm:px-6 flex-shrink-0 border-b gap-3"
       style={{
         backgroundColor: "var(--t-header-bg)",
-        borderColor: "rgba(0, 129, 242, 0.12)",
+        borderColor: "var(--t-border-nav)",
         backdropFilter: "blur(12px)",
       }}
     >
       {/* Left: hamburger (mobile) + page title */}
       <div className="flex items-center gap-3 min-w-0">
-        {/* Mobile hamburger */}
         <button
           onClick={onMenuClick}
           className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 transition-all"
           style={{
-            border: "1px solid rgba(0, 129, 242, 0.15)",
+            border: "1px solid var(--t-border)",
             backgroundColor: "var(--t-input-bg)",
             color: "var(--t-muted)",
           }}
@@ -90,12 +92,26 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        {/* Notifications — dot shown only when pending approvals exist */}
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+          className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all"
+          style={{
+            border: "1px solid var(--t-border)",
+            backgroundColor: "var(--t-input-bg)",
+            color: "var(--t-muted)",
+          }}
+        >
+          {isLight ? <Moon size={13} /> : <Sun size={13} />}
+        </button>
+
+        {/* Notifications */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all"
           title={pendingCount > 0 ? `${pendingCount} pending approval${pendingCount !== 1 ? "s" : ""}` : "Notifications"}
           style={{
-            border: "1px solid rgba(0, 129, 242, 0.15)",
+            border: "1px solid var(--t-border)",
             backgroundColor: "var(--t-input-bg)",
             color: "var(--t-muted)",
           }}
@@ -114,7 +130,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg transition-colors"
               style={{
                 backgroundColor: "var(--t-input-bg)",
-                border: "1px solid rgba(0, 129, 242, 0.15)",
+                border: "1px solid var(--t-border)",
               }}
             >
               <div
@@ -140,11 +156,11 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
             {showUserMenu && (
               <div
-                className="absolute right-0 top-full mt-1.5 w-[220px] rounded-xl shadow-2xl z-50 overflow-hidden"
+                className="absolute right-0 top-full mt-1.5 w-[220px] rounded-xl z-50 overflow-hidden"
                 style={{
-                  backgroundColor: "#060a10",
+                  backgroundColor: "var(--t-sidebar-bg)",
                   border: "1px solid rgba(0, 129, 242, 0.18)",
-                  boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 129, 242, 0.10)",
+                  boxShadow: "var(--t-dropdown-shadow)",
                 }}
               >
                 {/* User info header */}
@@ -160,10 +176,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                       {user.initials}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[12px] font-semibold truncate" style={{ color: "var(--t-text)" }}>
+                      <div className="text-[12px] font-semibold truncate" style={{ color: "#f8f8f7" }}>
                         {user.name}
                       </div>
-                      <div className="text-[10px] truncate" style={{ color: "var(--t-muted)" }}>
+                      <div className="text-[10px] truncate" style={{ color: "#6b7a99" }}>
                         {user.email}
                       </div>
                     </div>
@@ -185,10 +201,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                 {/* Permissions */}
                 <div className="py-1">
                   <div className="px-3 py-1">
-                    <div
-                      className="text-[9px] font-bold uppercase tracking-widest"
-                      style={{ color: "var(--t-dim)" }}
-                    >
+                    <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "#3d4f6e" }}>
                       Permissions
                     </div>
                   </div>
@@ -202,9 +215,9 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                       <div key={label} className="flex items-center gap-2 text-[11px]">
                         <span
                           className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${allowed ? "bg-[#22c55e]" : ""}`}
-                          style={!allowed ? { backgroundColor: "var(--t-dim)" } : {}}
+                          style={!allowed ? { backgroundColor: "#3d4f6e" } : {}}
                         />
-                        <span style={{ color: allowed ? "var(--t-muted)" : "var(--t-dim)" }}>
+                        <span style={{ color: allowed ? "#6b7a99" : "#3d4f6e" }}>
                           {label}
                         </span>
                       </div>
@@ -212,16 +225,13 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                   </div>
                 </div>
 
-                <div
-                  className="border-t py-1"
-                  style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
-                >
+                <div className="border-t py-1" style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}>
                   {can("canViewSettings") && (
                     <Link
                       href="/settings"
                       onClick={() => setShowUserMenu(false)}
                       className="flex items-center gap-2.5 px-4 py-2 text-[12px] transition-colors"
-                      style={{ color: "var(--t-muted)" }}
+                      style={{ color: "#6b7a99" }}
                     >
                       <User size={12} />
                       Account &amp; Settings
@@ -230,13 +240,9 @@ export function Topbar({ onMenuClick }: TopbarProps) {
                   <button
                     onClick={() => { void signOut(); setShowUserMenu(false); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2 text-[12px] transition-colors"
-                    style={{ color: "var(--t-muted)" }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = "#ef4444";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.color = "var(--t-muted)";
-                    }}
+                    style={{ color: "#6b7a99" }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#ef4444"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "#6b7a99"; }}
                   >
                     <LogOut size={12} />
                     Sign Out

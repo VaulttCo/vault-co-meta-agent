@@ -31,22 +31,19 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { label: "Dashboard",           href: "/",          icon: LayoutDashboard, permission: "canViewDashboard" },
-  { label: "Clients",             href: "/clients",   icon: Users,           permission: "canViewClients" },
-  { label: "Campaigns",           href: "/campaigns", icon: Megaphone,       permission: "canViewCampaigns" },
-  { label: "AI Campaign Builder", href: "/ai-agent",  icon: Bot,             permission: "canViewAiBuilder" },
-  { label: "Creatives",           href: "/creatives", icon: ImageIcon,       permission: "canViewCreatives" },
-  { label: "Analytics",           href: "/analytics", icon: BarChart3,       permission: "canViewAnalytics" },
-  { label: "Reports",             href: "/reports",   icon: FileText,        permission: "canViewReports" },
-  { label: "Approvals",           href: "/approvals", icon: CheckSquare,     permission: "canViewApprovals" },
+  { label: "Dashboard",        href: "/",          icon: LayoutDashboard, permission: "canViewDashboard" },
+  { label: "Clients",          href: "/clients",   icon: Users,           permission: "canViewClients" },
+  { label: "Campaigns",        href: "/campaigns", icon: Megaphone,       permission: "canViewCampaigns" },
+  { label: "Veronica Console", href: "/ai-agent",  icon: Bot,             permission: "canViewAiBuilder" },
+  { label: "Creatives",        href: "/creatives", icon: ImageIcon,       permission: "canViewCreatives" },
+  { label: "Analytics",        href: "/analytics", icon: BarChart3,       permission: "canViewAnalytics" },
+  { label: "Reports",          href: "/reports",   icon: FileText,        permission: "canViewReports" },
+  { label: "Approvals",        href: "/approvals", icon: CheckSquare,     permission: "canViewApprovals" },
 ];
 
 const settingsItem: NavItem = {
   label: "Settings", href: "/settings", icon: Settings, permission: "canViewSettings",
 };
-
-// Client Onboarding portal URL — update when the portal is live
-// const CLIENT_ONBOARDING_URL = "https://portal-vaulttco.manus.space"; // 404 — disabled until active URL is available
 
 interface SidebarProps {
   onClose?: () => void;
@@ -96,12 +93,11 @@ export function Sidebar({ onClose }: SidebarProps) {
             />
           </div>
         </div>
-        {/* Mobile close button */}
         {onClose && (
           <button
             onClick={onClose}
             className="lg:hidden w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0"
-            style={{ color: "var(--t-muted)" }}
+            style={{ color: "rgba(107, 122, 153, 0.8)" }}
             aria-label="Close menu"
           >
             <X size={16} />
@@ -126,7 +122,7 @@ export function Sidebar({ onClose }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
         <div
           className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-1"
-          style={{ color: "var(--t-dim)" }}
+          style={{ color: "rgba(107, 122, 153, 0.6)" }}
         >
           Command Center
         </div>
@@ -137,10 +133,8 @@ export function Sidebar({ onClose }: SidebarProps) {
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group ${
-                active
-                  ? "text-[#f8f8f7]"
-                  : "hover:text-[#f8f8f7]"
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group relative ${
+                active ? "text-[#f8f8f7]" : ""
               }`}
               style={
                 active
@@ -150,17 +144,24 @@ export function Sidebar({ onClose }: SidebarProps) {
                       color: "#f8f8f7",
                     }
                   : {
-                      color: "var(--t-muted)",
+                      color: "rgba(107, 122, 153, 0.85)",
+                      border: "1px solid transparent",
                     }
               }
+              onMouseEnter={(e) => {
+                if (!active) (e.currentTarget as HTMLElement).style.color = "#f8f8f7";
+              }}
+              onMouseLeave={(e) => {
+                if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(107, 122, 153, 0.85)";
+              }}
             >
               <Icon
                 size={15}
-                className="flex-shrink-0 transition-colors"
+                className="flex-shrink-0"
                 style={{ color: active ? "#0081f2" : undefined }}
               />
               <span className="truncate">{label}</span>
-              {label === "AI Campaign Builder" && (
+              {label === "Veronica Console" && (
                 <span
                   className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
                   style={{
@@ -173,7 +174,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                   AI
                 </span>
               )}
-              {label === "Approvals" && (
+              {label === "Approvals" && pendingDrafts > 0 && (
                 <span
                   className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
                   style={{
@@ -182,7 +183,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                     border: "1px solid rgba(255, 132, 0, 0.20)",
                   }}
                 >
-                  {3 + pendingDrafts}
+                  {pendingDrafts}
                 </span>
               )}
             </Link>
@@ -192,26 +193,23 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* Client Onboarding — coming soon */}
         <div
           className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
-          style={{ color: "var(--t-dim)" }}
+          style={{ color: "rgba(107, 122, 153, 0.6)" }}
         >
           Onboarding
         </div>
         <div
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
-          style={{ color: "var(--t-dim)", opacity: 0.5 }}
+          style={{ color: "rgba(107, 122, 153, 0.4)" }}
           title="Client Onboarding Portal — coming soon"
         >
-          <ClipboardList
-            size={15}
-            className="flex-shrink-0"
-          />
+          <ClipboardList size={15} className="flex-shrink-0" />
           <span className="truncate">Client Onboarding</span>
           <span
             className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
             style={{
-              color: "#6b7a99",
-              backgroundColor: "rgba(61,79,110,0.15)",
-              border: "1px solid rgba(61,79,110,0.25)",
+              color: "rgba(107, 122, 153, 0.6)",
+              backgroundColor: "rgba(61,79,110,0.12)",
+              border: "1px solid rgba(61,79,110,0.20)",
             }}
           >
             Soon
@@ -235,7 +233,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                     border: "1px solid rgba(0, 129, 242, 0.20)",
                     color: "#f8f8f7",
                   }
-                : { color: "var(--t-muted)" }
+                : { color: "rgba(107, 122, 153, 0.85)", border: "1px solid transparent" }
             }
           >
             <Settings
@@ -264,7 +262,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                 {user.initials}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: "var(--t-text)" }}>
+                <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: "#f8f8f7" }}>
                   {user.name}
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
@@ -284,13 +282,13 @@ export function Sidebar({ onClose }: SidebarProps) {
                 onClick={() => void signOut()}
                 title="Sign out"
                 className="w-6 h-6 flex items-center justify-center rounded-md transition-colors flex-shrink-0"
-                style={{ color: "var(--t-dim)" }}
+                style={{ color: "rgba(61, 79, 110, 0.8)" }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.color = "#ef4444";
                   (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239, 68, 68, 0.08)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = "var(--t-dim)";
+                  (e.currentTarget as HTMLElement).style.color = "rgba(61, 79, 110, 0.8)";
                   (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
                 }}
               >

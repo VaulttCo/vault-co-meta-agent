@@ -14,10 +14,11 @@ interface StatCardProps {
 export function StatCard({ label, value, change, changeType = "neutral", icon: Icon, iconColor = "#0081f2" }: StatCardProps) {
   return (
     <div
-      className="rounded-xl p-5 transition-all duration-150 hover:shadow-[0_0_20px_rgba(0,129,242,0.06)]"
+      className="rounded-xl p-5 transition-all duration-150"
       style={{
-        backgroundColor: "#0D1520",
-        border: "1px solid rgba(0, 129, 242, 0.15)",
+        backgroundColor: "var(--t-surface)",
+        border: "1px solid var(--t-border)",
+        boxShadow: "var(--t-card-shadow)",
       }}
     >
       <div className="flex items-start justify-between mb-4">
@@ -51,12 +52,12 @@ export function StatCard({ label, value, change, changeType = "neutral", icon: I
         className="text-2xl font-bold mb-1 tracking-wide"
         style={{
           fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
-          color: "#f8f8f7",
+          color: "var(--t-text)",
         }}
       >
         {value}
       </div>
-      <div className="text-xs font-medium" style={{ color: "#6b7a99" }}>{label}</div>
+      <div className="text-xs font-medium" style={{ color: "var(--t-muted)" }}>{label}</div>
     </div>
   );
 }

@@ -2,10 +2,11 @@
 
 import { useRef, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, Search, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
+import { Bell, Sun, Moon, ChevronDown, LogOut, User, ShieldCheck, Menu } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { usePlans } from "@/components/PlanProvider";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/auth/types";
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
@@ -36,6 +37,9 @@ export function Topbar({ onMenuClick }: TopbarProps) {
   ) ?? "/";
   const page = pageTitles[key];
   const isLight = theme === "light";
+
+  const { plans } = usePlans();
+  const pendingCount = plans.filter((p) => p.status === "needs_review").length;
 
   const roleColor = user ? ROLE_COLORS[user.role] : "#6b7a99";
   const roleLabel = user ? ROLE_LABELS[user.role] : "";
@@ -89,27 +93,6 @@ export function Topbar({ onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        {/* Search — hidden on mobile */}
-        <div className="relative hidden md:flex items-center">
-          <Search size={13} className="absolute left-3" style={{ color: "var(--t-muted)" }} />
-          <input
-            type="text"
-            placeholder="Search clients, campaigns..."
-            className="w-44 lg:w-52 pl-8 pr-3 py-1.5 rounded-lg text-[13px] focus:outline-none transition-colors"
-            style={{
-              backgroundColor: "var(--t-input-bg)",
-              border: "1px solid rgba(0, 129, 242, 0.15)",
-              color: "var(--t-text)",
-            }}
-            onFocus={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(0, 129, 242, 0.40)";
-            }}
-            onBlur={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(0, 129, 242, 0.15)";
-            }}
-          />
-        </div>
-
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
@@ -124,9 +107,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           {isLight ? <Moon size={13} /> : <Sun size={13} />}
         </button>
 
-        {/* Notifications */}
+        {/* Notifications — dot shown only when pending approvals exist */}
         <button
           className="relative w-8 h-8 flex items-center justify-center rounded-lg transition-all"
+          title={pendingCount > 0 ? `${pendingCount} pending approval${pendingCount !== 1 ? "s" : ""}` : "Notifications"}
           style={{
             border: "1px solid rgba(0, 129, 242, 0.15)",
             backgroundColor: "var(--t-input-bg)",
@@ -134,34 +118,10 @@ export function Topbar({ onMenuClick }: TopbarProps) {
           }}
         >
           <Bell size={13} />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#ff8400] rounded-full"></span>
+          {pendingCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#ff8400] rounded-full" />
+          )}
         </button>
-
-        {/* GHL connection badge — hidden on mobile */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid rgba(61, 79, 110, 0.25)",
-          }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e] flex-shrink-0"></span>
-          <span style={{ color: "#3d4f6e" }}>GHL</span>
-          <span className="font-medium" style={{ color: "#3d4f6e" }}>Not connected</span>
-        </div>
-
-        {/* Meta connection badge — hidden on mobile */}
-        <div
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px]"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid rgba(61, 79, 110, 0.25)",
-          }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3d4f6e] flex-shrink-0"></span>
-          <span style={{ color: "#3d4f6e" }}>Meta</span>
-          <span className="font-medium" style={{ color: "#3d4f6e" }}>Not connected</span>
-        </div>
 
         {/* User dropdown */}
         {user && (

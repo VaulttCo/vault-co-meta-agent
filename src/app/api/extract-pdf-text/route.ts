@@ -86,14 +86,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Extract text using zero-dependency extractor
-    const { text, pageCount, scanned } = extractTextFromPdf(buffer);
+    // Extract text — pdfjs-dist primary, hand-rolled zlib fallback
+    const { text, pageCount, scanned, method } = await extractTextFromPdf(buffer);
+
+    // Safe diagnostic log: counts only, no content
+    console.log(
+      `[extract-pdf-text] file=${fileObj.name} size=${buffer.length}B pages=${pageCount} chars=${text.length} method=${method} scanned=${scanned}`
+    );
 
     if (scanned) {
       return NextResponse.json(
         {
           error:
-            "PDF text extraction failed — this appears to be a scanned image PDF with no embedded text. Paste the onboarding summary manually.",
+            "PDF text could not be extracted automatically. You can paste the onboarding summary manually, or try exporting the PDF as a text-based PDF.",
           scanned: true,
           text: "",
           pageCount,
@@ -109,6 +114,7 @@ export async function POST(req: NextRequest) {
       scanned: false,
       charCount: text.length,
       fileName: fileObj.name,
+      method,
     });
   } catch (err) {
     console.error("[extract-pdf-text] unexpected error:", err);

@@ -13,9 +13,9 @@ import type { ClientCreateInput } from "@/lib/data/data-provider";
 
 // ── Shared input style ─────────────────────────────────────────
 const inputStyle: React.CSSProperties = {
-  backgroundColor: "#0D1520",
-  border: "1px solid rgba(0, 129, 242, 0.18)",
-  color: "#f8f8f7",
+  backgroundColor: "var(--t-input-bg)",
+  border: "1px solid var(--t-border)",
+  color: "var(--t-text)",
   borderRadius: "8px",
 };
 
@@ -28,7 +28,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   textTransform: "uppercase" as const,
   letterSpacing: "0.08em",
-  color: "#6b7a99",
+  color: "var(--t-muted)",
   display: "block",
   marginBottom: "6px",
 };
@@ -97,24 +97,24 @@ function AddClientModal({
       <div
         className="w-full max-w-lg shadow-2xl rounded-xl overflow-hidden max-h-[90vh] flex flex-col"
         style={{
-          backgroundColor: "#0a1118",
-          border: "1px solid rgba(0, 129, 242, 0.20)",
-          boxShadow: "0 25px 80px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 129, 242, 0.10)",
+          backgroundColor: "var(--t-surface)",
+          border: "1px solid var(--t-border)",
+          boxShadow: "var(--t-dropdown-shadow)",
         }}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-6 py-4 border-b"
-          style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+          style={{ borderColor: "var(--t-border-nav)" }}
         >
           <div>
             <div
               className="text-[15px] font-bold tracking-wide"
-              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#f8f8f7" }}
+              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
             >
               Add New Client
             </div>
-            <div className="text-[11px] mt-0.5" style={{ color: "#6b7a99" }}>
+            <div className="text-[11px] mt-0.5" style={{ color: "var(--t-muted)" }}>
               Fill in the basics — you can update everything else in the client profile.
             </div>
           </div>
@@ -418,21 +418,22 @@ export default function ClientsPage() {
       <div
         className="rounded-xl overflow-hidden"
         style={{
-          backgroundColor: "#0D1520",
-          border: "1px solid rgba(0, 129, 242, 0.15)",
+          backgroundColor: "var(--t-surface)",
+          border: "1px solid var(--t-border)",
+          boxShadow: "var(--t-card-shadow)",
         }}
       >
         {!hasLoaded ? (
-          <div className="flex items-center justify-center py-16 text-[13px] gap-2" style={{ color: "#6b7a99" }}>
+          <div className="flex items-center justify-center py-16 text-[13px] gap-2" style={{ color: "var(--t-muted)" }}>
             <Loader2 size={14} className="animate-spin" />
             Loading clients…
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="text-[13px] font-semibold mb-1" style={{ color: "#f8f8f7" }}>
+            <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--t-text)" }}>
               {search || filter !== "All" ? "No clients match your filter" : "No clients yet"}
             </div>
-            <p className="text-[12px] mb-4" style={{ color: "#6b7a99" }}>
+            <p className="text-[12px] mb-4" style={{ color: "var(--t-muted)" }}>
               {search || filter !== "All"
                 ? "Try adjusting your search or filter."
                 : "Add your first client to get started."}
@@ -451,7 +452,7 @@ export default function ClientsPage() {
         ) : (
           <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
             <thead>
-              <tr className="border-b" style={{ borderColor: "rgba(0, 129, 242, 0.10)" }}>
+              <tr className="border-b" style={{ borderColor: "var(--t-border-subtle)" }}>
                 {["Client", "Market", "Status", "Budget", "Leads", "Booked", "CPL", "Avg. Job Value", ""].map(
                   (h, i) => (
                     <th
@@ -459,7 +460,7 @@ export default function ClientsPage() {
                       className={`px-4 py-3.5 text-[9px] font-bold uppercase tracking-widest ${
                         h === "Client" || h === "Market" ? "text-left" : h === "" ? "" : "text-right"
                       }`}
-                      style={{ color: "#3d4f6e" }}
+                      style={{ color: "var(--t-dim)" }}
                     >
                       {h}
                     </th>
@@ -473,31 +474,31 @@ export default function ClientsPage() {
                   key={c.id}
                   className="border-b transition-colors group cursor-pointer"
                   style={{
-                    borderColor: i === filtered.length - 1 ? "transparent" : "rgba(0, 129, 242, 0.08)",
+                    borderColor: i === filtered.length - 1 ? "transparent" : "var(--t-border-subtle)",
                   }}
                   onClick={() => router.push(`/clients/${c.id}`)}
                 >
                   <td className="px-4 py-4">
-                    <div className="font-semibold" style={{ color: "#f8f8f7" }}>{c.name}</div>
-                    <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "#6b7a99" }}>
+                    <div className="font-semibold" style={{ color: "var(--t-text)" }}>{c.name}</div>
+                    <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "var(--t-muted)" }}>
                       <Phone size={9} />
                       {c.owner} · {c.phone || "—"}
                     </div>
                   </td>
-                  <td className="px-4 py-4" style={{ color: "#6b7a99" }}>{c.market || "—"}</td>
+                  <td className="px-4 py-4" style={{ color: "var(--t-muted)" }}>{c.market || "—"}</td>
                   <td className="px-4 py-4">
                     <Badge label={c.status} variant={clientStatusVariant[c.status]} />
                   </td>
-                  <td className="px-4 py-4 text-right" style={{ color: "#f8f8f7" }}>{c.monthlyBudget || "—"}</td>
+                  <td className="px-4 py-4 text-right" style={{ color: "var(--t-text)" }}>{c.monthlyBudget || "—"}</td>
                   <td className="px-4 py-4 text-right font-semibold" style={{ color: "#0081f2" }}>
                     {c.stats.leads > 0 ? c.stats.leads : "—"}
                   </td>
                   <td className="px-4 py-4 text-right font-semibold" style={{ color: "#22c55e" }}>
                     {c.stats.booked > 0 ? c.stats.booked : "—"}
                   </td>
-                  <td className="px-4 py-4 text-right" style={{ color: "#f8f8f7" }}>{c.stats.cpl}</td>
+                  <td className="px-4 py-4 text-right" style={{ color: "var(--t-text)" }}>{c.stats.cpl}</td>
                   <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1" style={{ color: "#f8f8f7" }}>
+                    <div className="flex items-center justify-end gap-1" style={{ color: "var(--t-text)" }}>
                       <DollarSign size={10} style={{ color: "#ff8400" }} />
                       {(c.avgJobValue || "0").replace("$", "").replace(",", "")}
                     </div>
@@ -506,7 +507,7 @@ export default function ClientsPage() {
                     <Link
                       href={`/clients/${c.id}`}
                       className="flex items-center gap-1 text-[11px] transition-colors opacity-0 group-hover:opacity-100"
-                      style={{ color: "#6b7a99" }}
+                      style={{ color: "var(--t-muted)" }}
                     >
                       Open <ChevronRight size={11} />
                     </Link>

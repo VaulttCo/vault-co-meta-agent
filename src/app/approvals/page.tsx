@@ -87,13 +87,16 @@ function DraftCard({
 
   return (
     <div
-      className={`bg-[#0D1520] border rounded-xl p-5 transition-colors ${
-        isActive
-          ? "border-[#0081f2]/25 hover:border-[#0081f2]/40"
+      className="rounded-xl p-5 transition-colors"
+      style={{
+        backgroundColor: "var(--t-surface)",
+        border: isActive
+          ? "1px solid rgba(0, 129, 242, 0.25)"
           : isApproved
-          ? "border-[#22c55e]/20 hover:border-[#22c55e]/30"
-          : "border-[rgba(0, 129, 242, 0.15)] hover:border-[rgba(0, 129, 242, 0.25)]"
-      }`}
+          ? "1px solid rgba(34, 197, 94, 0.20)"
+          : "1px solid var(--t-border)",
+        boxShadow: "var(--t-card-shadow)",
+      }}
     >
       <div className="flex items-start gap-4">
         {/* Icon */}
@@ -104,9 +107,9 @@ function DraftCard({
         {/* Body */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[12px] font-bold text-[#f8f8f7]">{draft.clientName}</span>
-            <span className="text-[11px] text-[#6b7a99]">·</span>
-            <span className="text-[11px] text-[#6b7a99]">AI Campaign Draft</span>
+            <span className="text-[12px] font-bold" style={{ color: "var(--t-text)" }}>{draft.clientName}</span>
+            <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>·</span>
+            <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>AI Campaign Draft</span>
             <Badge label={draftStatusLabel[draft.status]} variant={draftStatusVariant[draft.status]} />
             <span
               className="text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1"
@@ -120,8 +123,8 @@ function DraftCard({
               {risk.label}
             </span>
           </div>
-          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1.5">{draft.campaignName}</div>
-          <div className="flex items-center gap-2 text-[11px] text-[#6b7a99] flex-wrap mb-2">
+          <div className="text-[13px] font-semibold mb-1.5" style={{ color: "var(--t-text)" }}>{draft.campaignName}</div>
+          <div className="flex items-center gap-2 text-[11px] flex-wrap mb-2" style={{ color: "var(--t-muted)" }}>
             <span>{draft.service}</span>
             <span>·</span>
             <span>{draft.market}</span>
@@ -130,7 +133,7 @@ function DraftCard({
             <span>·</span>
             <span>{draft.goal}</span>
           </div>
-          <div className="text-[10px] text-[#3d4f6e]">
+          <div className="text-[10px]" style={{ color: "var(--t-dim)" }}>
             Submitted by {draft.createdBy} · {draft.updatedAt}
           </div>
         </div>
@@ -172,7 +175,7 @@ function DraftCard({
                   </button>
                 </>
               ) : (
-                <span className="text-[10px] text-[#3d4f6e] px-2 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg flex items-center gap-1">
+                <span className="text-[10px] px-2 py-1.5 rounded-lg flex items-center gap-1" style={{ color: "var(--t-dim)", backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}>
                   <ShieldCheck size={10} />
                   Admin approval required
                 </span>
@@ -190,7 +193,7 @@ function DraftCard({
                 Mark Ready for Meta
               </button>
             ) : (
-              <span className="text-[10px] text-[#3d4f6e] px-2 py-1.5 bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] rounded-lg flex items-center gap-1">
+              <span className="text-[10px] px-2 py-1.5 rounded-lg flex items-center gap-1" style={{ color: "var(--t-dim)", backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}>
                 <ShieldCheck size={10} />
                 Admin only
               </span>
@@ -230,15 +233,18 @@ function CreativeApprovalCard({ draft }: { draft: CampaignDraft }) {
 
   return (
     <div
-      className={`bg-[#0D1520] border rounded-xl p-5 transition-colors ${
-        status === "approved"
-          ? "border-[#22c55e]/20"
+      className="rounded-xl p-5 transition-colors"
+      style={{
+        backgroundColor: "var(--t-surface)",
+        border: status === "approved"
+          ? "1px solid rgba(34, 197, 94, 0.20)"
           : status === "rejected"
-          ? "border-[#ef4444]/20"
+          ? "1px solid rgba(239, 68, 68, 0.20)"
           : status === "changes"
-          ? "border-[#f59e0b]/20"
-          : "border-[#a78bfa]/25 hover:border-[#a78bfa]/40"
-      }`}
+          ? "1px solid rgba(245, 158, 11, 0.20)"
+          : "1px solid rgba(167, 139, 250, 0.25)",
+        boxShadow: "var(--t-card-shadow)",
+      }}
     >
       <div className="flex items-start gap-4">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-[#a78bfa]/10 border border-[#a78bfa]/20">
@@ -246,9 +252,9 @@ function CreativeApprovalCard({ draft }: { draft: CampaignDraft }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-[12px] font-bold text-[#f8f8f7]">{draft.clientName}</span>
-            <span className="text-[11px] text-[#6b7a99]">·</span>
-            <span className="text-[11px] text-[#6b7a99]">Creative Approval Request</span>
+            <span className="text-[12px] font-bold" style={{ color: "var(--t-text)" }}>{draft.clientName}</span>
+            <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>·</span>
+            <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>Creative Approval Request</span>
             {status === "pending" && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/25">
                 Needs Approval
@@ -270,15 +276,15 @@ function CreativeApprovalCard({ draft }: { draft: CampaignDraft }) {
               </span>
             )}
           </div>
-          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">{intel.assetType}</div>
-          <div className="text-[12px] text-[#6b7a99] mb-1">{intel.creativeStrength}</div>
+          <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--t-text)" }}>{intel.assetType}</div>
+          <div className="text-[12px] mb-1" style={{ color: "var(--t-muted)" }}>{intel.creativeStrength}</div>
           <div className="flex flex-wrap gap-1.5 mb-2">
             {intel.trustSignals.slice(0, 3).map((s) => (
               <span key={s} className="text-[10px] px-2 py-0.5 bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20 rounded-full">{s}</span>
             ))}
           </div>
-          <div className="text-[11px] text-[#6b7a99] mb-1">
-            <span className="text-[#3d4f6e]">Used in:</span> {draft.campaignName}
+          <div className="text-[11px] mb-1" style={{ color: "var(--t-muted)" }}>
+            <span style={{ color: "var(--t-dim)" }}>Used in:</span> {draft.campaignName}
           </div>
           {intel.complianceNote && (
             <div className="flex items-start gap-1.5 mt-2">
@@ -394,7 +400,7 @@ export default function ApprovalsPage() {
       {/* Safety notice */}
       <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/15 rounded-xl mb-6">
         <ShieldCheck size={13} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] text-[#6b7a99] leading-snug">
+        <p className="text-[12px] leading-snug" style={{ color: "var(--t-muted)" }}>
           <span className="text-[#f59e0b] font-semibold">AI Safety: </span>
           AI-generated campaign drafts require human approval before launch, budget changes, or Meta publishing.
         </p>
@@ -410,12 +416,12 @@ export default function ApprovalsPage() {
         ].map((s) => (
           <div
             key={s.label}
-            className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-4 flex items-center gap-3"
+            className="rounded-xl p-4 flex items-center gap-3" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
           >
-            <span className="text-2xl font-bold tracking-tight" style={{ color: s.color }}>
+            <span className="text-[22px] font-bold" style={{ color: s.color, fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
               {s.count}
             </span>
-            <span className="text-[12px] text-[#6b7a99]">{s.label}</span>
+            <span className="text-[12px]" style={{ color: "var(--t-muted)" }}>{s.label}</span>
           </div>
         ))}
       </div>
@@ -424,7 +430,7 @@ export default function ApprovalsPage() {
       <section className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <Bot size={13} className="text-[#0081f2]" />
-          <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+          <h3 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
             Needs Your Review
           </h3>
           {actionableDrafts.length > 0 && (
@@ -435,14 +441,14 @@ export default function ApprovalsPage() {
         </div>
 
         {actionableDrafts.length === 0 ? (
-          <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 flex flex-col items-center text-center">
-            <div className="w-10 h-10 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mb-3">
-              <Bot size={16} className="text-[#3d4f6e]" />
+          <div className="rounded-xl p-10 flex flex-col items-center text-center" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}>
+              <Bot size={16} style={{ color: "var(--t-dim)" }} />
             </div>
-            <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">
+            <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--t-text)" }}>
               No approvals waiting for review
             </div>
-            <p className="text-[12px] text-[#6b7a99] mb-4">
+            <p className="text-[12px] mb-4" style={{ color: "var(--t-muted)" }}>
               Generate a campaign with Veronica and submit it for approval to see it here.
             </p>
             <Link
@@ -467,7 +473,7 @@ export default function ApprovalsPage() {
         <section className="mb-8">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 size={13} className="text-[#22c55e]" />
-            <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
               Approved — Pending Meta Launch
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/25 rounded-full">
@@ -514,7 +520,7 @@ export default function ApprovalsPage() {
         <section className="mb-8">
           <div className="flex items-center gap-2 mb-3">
             <Film size={13} className="text-[#a78bfa]" />
-            <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
               Creative Approval Requests
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 bg-[#a78bfa]/15 text-[#a78bfa] border border-[#a78bfa]/25 rounded-full">

@@ -623,10 +623,10 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       }
 
       if (extractJson.scanned) {
-        // PDF has no embedded text — likely a scanned image
         setPdfStage("scanned");
         setPdfError(
-          "PDF text extraction failed — this appears to be a scanned image PDF with no embedded text. Paste the onboarding summary manually."
+          extractJson.error ??
+            "PDF text could not be extracted automatically. You can paste the onboarding summary manually, or try exporting the PDF as a text-based PDF."
         );
         return;
       }
@@ -635,7 +635,7 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
       if (!extractedText.trim()) {
         setPdfStage("scanned");
         setPdfError(
-          "No text could be extracted from this PDF. Paste the onboarding summary manually."
+          "PDF text could not be extracted automatically. You can paste the onboarding summary manually, or try exporting the PDF as a text-based PDF."
         );
         return;
       }

@@ -18,12 +18,26 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 import { extractTextFromPdf } from "@/lib/pdfTextExtractor";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  // ── Auth: session + role ────────────────────────────────────────────────────
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canUploadFiles")) {
+    return NextResponse.json(
+      { error: "Forbidden — PDF extraction requires admin or media buyer role" },
+      { status: 403 }
+    );
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("file");

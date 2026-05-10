@@ -356,9 +356,23 @@ export default function ApprovalsPage() {
   // Prevent hydration mismatch: localStorage-derived counts are 0 on the server
   // and may differ on the client. Render stable placeholders until after mount.
   const [mounted, setMounted] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  const submittedDrafts = mounted ? plans.filter((p) => p.status !== "draft") : [];
+  // Actionable: require human review or revision
+  const actionableDrafts = mounted
+    ? plans.filter((p) => ["needs_review", "changes_requested"].includes(p.status))
+    : [];
+  // Approved: admin must mark ready for Meta before launch
+  const approvedDrafts = mounted
+    ? plans.filter((p) => p.status === "approved")
+    : [];
+  // History: terminal or launched — no further action needed
+  const historyDrafts = mounted
+    ? plans.filter((p) =>
+        ["ready_for_meta", "pushed_paused", "live", "rejected"].includes(p.status)
+      )
+    : [];
   const creativePendingDrafts = mounted
     ? plans.filter((p) => p.creativeIntelligenceUsed && !p.creativeIntelligenceUsed.approvedForAds)
     : [];
@@ -366,13 +380,9 @@ export default function ApprovalsPage() {
   const changesRequestedCount = mounted
     ? plans.filter((p) => p.status === "changes_requested").length
     : 0;
-  const approvedCount = mounted
-    ? plans.filter((p) =>
-        ["approved", "ready_for_meta", "pushed_paused", "live"].includes(p.status)
-      ).length
-    : 0;
+  const approvedCount = mounted ? approvedDrafts.length : 0;
 
-  const totalPending = needsReviewCount + creativePendingDrafts.length;
+  const totalPending = needsReviewCount + changesRequestedCount + creativePendingDrafts.length;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -410,30 +420,30 @@ export default function ApprovalsPage() {
         ))}
       </div>
 
-      {/* ── AI Campaign Drafts ── */}
+      {/* ── Needs Action ── */}
       <section className="mb-8">
         <div className="flex items-center gap-2 mb-3">
           <Bot size={13} className="text-[#0081f2]" />
           <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
-            AI Campaign Drafts
+            Needs Your Review
           </h3>
-          {needsReviewCount > 0 && (
+          {actionableDrafts.length > 0 && (
             <span className="text-[10px] font-bold px-2 py-0.5 bg-[#0081f2]/15 text-[#0081f2] border border-[#0081f2]/25 rounded-full">
-              {needsReviewCount} need review
+              {actionableDrafts.length} actionable
             </span>
           )}
         </div>
 
-        {submittedDrafts.length === 0 ? (
+        {actionableDrafts.length === 0 ? (
           <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mb-3">
               <Bot size={16} className="text-[#3d4f6e]" />
             </div>
             <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">
-              No campaign drafts submitted yet
+              No approvals waiting for review
             </div>
             <p className="text-[12px] text-[#6b7a99] mb-4">
-              Generate a campaign with Veronica and click Submit for Approval.
+              Generate a campaign with Veronica and submit it for approval to see it here.
             </p>
             <Link
               href="/ai-agent"
@@ -445,12 +455,59 @@ export default function ApprovalsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {submittedDrafts.map((draft) => (
+            {actionableDrafts.map((draft) => (
               <DraftCard key={draft.id} draft={draft} onUpdate={updateStatus} canApprove={canApprove} canMarkReady={canMarkReady} />
             ))}
           </div>
         )}
       </section>
+
+      {/* ── Approved — Pending Meta Launch ── */}
+      {approvedDrafts.length > 0 && (
+        <section className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 size={13} className="text-[#22c55e]" />
+            <h3 className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+              Approved — Pending Meta Launch
+            </h3>
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/25 rounded-full">
+              {approvedDrafts.length} approved
+            </span>
+          </div>
+          <div className="space-y-3">
+            {approvedDrafts.map((draft) => (
+              <DraftCard key={draft.id} draft={draft} onUpdate={updateStatus} canApprove={canApprove} canMarkReady={canMarkReady} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── History (collapsed by default) ── */}
+      {historyDrafts.length > 0 && (
+        <section className="mb-8">
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex items-center gap-2 mb-3 text-left w-full group"
+          >
+            <span className="text-[11px] font-bold text-[#3d4f6e] uppercase tracking-widest">
+              History
+            </span>
+            <span className="text-[10px] text-[#3d4f6e] bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.12)] px-2 py-0.5 rounded-full">
+              {historyDrafts.length} completed
+            </span>
+            <span className="text-[10px] text-[#3d4f6e] ml-auto group-hover:text-[#6b7a99] transition-colors">
+              {showHistory ? "Hide ↑" : "Show ↓"}
+            </span>
+          </button>
+          {showHistory && (
+            <div className="space-y-3">
+              {historyDrafts.map((draft) => (
+                <DraftCard key={draft.id} draft={draft} onUpdate={updateStatus} canApprove={canApprove} canMarkReady={canMarkReady} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Creative Approval Requests ── */}
       {creativePendingDrafts.length > 0 && (

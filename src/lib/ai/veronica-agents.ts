@@ -110,6 +110,9 @@ export interface MediaBuyerOutput {
 }
 
 export interface GhlFollowUpOutput {
+  ghlConnected: boolean;
+  ghlSynced: boolean;
+  ghlStaleDays: number | null;
   followUpBottleneck: string;
   bookingIssue: string | null;
   pipelineIssue: string | null;
@@ -444,7 +447,7 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     followUpBottleneck = "GHL is connected but pipeline data has not synced yet. Workflow auditing will be available once the first sync completes.";
     bookingIssue = "GHL connected — waiting for first sync. Pipeline and contact data will populate after sync runs.";
   } else if (ghlStale) {
-    followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Trigger a fresh sync from Settings → Integrations.`;
+    followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Open the client profile → Integrations tab to trigger a fresh sync.`;
   } else if (p.leads > 5 && p.booked === 0) {
     followUpBottleneck = `${p.leads} leads entered the system with zero appointments booked. Speed-to-lead failure or workflow not triggering.`;
     bookingIssue = "GHL follow-up workflow may not be active or setter tasks are not being created.";
@@ -468,6 +471,9 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
   if (sa?.followUpCadence) audit.push(`Review follow-up cadence — current: "${sa.followUpCadence}".`);
 
   return {
+    ghlConnected,
+    ghlSynced,
+    ghlStaleDays,
     followUpBottleneck,
     bookingIssue,
     pipelineIssue,

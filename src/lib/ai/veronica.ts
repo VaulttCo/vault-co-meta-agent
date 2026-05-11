@@ -6,6 +6,30 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
 import type { CampaignDraft } from "@/lib/planStore";
 import type { PersistedReport } from "@/lib/data/data-provider";
+import {
+  type AgentId,
+  type AgentOutputBundle,
+  AGENT_DISPLAY_NAMES,
+  runClientHealthAgent,
+  runLaunchReadinessAgent,
+  runClientIntelligenceAgent,
+  runMediaBuyerAgent,
+  runGhlFollowUpAgent,
+  runSalesConversionAgent,
+  runCreativeStrategistAgent,
+  runOfferMessagingAgent,
+  runReportingAgent,
+  runOperatorPriorityAgent,
+  runClientRetentionAgent,
+  runUpsellOpportunityAgent,
+  runCapacityScalingAgent,
+  runDataQualityAgent,
+  runComplianceRiskAgent,
+  runLandingPageCROAgent,
+  runAppointmentSetterAgent,
+  runClientCommunicationAgent,
+  runGhlWorkflowBuilderAgent,
+} from "@/lib/ai/veronica-agents";
 
 // ─────────────────────────────────────────────────────────────
 // Public response types
@@ -26,6 +50,14 @@ export interface VeronicaConsoleResponse {
   };
   mockMode: boolean;
   provider: string;
+  // Veronica 2.0 multi-agent fields
+  agentsUsed?: AgentId[];
+  approvalRequired?: boolean;
+  suggestedApprovalDestination?: string;
+  whatVeronicaCanDoNow?: string[];
+  whatRequiresHumanApproval?: string[];
+  whatIsBlocked?: string[];
+  dataConfidence?: "high" | "medium" | "low";
 }
 
 export interface IntegrationConnection {
@@ -1141,6 +1173,388 @@ export function buildClientBrain(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Veronica 2.0 — Agent routing and orchestration
+// ─────────────────────────────────────────────────────────────
+
+export interface AgentRoutingResult {
+  agentIds: AgentId[];
+  detectedClientId: string | null;
+  routingReason: string;
+}
+
+export function routeToAgents(
+  message: string,
+  clients: Client[]
+): AgentRoutingResult {
+  const msg = message.toLowerCase();
+  const agents: AgentId[] = [];
+
+  const detectedClient = clients.find((c) => {
+    if (msg.includes(c.name.toLowerCase())) return true;
+    if (msg.includes(c.id.toLowerCase())) return true;
+    const ownerParts = c.owner.toLowerCase().split(" ");
+    if (ownerParts.some((w: string) => w.length >= 4 && msg.includes(w))) return true;
+    const genericWords = new Set(["group", "roofing", "construction", "builders", "remodeling", "forge", "home"]);
+    const nameParts = c.name.toLowerCase().split(/[\s-]+/);
+    return nameParts.some((w: string) => w.length >= 4 && !genericWords.has(w) && msg.includes(w));
+  });
+  const detectedClientId = detectedClient?.id ?? null;
+
+  if (
+    msg.includes("priority") || msg.includes("this week") || msg.includes("next week") ||
+    msg.includes("today") || msg.includes("what should i") || msg.includes("focus") ||
+    msg.includes("operator") || msg.includes("overview") || msg.includes("portfolio") ||
+    (!detectedClientId && (msg.includes("all clients") || msg.includes("which client")))
+  ) agents.push("operator_priority");
+
+  if (
+    msg.includes("data quality") || msg.includes("data conflict") || msg.includes("missing data") ||
+    msg.includes("mismatch") || msg.includes("unreliable")
+  ) agents.push("data_quality");
+
+  if (
+    msg.includes("health") || msg.includes("score") || msg.includes("at risk") ||
+    msg.includes("blocked") || msg.includes("status")
+  ) agents.push("client_health");
+
+  if (
+    msg.includes("launch") || msg.includes("ready") || msg.includes("setup") ||
+    msg.includes("missing") || msg.includes("complete") || msg.includes("onboarding") ||
+    msg.includes("not ready")
+  ) agents.push("launch_readiness");
+
+  if (
+    msg.includes("intelligence") || msg.includes("buyer") || msg.includes("objection") ||
+    msg.includes("positioning") || msg.includes("intake")
+  ) agents.push("client_intelligence");
+
+  if (
+    msg.includes("cpl") || msg.includes("ad performance") || msg.includes("campaign performance") ||
+    msg.includes("meta") || msg.includes("budget") || msg.includes("spend") ||
+    msg.includes("scale") || msg.includes("increase")
+  ) agents.push("media_buyer");
+
+  if (
+    msg.includes("ghl") || msg.includes("follow-up") || msg.includes("follow up") ||
+    msg.includes("followup") || msg.includes("pipeline") || msg.includes("workflow")
+  ) agents.push("ghl_followup");
+
+  if (
+    msg.includes("booking") || msg.includes("convert") || msg.includes("close") ||
+    msg.includes("leads") || msg.includes("contact") || msg.includes("appointment") ||
+    msg.includes("not booking") || msg.includes("no booking")
+  ) agents.push("sales_conversion");
+
+  if (
+    msg.includes("creative") || msg.includes("asset") || msg.includes("video") ||
+    msg.includes("image") || msg.includes("photo") || msg.includes("shoot")
+  ) agents.push("creative_strategist");
+
+  if (
+    msg.includes("hook") || msg.includes("copy") || msg.includes("messaging") ||
+    msg.includes("offer") || msg.includes("angle") || msg.includes("headline") ||
+    msg.includes("ad copy")
+  ) agents.push("offer_messaging");
+
+  if (msg.includes("report") || msg.includes("reporting") || msg.includes("weekly")) {
+    agents.push("reporting");
+  }
+
+  if (
+    msg.includes("retention") || msg.includes("churn") || msg.includes("cancel") ||
+    msg.includes("losing client") || msg.includes("unhappy")
+  ) agents.push("client_retention");
+
+  if (
+    msg.includes("upsell") || msg.includes("expand") || msg.includes("opportunity") ||
+    msg.includes("upgrade") || msg.includes("more services")
+  ) agents.push("upsell_opportunity");
+
+  if (
+    msg.includes("capacity") || msg.includes("crew") || msg.includes("scaling") ||
+    msg.includes("can we scale") || msg.includes("maximum")
+  ) agents.push("capacity_scaling");
+
+  if (
+    msg.includes("compliance") || msg.includes("risk") || msg.includes("insurance language") ||
+    msg.includes("guarantee") || msg.includes("legal") || msg.includes("policy")
+  ) agents.push("compliance_risk");
+
+  if (
+    msg.includes("landing page") || msg.includes("cro") || msg.includes("conversion rate") ||
+    msg.includes("form") || msg.includes("website")
+  ) agents.push("landing_page_cro");
+
+  if (
+    msg.includes("setter") || msg.includes("appointment setter") || msg.includes("sales call") ||
+    msg.includes("show rate") || msg.includes("no show")
+  ) agents.push("appointment_setter");
+
+  if (
+    msg.includes("client message") || msg.includes("client communication") ||
+    msg.includes("what to say") || msg.includes("client update") || msg.includes("draft message")
+  ) agents.push("client_communication");
+
+  if (
+    msg.includes("build workflow") || msg.includes("ghl workflow") ||
+    msg.includes("automation") || msg.includes("trigger") || msg.includes("speed-to-lead")
+  ) agents.push("ghl_workflow_builder");
+
+  if (
+    msg.includes("bottleneck") || msg.includes("problem") || msg.includes("issue") ||
+    msg.includes("diagnose") || msg.includes("what is wrong") || msg.includes("what's wrong")
+  ) {
+    if (!agents.includes("client_health")) agents.push("client_health");
+    if (!agents.includes("media_buyer")) agents.push("media_buyer");
+    if (!agents.includes("sales_conversion")) agents.push("sales_conversion");
+    if (!agents.includes("ghl_followup")) agents.push("ghl_followup");
+  }
+
+  if (agents.length === 0) agents.push("client_health", "operator_priority");
+
+  const uniqueAgents = [...new Set(agents)] as AgentId[];
+  const routingReason = `Matched ${uniqueAgents.length} agent(s): ${uniqueAgents.join(", ")}${detectedClient ? ` (client: ${detectedClient.name})` : ""}`;
+
+  return { agentIds: uniqueAgents, detectedClientId, routingReason };
+}
+
+export function runSelectedAgents(
+  routing: AgentRoutingResult,
+  ctx: VeronicaPortalContext
+): AgentOutputBundle[] {
+  const { agentIds, detectedClientId } = routing;
+  const { clients, approvals, campaignDrafts } = ctx;
+  const bundles: AgentOutputBundle[] = [];
+
+  const targetClient = detectedClientId ? clients.find((c) => c.id === detectedClientId) ?? null : null;
+  const targetBrain = targetClient ? buildClientBrain(targetClient, ctx) : null;
+
+  const needsAllBrains = agentIds.some((id) => id === "operator_priority" || id === "data_quality");
+  const allBrains = needsAllBrains ? clients.map((c) => buildClientBrain(c, ctx)) : [];
+
+  for (const agentId of agentIds) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let output: any = null;
+
+      switch (agentId) {
+        case "client_health":
+          if (targetBrain) { output = runClientHealthAgent(targetBrain); break; }
+          if (clients.length > 0) {
+            const brains = allBrains.length > 0 ? allBrains : clients.map((c) => buildClientBrain(c, ctx));
+            const lowest = [...brains].sort((a, b) => a.healthScore.score - b.healthScore.score)[0];
+            if (lowest) output = runClientHealthAgent(lowest);
+          }
+          break;
+        case "launch_readiness":
+          if (targetBrain) output = runLaunchReadinessAgent(targetBrain);
+          break;
+        case "client_intelligence":
+          if (targetBrain) output = runClientIntelligenceAgent(targetBrain);
+          break;
+        case "media_buyer":
+          if (targetBrain) output = runMediaBuyerAgent(targetBrain);
+          break;
+        case "ghl_followup":
+          if (targetBrain) output = runGhlFollowUpAgent(targetBrain);
+          break;
+        case "sales_conversion":
+          if (targetBrain) output = runSalesConversionAgent(targetBrain);
+          break;
+        case "creative_strategist":
+          if (targetBrain) output = runCreativeStrategistAgent(targetBrain);
+          break;
+        case "offer_messaging":
+          if (targetBrain) output = runOfferMessagingAgent(targetBrain);
+          break;
+        case "reporting":
+          if (targetBrain) output = runReportingAgent(targetBrain);
+          break;
+        case "operator_priority": {
+          const brains = allBrains.length > 0 ? allBrains : clients.map((c) => buildClientBrain(c, ctx));
+          output = runOperatorPriorityAgent(brains, approvals, campaignDrafts);
+          break;
+        }
+        case "client_retention":
+          if (targetBrain) output = runClientRetentionAgent(targetBrain);
+          break;
+        case "upsell_opportunity":
+          if (targetBrain) output = runUpsellOpportunityAgent(targetBrain);
+          break;
+        case "capacity_scaling":
+          if (targetBrain) output = runCapacityScalingAgent(targetBrain);
+          break;
+        case "data_quality": {
+          const brains = allBrains.length > 0 ? allBrains : clients.map((c) => buildClientBrain(c, ctx));
+          output = runDataQualityAgent(targetBrain, brains);
+          break;
+        }
+        case "compliance_risk":
+          if (targetBrain) output = runComplianceRiskAgent(targetBrain, campaignDrafts);
+          break;
+        case "landing_page_cro":
+          if (targetBrain) output = runLandingPageCROAgent(targetBrain);
+          break;
+        case "appointment_setter":
+          if (targetBrain) output = runAppointmentSetterAgent(targetBrain);
+          break;
+        case "client_communication": {
+          if (targetBrain) {
+            const retentionOut = runClientRetentionAgent(targetBrain);
+            const reportingOut = runReportingAgent(targetBrain);
+            output = runClientCommunicationAgent(targetBrain, retentionOut, reportingOut);
+          }
+          break;
+        }
+        case "ghl_workflow_builder":
+          if (targetBrain) output = runGhlWorkflowBuilderAgent(targetBrain);
+          break;
+      }
+
+      if (output) bundles.push({ agentId, clientId: detectedClientId, output });
+    } catch {
+      // Silent fail — one agent crashing should not break the whole response
+    }
+  }
+
+  return bundles;
+}
+
+export function assembleApprovalGating(bundles: AgentOutputBundle[]): {
+  approvalRequired: boolean;
+  suggestedApprovalDestination: string | undefined;
+  whatVeronicaCanDoNow: string[];
+  whatRequiresHumanApproval: string[];
+  whatIsBlocked: string[];
+} {
+  const approvalRequired = bundles.some((b) => {
+    const o = b.output as unknown as Record<string, unknown>;
+    return o.approvalRequired === true || o.approvalNeeded === true;
+  });
+
+  const canDoNow: string[] = [];
+  const requiresApproval: string[] = [];
+  const blocked: string[] = [];
+
+  for (const bundle of bundles) {
+    const o = bundle.output as unknown as Record<string, unknown>;
+    const name = AGENT_DISPLAY_NAMES[bundle.agentId];
+    canDoNow.push(`${name}: analysis and recommendations available in this response`);
+
+    if (o.approvalRequired || o.approvalNeeded) {
+      if (bundle.agentId === "ghl_workflow_builder") {
+        requiresApproval.push("Build and activate GHL workflow — human must implement in GHL directly");
+      } else if (bundle.agentId === "media_buyer") {
+        requiresApproval.push("Budget change or campaign modification — operator sign-off required before activation");
+      } else if (bundle.agentId === "offer_messaging" || bundle.agentId === "creative_strategist") {
+        requiresApproval.push("Ad copy and creative direction — human must review before Meta submission");
+      } else if (bundle.agentId === "client_communication" || bundle.agentId === "client_retention") {
+        requiresApproval.push("Client message draft — human must review and send directly");
+      } else if (bundle.agentId === "reporting") {
+        requiresApproval.push("Report draft — human must review before client delivery");
+      } else {
+        requiresApproval.push(`${name} output — human review recommended before acting`);
+      }
+    }
+
+    const launchOut = o as { blockingItems?: string[] };
+    if (launchOut.blockingItems?.length) {
+      blocked.push(...launchOut.blockingItems.map((item) => `Blocked: ${item}`));
+    }
+  }
+
+  const agentIds = bundles.map((b) => b.agentId);
+  let suggestedApprovalDestination: string | undefined;
+  if (agentIds.includes("ghl_workflow_builder")) suggestedApprovalDestination = "/settings";
+  else if (agentIds.includes("media_buyer") || agentIds.includes("launch_readiness")) suggestedApprovalDestination = "/approvals";
+  else if (agentIds.includes("reporting")) suggestedApprovalDestination = "/reports";
+  else if (agentIds.includes("creative_strategist")) suggestedApprovalDestination = "/creatives";
+  else if (approvalRequired) suggestedApprovalDestination = "/approvals";
+
+  return {
+    approvalRequired,
+    suggestedApprovalDestination,
+    whatVeronicaCanDoNow: [...new Set(canDoNow)],
+    whatRequiresHumanApproval: [...new Set(requiresApproval)],
+    whatIsBlocked: [...new Set(blocked)].slice(0, 5),
+  };
+}
+
+export function aggregateDataConfidence(bundles: AgentOutputBundle[]): "high" | "medium" | "low" {
+  if (bundles.length === 0) return "low";
+  const confidences = bundles
+    .map((b) => (b.output as unknown as Record<string, unknown>).dataConfidence as "high" | "medium" | "low" | undefined)
+    .filter(Boolean) as Array<"high" | "medium" | "low">;
+  if (confidences.includes("low")) return "low";
+  if (confidences.includes("medium")) return "medium";
+  return "high";
+}
+
+export function buildSynthesisPrompt(
+  message: string,
+  routing: AgentRoutingResult,
+  bundles: AgentOutputBundle[],
+  ctx: VeronicaPortalContext
+): string {
+  const agentOutputsJson = JSON.stringify(
+    bundles.map((b) => ({
+      agent: AGENT_DISPLAY_NAMES[b.agentId],
+      agentId: b.agentId,
+      clientId: b.clientId,
+      output: b.output,
+    })),
+    null,
+    2
+  );
+
+  const clientNames = ctx.clients.map((c) => `${c.name} (${c.status}, ${c.market})`).join(", ");
+
+  return `You are Veronica, Vault Co's internal AI Growth Operator. You are an approval-gated operator — you analyze, diagnose, draft recommendations, and prepare approval-ready outputs. You never activate campaigns, send messages, or make live external changes. All output requiring external action must be framed as requiring human approval.
+
+## Operator Question
+${message}
+
+## Agent Routing
+${routing.routingReason}
+
+## Pre-Computed Agent Analysis
+The following agents have analyzed the portal data. Use their output as your primary evidence. Do not contradict it. Synthesize and connect findings across agents.
+
+${agentOutputsJson}
+
+## Portal Context
+Clients: ${clientNames}
+Total: ${ctx.clients.length} clients | ${ctx.approvals.length} approvals pending | ${ctx.campaignDrafts.length} drafts | ${ctx.reports.length} reports
+
+## Absolute Safety Rules
+- Never publish, activate, pause, or modify any live campaign or ad
+- Never change ad budgets, spend caps, or bid strategies
+- Never send SMS, email, or push GHL workflows or sequences
+- Never expose API keys, tokens, or credentials
+- Never guarantee ROI, lead volume, or insurance outcomes
+- All output is recommendations and approval-ready drafts — humans approve and act
+
+## Vault Co Benchmarks
+- CPL: under $75 roofing, under $150 remodeling
+- Booking rate: 30%+ target | Show rate: 65%+ target
+- Speed-to-lead: first contact within 5 minutes
+
+## Response Format — CRITICAL
+Respond ONLY with a valid JSON object. No text before or after. No markdown code fences.
+{
+  "reply": "Synthesized answer using agent outputs above. Reference specific agent findings by name. Plain text with newlines. Use - for bullets. Never fabricate data.",
+  "dataSources": ["clients", "reports"],
+  "relatedLinks": [{ "label": "View Client", "href": "/clients/id" }],
+  "actionSuggested": { "label": "Next Action", "href": "/approvals" }
+}
+Rules:
+- dataSources: only sources actually used — clients, reports, campaign_drafts, approvals, client_intelligence, creative_assets, integration_connections
+- relatedLinks: max 3, directly relevant. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent, /settings
+- actionSuggested: omit if no clear next operator action
+- reply: synthesize agent findings; do not dump raw JSON`;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Build a compact diagnostic summary for ALL clients (for system prompt)
 // ─────────────────────────────────────────────────────────────
 
@@ -1508,6 +1922,30 @@ function formatReasoningReply(
 }
 
 export function mockVeronicaResponse(
+  message: string,
+  ctx: VeronicaPortalContext
+): VeronicaConsoleResponse {
+  const routing = routeToAgents(message, ctx.clients);
+  const bundles = runSelectedAgents(routing, ctx);
+  const gating = assembleApprovalGating(bundles);
+  const dataConfidence = aggregateDataConfidence(bundles);
+  const agentsUsed = bundles.map((b) => b.agentId);
+
+  const base = _mockVeronicaBaseResponse(message, ctx);
+
+  return {
+    ...base,
+    agentsUsed,
+    approvalRequired: gating.approvalRequired,
+    suggestedApprovalDestination: gating.suggestedApprovalDestination,
+    whatVeronicaCanDoNow: gating.whatVeronicaCanDoNow,
+    whatRequiresHumanApproval: gating.whatRequiresHumanApproval,
+    whatIsBlocked: gating.whatIsBlocked,
+    dataConfidence,
+  };
+}
+
+function _mockVeronicaBaseResponse(
   message: string,
   ctx: VeronicaPortalContext
 ): VeronicaConsoleResponse {

@@ -159,6 +159,7 @@ export interface ClientBrain {
     pixelInstalled: boolean;
     fbPageConnected: boolean;
     ghlConnected: boolean;
+    ghlLastSynced: string | null;
     hasActiveMetaCampaigns: boolean;
     activeCampaignCount: number;
   };
@@ -1079,11 +1080,20 @@ export function buildClientBrain(
 
   const intelligence = clientIntelligence ?? null;
 
+  // Check integration_connections for live status — this is the same source the UI uses.
+  // Client profile fields (ghlLocationId etc.) may still be "Pending" even after a successful
+  // sync, so we OR the DB-sourced connected flag in as the authoritative check.
+  const clientConnsLive = (ctx.integrationConnections ?? []).filter((ic) => ic.clientId === client.id);
+  const ghlConnFromDb = clientConnsLive.some((ic) => ic.provider === "ghl" && ic.status === "connected");
+  const ghlLastSynced = clientConnsLive.find((ic) => ic.provider === "ghl")?.lastSyncedAt ?? null;
+  const metaConnFromDb = clientConnsLive.some((ic) => ic.provider === "meta" && ic.status === "connected");
+
   const integrations = {
-    metaConnected: !!client.metaAccountId && !isValuePending(client.metaAccountId),
+    metaConnected: (!!client.metaAccountId && !isValuePending(client.metaAccountId)) || metaConnFromDb,
     pixelInstalled: !!client.pixelId && !isValuePending(client.pixelId),
     fbPageConnected: !!client.fbPageId && !isValuePending(client.fbPageId),
-    ghlConnected: !!client.ghlLocationId && !isValuePending(client.ghlLocationId),
+    ghlConnected: (!!client.ghlLocationId && !isValuePending(client.ghlLocationId)) || ghlConnFromDb,
+    ghlLastSynced,
     hasActiveMetaCampaigns,
     activeCampaignCount: activeCampaigns.length,
   };
@@ -1176,6 +1186,60 @@ export function buildClientBrain(
 // Veronica 2.0 — Agent routing and orchestration
 // ─────────────────────────────────────────────────────────────
 
+// ── Fuzzy client name detection ───────────────────────────────────────────────
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+const GENERIC_NAME_WORDS = new Set([
+  "group", "roofing", "construction", "builders", "remodeling",
+  "forge", "home", "services", "company", "inc", "llc",
+]);
+
+export function clientMatchesMessage(client: Client, msg: string): boolean {
+  const m = msg.toLowerCase();
+
+  // Exact substring: full name or id
+  if (m.includes(client.name.toLowerCase())) return true;
+  if (m.includes(client.id.toLowerCase())) return true;
+
+  // Owner first/last name partial match (4+ char words)
+  const ownerParts = client.owner.toLowerCase().split(" ");
+  if (ownerParts.some((w) => w.length >= 4 && m.includes(w))) return true;
+
+  // Significant name parts — exact substring
+  const nameParts = client.name.toLowerCase().split(/[\s\-_]+/).filter(
+    (w) => w.length >= 4 && !GENERIC_NAME_WORDS.has(w)
+  );
+  if (nameParts.some((w) => m.includes(w))) return true;
+
+  // Fuzzy match: each significant name part against each message word (length-gated)
+  const msgWords = m.split(/\s+/);
+  for (const namePart of nameParts) {
+    for (const msgWord of msgWords) {
+      // Only compare words of similar length to avoid false positives
+      if (Math.abs(namePart.length - msgWord.length) > 2) continue;
+      if (msgWord.length < 4) continue;
+      const threshold = namePart.length >= 7 ? 2 : 1;
+      if (levenshtein(namePart, msgWord) <= threshold) return true;
+    }
+  }
+
+  return false;
+}
+
 export interface AgentRoutingResult {
   agentIds: AgentId[];
   detectedClientId: string | null;
@@ -1189,15 +1253,7 @@ export function routeToAgents(
   const msg = message.toLowerCase();
   const agents: AgentId[] = [];
 
-  const detectedClient = clients.find((c) => {
-    if (msg.includes(c.name.toLowerCase())) return true;
-    if (msg.includes(c.id.toLowerCase())) return true;
-    const ownerParts = c.owner.toLowerCase().split(" ");
-    if (ownerParts.some((w: string) => w.length >= 4 && msg.includes(w))) return true;
-    const genericWords = new Set(["group", "roofing", "construction", "builders", "remodeling", "forge", "home"]);
-    const nameParts = c.name.toLowerCase().split(/[\s-]+/);
-    return nameParts.some((w: string) => w.length >= 4 && !genericWords.has(w) && msg.includes(w));
-  });
+  const detectedClient = clients.find((c) => clientMatchesMessage(c, msg));
   const detectedClientId = detectedClient?.id ?? null;
 
   if (
@@ -1952,18 +2008,8 @@ function _mockVeronicaBaseResponse(
   const msg = message.toLowerCase();
   const { clients, approvals, campaignDrafts, reports, creativeAssets } = ctx;
 
-  // ── Client detection ──
-  const mentionedClient = clients.find((c) => {
-    const m = msg;
-    if (m.includes(c.name.toLowerCase())) return true;
-    if (m.includes(c.id.toLowerCase())) return true;
-    const ownerParts = c.owner.toLowerCase().split(" ");
-    if (ownerParts.some((w: string) => w.length >= 4 && m.includes(w))) return true;
-    // Partial name match — catch "Kaczmar" for "Kaczmar Builders", "Acorns" for "Acorns Roofing", etc.
-    const genericWords = new Set(["group", "roofing", "construction", "builders", "remodeling", "forge", "home"]);
-    const nameParts = c.name.toLowerCase().split(/[\s-]+/);
-    return nameParts.some((w: string) => w.length >= 4 && !genericWords.has(w) && m.includes(w));
-  });
+  // ── Client detection (fuzzy — catches typos like "Kazcmar" → "Kaczmar") ──
+  const mentionedClient = clients.find((c) => clientMatchesMessage(c, msg));
 
   // ── Intent detection ──
   const isApprovals =

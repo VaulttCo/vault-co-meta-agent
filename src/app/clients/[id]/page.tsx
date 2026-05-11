@@ -1060,6 +1060,231 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
   );
 }
 
+// ─── Edit Client Modal ────────────────────────────────────────
+
+interface EditFormState {
+  name: string;
+  owner: string;
+  email: string;
+  phone: string;
+  website: string;
+  market: string;
+  notes: string;
+}
+
+function EditClientModal({
+  clientId,
+  client,
+  onClose,
+  onSaved,
+}: {
+  clientId: string;
+  client: Client;
+  onClose: () => void;
+  onSaved: (updates: Partial<Client>) => void;
+}) {
+  const [form, setForm] = useState<EditFormState>({
+    name: client.name,
+    owner: client.owner,
+    email: client.email,
+    phone: client.phone,
+    website: client.website,
+    market: client.market,
+    notes: client.notes,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function field(key: keyof EditFormState, value: string) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Save failed. Please try again.");
+        return;
+      }
+      setSaved(true);
+      onSaved({
+        name: form.name,
+        owner: form.owner,
+        email: form.email,
+        phone: form.phone,
+        website: form.website,
+        market: form.market,
+        notes: form.notes,
+      });
+      setTimeout(() => onClose(), 800);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputCls =
+    "w-full px-3 py-2 text-[12px] bg-[#0d0e12] border border-[rgba(0,129,242,0.2)] rounded-lg text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[rgba(0,129,242,0.45)] transition-colors";
+  const labelCls = "block text-[11px] font-semibold text-[#6b7a99] uppercase tracking-wider mb-1";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-lg bg-[#13151c] border border-[rgba(0,129,242,0.18)] rounded-2xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(0,129,242,0.12)]">
+          <div>
+            <h3 className="text-[14px] font-bold text-[#f8f8f7]">Edit Client</h3>
+            <p className="text-[11px] text-[#6b7a99] mt-0.5">{client.name}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-[#1a1d27] transition-colors text-[#6b7a99] hover:text-[#f8f8f7]"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Company Name</label>
+              <input
+                className={inputCls}
+                value={form.name}
+                onChange={(e) => field("name", e.target.value)}
+                placeholder="Company name"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Owner Name</label>
+              <input
+                className={inputCls}
+                value={form.owner}
+                onChange={(e) => field("owner", e.target.value)}
+                placeholder="Owner name"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Email</label>
+              <input
+                type="email"
+                className={inputCls}
+                value={form.email}
+                onChange={(e) => field("email", e.target.value)}
+                placeholder="email@example.com"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Phone</label>
+              <input
+                className={inputCls}
+                value={form.phone}
+                onChange={(e) => field("phone", e.target.value)}
+                placeholder="(555) 000-0000"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Website</label>
+              <input
+                className={inputCls}
+                value={form.website}
+                onChange={(e) => field("website", e.target.value)}
+                placeholder="example.com"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Market / Service Area</label>
+              <input
+                className={inputCls}
+                value={form.market}
+                onChange={(e) => field("market", e.target.value)}
+                placeholder="City, State"
+              />
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Notes</label>
+            <textarea
+              className={`${inputCls} resize-none`}
+              rows={3}
+              value={form.notes}
+              onChange={(e) => field("notes", e.target.value)}
+              placeholder="Internal notes about this client…"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-[rgba(0,129,242,0.12)] flex items-center justify-between">
+          <div className="text-[11px]">
+            {error && (
+              <span className="flex items-center gap-1.5 text-[#f87171]">
+                <AlertCircle size={11} />
+                {error}
+              </span>
+            )}
+            {saved && (
+              <span className="flex items-center gap-1.5 text-[#4ade80]">
+                <CheckCircle2 size={11} />
+                Saved
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-[12px] font-medium text-[#6b7a99] hover:text-[#f8f8f7] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || saved}
+              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-semibold rounded-lg transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ background: "rgba(0,129,242,0.18)", border: "1px solid rgba(0,129,242,0.3)", color: "#60b4ff" }}
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              {saving ? "Saving…" : saved ? "Saved" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Client Status Control ────────────────────────────────────
 
 const ALL_STATUSES: ClientStatus[] = ["onboarding", "setup", "active", "paused", "archived"];
@@ -1164,6 +1389,7 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
   const { id: clientId } = use(params);
   const { can } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
+  const [editOpen, setEditOpen] = useState(false);
   // Start with mock data (fast); fall back to data provider for Supabase-added clients
   const [client, setClient] = useState<Client | null>(getClient(clientId) ?? null);
   const [clientLoading, setClientLoading] = useState(!getClient(clientId));
@@ -1234,9 +1460,14 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0, 129, 242, 0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0, 129, 242, 0.25)] transition-colors">
-              Edit Client
-            </button>
+            {can("canEditClients") && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0,129,242,0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.25)] transition-colors"
+              >
+                Edit Client
+              </button>
+            )}
             <button className="flex items-center gap-1.5 px-3 py-1.5 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
               <Bot size={13} />
               Build Campaign
@@ -1454,6 +1685,16 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
           </div>
           <p className="text-[12px] text-[#6b7a99]">This section is being built. Check back soon.</p>
         </div>
+      )}
+
+      {/* Edit Client modal */}
+      {editOpen && (
+        <EditClientModal
+          clientId={clientId}
+          client={client}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updates) => setClient((prev) => prev ? { ...prev, ...updates } : prev)}
+        />
       )}
     </div>
   );

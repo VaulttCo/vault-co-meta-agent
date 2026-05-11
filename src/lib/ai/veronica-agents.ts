@@ -296,8 +296,11 @@ export interface AgentOutputBundle {
 export function runClientHealthAgent(brain: ClientBrain): ClientHealthOutput {
   const { healthScore: hs, performance: p, integrations: i } = brain;
   const hasPerf = p.leads > 0 || parseFloat(p.spend.replace(/[^0-9.]/g, "")) > 0;
+  // "low" only when we cannot determine integration status or trust any data source
   const dataConf: "high" | "medium" | "low" =
-    brain.intelligence && hasPerf ? "high" : hasPerf || i.metaConnected ? "medium" : "low";
+    brain.intelligence && hasPerf ? "high"
+    : hasPerf || i.metaConnected || i.ghlConnected ? "medium"
+    : "low";
   return {
     healthScore: hs.score,
     status: hs.status,
@@ -313,9 +316,9 @@ export function runClientHealthAgent(brain: ClientBrain): ClientHealthOutput {
 export function runLaunchReadinessAgent(brain: ClientBrain): LaunchReadinessOutput {
   const { launchReadiness: lr, integrations: i } = brain;
   const whatNotToDoYet = lr.blockingItems.length > 0
-    ? `Veronica can prepare approval-ready campaign drafts now. Do not launch, activate, or submit campaigns to Meta until these blockers are resolved: ${lr.blockingItems.join(", ")}.`
+    ? `Veronica can prepare an approval-ready campaign draft now — drafting and internal review do not require these blockers to be cleared. The draft cannot be launched, activated, or sent to Meta until resolved: ${lr.blockingItems.join(", ")}.`
     : lr.missing.length > 0
-    ? `Drafting and strategy work can proceed. Do not assume full launch readiness — ${lr.missing.length} item(s) still outstanding.`
+    ? `Drafting and strategy work can proceed. Do not assume full launch readiness — ${lr.missing.length} non-blocking item(s) still outstanding.`
     : "Ready for launch consideration. Do not increase ad spend before confirming baseline reporting is in place.";
   const dataConf: "high" | "medium" | "low" =
     i.metaConnected || i.ghlConnected ? "high" : "medium";
@@ -419,7 +422,11 @@ export function runMediaBuyerAgent(brain: ClientBrain): MediaBuyerOutput {
     budgetRecommendation: budgetRec,
     whatNotToDoYet: "Do not pause campaigns, change budgets, or modify targeting without human approval. Any budget change requires explicit operator sign-off before activation.",
     approvalRequired: true,
-    dataConfidence: hasSpendData && p.leads > 5 ? "high" : hasSpendData ? "medium" : "low",
+    // "not connected" is a known state — not missing data. Only "low" if Meta is connected but truly has no data.
+    dataConfidence: hasSpendData && p.leads > 5 ? "high"
+      : hasSpendData || p.leads > 0 ? "medium"
+      : !i.metaConnected ? "medium"
+      : "low",
   };
 }
 

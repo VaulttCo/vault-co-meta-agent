@@ -864,7 +864,7 @@ function classifyBottleneck(data: {
         "Client onboarding is incomplete. Ads cannot run effectively — or at all — without these items in place.",
       nextAction: `Complete setup for: ${setupGaps.slice(0, 2).join(" and ")}. Open the client profile → Integrations tab for credentials; Creative Library for assets.`,
       notToDo:
-        "Do not generate campaign drafts for Meta submission until integrations are connected. Do not run ads without an approved creative.",
+        "Do not launch, activate, or submit campaigns to Meta until integrations are connected and an approved creative is in place. Veronica can prepare campaign drafts and strategy now.",
       dataConfidence: "high",
     };
   }

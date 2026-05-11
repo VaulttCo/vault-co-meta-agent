@@ -429,8 +429,22 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
   let bookingIssue: string | null = null;
   let pipelineIssue: string | null = null;
 
-  if (!i.ghlConnected) {
+  // GHL state classification — 4 possible states
+  const ghlConnected = i.ghlConnected;
+  const ghlSynced = !!i.ghlLastSynced;
+  const ghlStaleDays = i.ghlLastSynced
+    ? Math.round((Date.now() - new Date(i.ghlLastSynced).getTime()) / 86400000)
+    : null;
+  const ghlStale = ghlStaleDays !== null && ghlStaleDays > 3;
+
+  if (!ghlConnected) {
     followUpBottleneck = "GHL Location not connected — follow-up system cannot be audited.";
+  } else if (!ghlSynced) {
+    // Connected but no sync has run yet
+    followUpBottleneck = "GHL is connected but pipeline data has not synced yet. Workflow auditing will be available once the first sync completes.";
+    bookingIssue = "GHL connected — waiting for first sync. Pipeline and contact data will populate after sync runs.";
+  } else if (ghlStale) {
+    followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Trigger a fresh sync from Settings → Integrations.`;
   } else if (p.leads > 5 && p.booked === 0) {
     followUpBottleneck = `${p.leads} leads entered the system with zero appointments booked. Speed-to-lead failure or workflow not triggering.`;
     bookingIssue = "GHL follow-up workflow may not be active or setter tasks are not being created.";
@@ -459,7 +473,10 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     pipelineIssue,
     recommendedFollowUpAudit: audit,
     approvalRequired: false,
-    dataConfidence: i.ghlConnected && p.leads > 5 ? "high" : i.ghlConnected ? "medium" : "low",
+    dataConfidence: i.ghlConnected && p.leads > 5 ? "high"
+      : i.ghlConnected && i.ghlLastSynced ? "medium"
+      : i.ghlConnected ? "medium"   // connected but no sync yet — still medium, not low
+      : "low",
   };
 }
 

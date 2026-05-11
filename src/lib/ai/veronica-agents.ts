@@ -313,10 +313,10 @@ export function runClientHealthAgent(brain: ClientBrain): ClientHealthOutput {
 export function runLaunchReadinessAgent(brain: ClientBrain): LaunchReadinessOutput {
   const { launchReadiness: lr, integrations: i } = brain;
   const whatNotToDoYet = lr.blockingItems.length > 0
-    ? `Do not generate Meta campaign submissions until blocking items are resolved: ${lr.blockingItems.join(", ")}.`
+    ? `Veronica can prepare approval-ready campaign drafts now. Do not launch, activate, or submit campaigns to Meta until these blockers are resolved: ${lr.blockingItems.join(", ")}.`
     : lr.missing.length > 0
-    ? `Do not assume launch readiness with ${lr.missing.length} item(s) still missing.`
-    : "Ready. Do not increase ad spend before confirming baseline reporting is in place.";
+    ? `Drafting and strategy work can proceed. Do not assume full launch readiness — ${lr.missing.length} item(s) still outstanding.`
+    : "Ready for launch consideration. Do not increase ad spend before confirming baseline reporting is in place.";
   const dataConf: "high" | "medium" | "low" =
     i.metaConnected || i.ghlConnected ? "high" : "medium";
   return {
@@ -920,9 +920,15 @@ export function runDataQualityAgent(brain: ClientBrain | null, allBrains: Client
     const pr = b.profile;
     const p = b.performance;
     const i = b.integrations;
-    const conflictDiags = b.diagnostics.filter((d) => d.signal.toLowerCase().includes("data mismatch"));
-
+    // Only critical-severity data conflicts tank confidence — warning/info mismatches go to required fixes
+    const conflictDiags = b.diagnostics.filter(
+      (d) => d.signal.toLowerCase().includes("data mismatch") && d.severity === "critical"
+    );
+    const warnConflictDiags = b.diagnostics.filter(
+      (d) => d.signal.toLowerCase().includes("data mismatch") && d.severity !== "critical"
+    );
     conflictDiags.forEach((d) => conflicting.push(`${pr.name}: ${d.signal}`));
+    warnConflictDiags.forEach((d) => required.push(`${pr.name}: ${d.signal}`));
 
     if (!b.intelligence) missing.push(`${pr.name}: Client intelligence not extracted`);
     if (!i.metaConnected && pr.status === "active") missing.push(`${pr.name}: Meta Ad Account not connected (active client)`);

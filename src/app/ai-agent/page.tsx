@@ -453,6 +453,11 @@ const agentSuggestions = [
   "Which clients have follow-up bottlenecks?",
   "Should we increase ad spend anywhere?",
   "What should we fix before scaling?",
+  "Build a GHL speed-to-lead workflow for Kaczmar",
+  "Draft a client message for Kaczmar",
+  "What is the media buyer bottleneck?",
+  "Run a compliance check on current campaigns",
+  "Who is the highest upsell opportunity right now?",
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -466,6 +471,14 @@ interface ConsoleMsg {
   relatedLinks?: { label: string; href: string }[];
   actionSuggested?: { label: string; href: string };
   isError?: boolean;
+  // Veronica 2.0 agent fields
+  agentsUsed?: string[];
+  approvalRequired?: boolean;
+  suggestedApprovalDestination?: string;
+  whatVeronicaCanDoNow?: string[];
+  whatRequiresHumanApproval?: string[];
+  whatIsBlocked?: string[];
+  dataConfidence?: "high" | "medium" | "low";
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -785,6 +798,13 @@ function AICampaignBuilderContent() {
           dataSources: data.dataSources,
           relatedLinks: data.relatedLinks,
           actionSuggested: data.actionSuggested,
+          agentsUsed: data.agentsUsed,
+          approvalRequired: data.approvalRequired,
+          suggestedApprovalDestination: data.suggestedApprovalDestination,
+          whatVeronicaCanDoNow: data.whatVeronicaCanDoNow,
+          whatRequiresHumanApproval: data.whatRequiresHumanApproval,
+          whatIsBlocked: data.whatIsBlocked,
+          dataConfidence: data.dataConfidence,
         },
       ]);
     } catch {
@@ -1967,13 +1987,13 @@ function AICampaignBuilderContent() {
           >
             <div className="flex items-center gap-2 px-5 py-3.5 border-b border-[var(--t-border)]">
               <Bot size={14} className="text-[#0081f2]" />
-              <span className="text-[13px] font-semibold text-[var(--t-text)]">Veronica Console</span>
+              <span className="text-[13px] font-semibold text-[var(--t-text)]">Veronica Command Center</span>
               <span
                 className="ml-3 flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                style={{ color: "#f59e0b", backgroundColor: "rgba(245, 158, 11, 0.10)", border: "1px solid rgba(245, 158, 11, 0.22)" }}
+                style={{ color: "#a78bfa", backgroundColor: "rgba(167, 139, 250, 0.10)", border: "1px solid rgba(167, 139, 250, 0.22)" }}
               >
                 <ShieldCheck size={9} />
-                Recommendation only
+                Approval-Gated Operator
               </span>
               <span className="ml-auto text-[10px] text-[var(--t-dim)]">Veronica by Vault Co</span>
             </div>
@@ -1989,6 +2009,44 @@ function AICampaignBuilderContent() {
                     <div className={`px-4 py-3 rounded-xl text-[13px] leading-relaxed whitespace-pre-line ${msg.role === "agent" ? (msg.isError ? "bg-[#ef4444]/5 border border-[#ef4444]/20 text-[#ef4444]" : "bg-[#131720] border border-[#1c2438] text-[#eef1f8]") : "bg-[#f07820]/10 border border-[#f07820]/15 text-[#eef1f8]"}`}>
                       {msg.text}
                     </div>
+                    {/* Agents used pills */}
+                    {msg.role === "agent" && msg.agentsUsed && msg.agentsUsed.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {msg.agentsUsed.map((agentId) => (
+                          <span key={agentId} className="text-[9px] font-medium px-2 py-0.5 rounded-full" style={{ color: "#a78bfa", backgroundColor: "rgba(167, 139, 250, 0.10)", border: "1px solid rgba(167, 139, 250, 0.20)" }}>
+                            {agentId.replace(/_/g, " ")}
+                          </span>
+                        ))}
+                        {msg.dataConfidence && (
+                          <span className="text-[9px] font-medium px-2 py-0.5 rounded-full ml-1" style={{
+                            color: msg.dataConfidence === "high" ? "#22c55e" : msg.dataConfidence === "medium" ? "#f59e0b" : "#ef4444",
+                            backgroundColor: msg.dataConfidence === "high" ? "rgba(34,197,94,0.10)" : msg.dataConfidence === "medium" ? "rgba(245,158,11,0.10)" : "rgba(239,68,68,0.10)",
+                            border: `1px solid ${msg.dataConfidence === "high" ? "rgba(34,197,94,0.25)" : msg.dataConfidence === "medium" ? "rgba(245,158,11,0.25)" : "rgba(239,68,68,0.25)"}`,
+                          }}>
+                            {msg.dataConfidence} confidence
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Approval required banner */}
+                    {msg.role === "agent" && msg.approvalRequired && msg.whatRequiresHumanApproval && msg.whatRequiresHumanApproval.length > 0 && (
+                      <div className="rounded-lg px-3 py-2 text-[11px]" style={{ backgroundColor: "rgba(245, 158, 11, 0.06)", border: "1px solid rgba(245, 158, 11, 0.18)" }}>
+                        <div className="flex items-center gap-1.5 font-semibold mb-1" style={{ color: "#f59e0b" }}>
+                          <ShieldCheck size={10} />
+                          Requires human approval before activation
+                        </div>
+                        <ul className="space-y-0.5">
+                          {msg.whatRequiresHumanApproval.slice(0, 3).map((item, idx) => (
+                            <li key={idx} className="text-[10px]" style={{ color: "#a78bfa" }}>• {item}</li>
+                          ))}
+                        </ul>
+                        {msg.suggestedApprovalDestination && (
+                          <a href={msg.suggestedApprovalDestination} className="inline-flex items-center gap-1 mt-2 text-[10px] font-medium" style={{ color: "#f59e0b" }}>
+                            <Sparkles size={9} /> Review in {msg.suggestedApprovalDestination.replace("/", "")} →
+                          </a>
+                        )}
+                      </div>
+                    )}
                     {msg.dataSources && msg.dataSources.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {msg.dataSources.map((src) => (

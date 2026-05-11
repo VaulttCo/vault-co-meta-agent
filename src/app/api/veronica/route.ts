@@ -14,6 +14,7 @@ import {
   runSelectedAgents,
   assembleApprovalGating,
   aggregateDataConfidence,
+  clientMatchesMessage,
   mockVeronicaResponse,
   type VeronicaConsoleResponse,
   type VeronicaPortalContext,
@@ -73,20 +74,10 @@ export async function POST(req: NextRequest) {
       db.getReports(),
     ]);
 
-    // If no explicit clientId, detect a mentioned client from the message text
-    // so the client brain is built with full intelligence context
+    // If no explicit clientId, detect a mentioned client from the message text (fuzzy)
     let effectiveClientId = clientId;
     if (!effectiveClientId) {
-      const m = message.toLowerCase();
-      const detected = clients.find((c) => {
-        if (m.includes(c.name.toLowerCase())) return true;
-        if (m.includes(c.id.toLowerCase())) return true;
-        const ownerParts = c.owner.toLowerCase().split(" ");
-        if (ownerParts.some((w: string) => w.length >= 4 && m.includes(w))) return true;
-        const genericWords = new Set(["group", "roofing", "construction", "builders", "remodeling", "forge", "home"]);
-        const nameParts = c.name.toLowerCase().split(/[\s-]+/);
-        return nameParts.some((w: string) => w.length >= 4 && !genericWords.has(w) && m.includes(w));
-      });
+      const detected = clients.find((c) => clientMatchesMessage(c, message));
       if (detected) effectiveClientId = detected.id;
     }
 

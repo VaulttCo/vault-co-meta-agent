@@ -48,7 +48,7 @@ import {
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { getClient, clientStatusVariant, campaignStatusVariant } from "@/lib/data";
-import type { Client } from "@/lib/data";
+import type { Client, ClientStatus } from "@/lib/data";
 import { getDataProvider } from "@/lib/data/data-provider";
 import { useIntelligence } from "@/components/IntelligenceProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -1060,10 +1060,109 @@ function IntelligenceTab({ clientId }: { clientId: string }) {
   );
 }
 
+// ─── Client Status Control ────────────────────────────────────
+
+const ALL_STATUSES: ClientStatus[] = ["onboarding", "setup", "active", "paused", "archived"];
+
+const STATUS_LABELS: Record<ClientStatus, string> = {
+  onboarding: "Onboarding",
+  setup: "Setup",
+  active: "Active",
+  paused: "Paused",
+  archived: "Archived",
+};
+
+function ClientStatusControl({
+  clientId,
+  initialStatus,
+  canEdit,
+}: {
+  clientId: string;
+  initialStatus: ClientStatus;
+  canEdit: boolean;
+}) {
+  const [status, setStatus] = useState<ClientStatus>(initialStatus);
+  const [saving, setSaving] = useState(false);
+  const [flash, setFlash] = useState<"success" | "error" | null>(null);
+
+  async function handleChange(next: ClientStatus) {
+    if (next === status) return;
+    setSaving(true);
+    setFlash(null);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setStatus(next);
+      setFlash("success");
+    } catch {
+      setFlash("error");
+    } finally {
+      setSaving(false);
+      setTimeout(() => setFlash(null), 2500);
+    }
+  }
+
+  if (!canEdit) {
+    return <Badge label={status} variant={clientStatusVariant[status]} />;
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="relative">
+        <select
+          value={status}
+          onChange={(e) => handleChange(e.target.value as ClientStatus)}
+          disabled={saving}
+          className="appearance-none pl-2.5 pr-6 py-0.5 text-[11px] font-semibold rounded-full border cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none transition-colors"
+          style={{
+            background:
+              status === "active" ? "rgba(34,197,94,0.12)"
+              : status === "paused" ? "rgba(234,179,8,0.12)"
+              : status === "archived" ? "rgba(107,122,153,0.12)"
+              : status === "setup" ? "rgba(0,129,242,0.12)"
+              : "rgba(255,132,0,0.12)",
+            color:
+              status === "active" ? "#4ade80"
+              : status === "paused" ? "#facc15"
+              : status === "archived" ? "#7b82a0"
+              : status === "setup" ? "#60b4ff"
+              : "#ff8400",
+            borderColor:
+              status === "active" ? "rgba(74,222,128,0.3)"
+              : status === "paused" ? "rgba(250,204,21,0.3)"
+              : status === "archived" ? "rgba(107,122,153,0.25)"
+              : status === "setup" ? "rgba(96,180,255,0.3)"
+              : "rgba(255,132,0,0.3)",
+          }}
+        >
+          {ALL_STATUSES.map((s) => (
+            <option key={s} value={s} style={{ background: "#13151c", color: "#e8eaf0" }}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={10}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{ color: "inherit", opacity: 0.7 }}
+        />
+      </div>
+      {saving && <Loader2 size={11} className="animate-spin text-[#6b7a99]" />}
+      {flash === "success" && <CheckCircle2 size={11} className="text-[#4ade80]" />}
+      {flash === "error" && <AlertCircle size={11} className="text-[#f87171]" />}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────
 
 export default function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: clientId } = use(params);
+  const { can } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   // Start with mock data (fast); fall back to data provider for Supabase-added clients
   const [client, setClient] = useState<Client | null>(getClient(clientId) ?? null);
@@ -1113,7 +1212,11 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
           <div>
             <div className="flex items-center gap-3">
               <h2 className="text-[18px] font-bold text-[#f8f8f7] tracking-tight">{client.name}</h2>
-              <Badge label={client.status} variant={clientStatusVariant[client.status]} />
+              <ClientStatusControl
+                clientId={clientId}
+                initialStatus={client.status}
+                canEdit={can("canEditClients")}
+              />
             </div>
             <div className="flex items-center gap-4 mt-1 text-[12px] text-[#6b7a99]">
               <span className="flex items-center gap-1">

@@ -211,14 +211,17 @@ function checkLaunchReadiness(
   hasDataConflicts: boolean
 ): LaunchReadinessCheck {
   const clientConns = integrationConnections.filter((ic) => ic.clientId === client.id);
-  const ghlSynced = clientConns.some((ic) => ic.provider === "ghl" && ic.lastSyncedAt);
+  // integration_connections is authoritative for live connection status
+  const ghlConnectedLive = clientConns.some((ic) => ic.provider === "ghl" && ic.status === "connected");
+  const ghlSynced = clientConns.some((ic) => ic.provider === "ghl" && !!ic.lastSyncedAt);
+  const ghlConnectedFinal = ghlConnectedLive || (!!client.ghlLocationId && !isValuePending(client.ghlLocationId));
 
   // Blocking checks — must all pass to launch
   const blocking: Array<{ label: string; pass: boolean }> = [
     { label: "Meta Ad Account connected", pass: !!client.metaAccountId && !isValuePending(client.metaAccountId) },
     { label: "Meta Pixel installed", pass: !!client.pixelId && !isValuePending(client.pixelId) },
     { label: "Facebook Page connected", pass: !!client.fbPageId && !isValuePending(client.fbPageId) },
-    { label: "GHL Location connected", pass: !!client.ghlLocationId && !isValuePending(client.ghlLocationId) },
+    { label: "GHL Location connected", pass: ghlConnectedFinal },
     { label: "GHL sync confirmed", pass: ghlSynced },
     { label: "Approved creative asset", pass: approvedAssets.length > 0 },
     {
@@ -496,78 +499,61 @@ function runDiagnosticsForClient(
     });
   }
 
-  // Rule 11 — Disconnected integrations (non-active clients only — active clients with missing data flag separately)
-  // Also detects integration status mismatch: integration_connections shows recent sync but client profile fields are still missing.
-  const missingIntegrations: string[] = [];
-  if (!client.metaAccountId || isValuePending(client.metaAccountId)) missingIntegrations.push("Meta Ad Account");
-  if (!client.pixelId || isValuePending(client.pixelId)) missingIntegrations.push("Meta Pixel");
-  if (!client.fbPageId || isValuePending(client.fbPageId)) missingIntegrations.push("Facebook Page");
-  if (!client.ghlLocationId || isValuePending(client.ghlLocationId)) missingIntegrations.push("GHL Location");
+  // Rule 11 — Integration status (non-active clients only)
+  // Source of truth hierarchy:
+  //   1. integration_connections.status === "connected" (live, authoritative)
+  //   2. Client profile ID fields (secondary/backfill only)
+  // When live integration says connected but profile field is missing → info note (not a blocker).
+  const missingProfileFields: string[] = [];
+  if (!client.metaAccountId || isValuePending(client.metaAccountId)) missingProfileFields.push("Meta Ad Account");
+  if (!client.pixelId || isValuePending(client.pixelId)) missingProfileFields.push("Meta Pixel");
+  if (!client.fbPageId || isValuePending(client.fbPageId)) missingProfileFields.push("Facebook Page");
+  if (!client.ghlLocationId || isValuePending(client.ghlLocationId)) missingProfileFields.push("GHL Location");
 
-  if (missingIntegrations.length > 0 && client.status !== "active") {
-    // Check whether integration_connections shows a recent sync for this client despite missing profile fields
-    const clientConns = (integrationConnections ?? []).filter(
-      (ic) => ic.clientId === client.id && ic.lastSyncedAt
-    );
-    const hasMetaSync = clientConns.some((ic) => ic.provider === "meta");
-    const hasGhlSync = clientConns.some((ic) => ic.provider === "ghl");
-    const missingMetaFields = missingIntegrations.filter(
-      (m) => m.includes("Meta") || m.includes("Pixel") || m.includes("Facebook")
-    );
-    const missingGhlFields = missingIntegrations.filter((m) => m.includes("GHL"));
-    // Mismatch: integration_connections has recent sync but client profile still shows missing IDs
-    const mismatchedFields = [
-      ...(hasMetaSync ? missingMetaFields : []),
-      ...(hasGhlSync ? missingGhlFields : []),
-    ];
-    const genuinelyMissing = missingIntegrations.filter(
-      (m) => !mismatchedFields.includes(m)
-    );
-    const isMismatch = mismatchedFields.length > 0;
+  if (missingProfileFields.length > 0 && client.status !== "active") {
+    const rule11Conns = (integrationConnections ?? []).filter((ic) => ic.clientId === client.id);
+    const ghlLiveConn = rule11Conns.some((ic) => ic.provider === "ghl" && ic.status === "connected");
+    const metaLiveConn = rule11Conns.some((ic) => ic.provider === "meta" && ic.status === "connected");
 
-    if (isMismatch) {
+    // Classify each field: live-connected (backfill needed) vs. genuinely missing
+    const backfillNeeded: string[] = [];
+    const genuinelyMissing: string[] = [];
+    for (const field of missingProfileFields) {
+      const isGhl = field.includes("GHL");
+      const isMeta = field.includes("Meta") || field.includes("Facebook") || field.includes("Pixel");
+      if (isGhl && ghlLiveConn) backfillNeeded.push(field);
+      else if (isMeta && metaLiveConn) backfillNeeded.push(field);
+      else genuinelyMissing.push(field);
+    }
+
+    // State D: Live connection active but profile field missing → cleanup info note (never a blocker)
+    if (backfillNeeded.length > 0) {
       findings.push({
         clientId: client.id,
         clientName: client.name,
-        signal: `Integration status mismatch: ${mismatchedFields.join(", ")} — sync activity detected in integration_connections but client profile IDs are incomplete${
-          genuinelyMissing.length > 0 ? `; also genuinely missing (no sync): ${genuinelyMissing.join(", ")}` : ""
-        }`,
-        severity: "critical",
+        signal: `${backfillNeeded.join(", ")} — live integration is connected. Client profile ID should be backfilled.`,
+        severity: "info",
         likelyCause:
-          "The integration_connections table shows recent Meta/GHL sync activity for this client, but the client profile still has missing or pending IDs. This is a partial setup verification issue — credentials may have been entered but the account IDs were not saved correctly, or the sync completed before the profile fields were fully populated.",
-        recommendation: `Verify and reconcile the following fields in the client profile: ${mismatchedFields.join(", ")}. Confirm the exact Meta Ad Account ID, Pixel ID, and GHL Location ID are saved correctly in Settings → Integrations. Do not assume the integration is fully operational until all profile fields are confirmed.`,
-        blocked:
-          "Cannot confirm campaign readiness until all profile IDs are verified. Do not launch ads based on sync activity alone.",
-        relatedAction: { label: "Settings & Integrations", href: "/settings" },
+          "The live integration connection is active and confirmed via integration_connections. The client profile ID field has not been backfilled yet — this is a cleanup item, not a connection issue.",
+        recommendation: `Open the client profile → Integrations tab to verify and save the ID(s) for: ${backfillNeeded.join(", ")}. The integration itself is operational.`,
+        blocked: "",
+        relatedAction: { label: "Client Profile", href: `/clients/${client.id}` },
       });
-      // If there are also genuinely missing integrations (no sync at all), add a separate finding
-      if (genuinelyMissing.length > 0) {
-        findings.push({
-          clientId: client.id,
-          clientName: client.name,
-          signal: `Missing integrations (no sync activity): ${genuinelyMissing.join(", ")}`,
-          severity: genuinelyMissing.length >= 2 ? "critical" : "warning",
-          likelyCause:
-            "These integrations have no connection or sync activity recorded. Credentials have not been entered in Settings → Integrations, or the client has not yet granted account access.",
-          recommendation: `Complete integration setup for: ${genuinelyMissing.join(", ")}. Go to Settings → Integrations.`,
-          blocked:
-            "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without GHL Location ID.",
-          relatedAction: { label: "Settings & Integrations", href: "/settings" },
-        });
-      }
-    } else {
-      // No mismatch — genuinely missing integrations with no sync activity
+    }
+
+    // State C: No live connection and no profile field → genuinely not connected
+    if (genuinelyMissing.length > 0) {
       findings.push({
         clientId: client.id,
         clientName: client.name,
-        signal: `Missing integrations: ${missingIntegrations.join(", ")}`,
-        severity: missingIntegrations.length >= 3 ? "critical" : "warning",
+        signal: `Missing integrations: ${genuinelyMissing.join(", ")}`,
+        severity: genuinelyMissing.length >= 3 ? "critical" : "warning",
         likelyCause:
-          "Client onboarding has not been completed. Credentials have not been entered in Settings → Integrations, or client has not yet granted account access.",
-        recommendation: `Complete integration setup for: ${missingIntegrations.join(", ")}. Go to Settings → Integrations.`,
+          "Client onboarding has not been completed. Credentials have not been entered or the client has not yet granted account access.",
+        recommendation: `Complete integration setup for: ${genuinelyMissing.join(", ")}. Open the client profile → Integrations tab.`,
         blocked:
-          "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without GHL Location ID.",
-        relatedAction: { label: "Settings & Integrations", href: "/settings" },
+          "Cannot run Meta ads without Meta Ad Account, Pixel, and Page. Cannot run GHL workflows without a connected GHL Location.",
+        relatedAction: { label: "Client Profile", href: `/clients/${client.id}` },
       });
     }
   }
@@ -667,10 +653,10 @@ function detectAdditionalDataConflicts(
       likelyCause:
         "The report was generated from a different period or the Meta sync reset the stats counter. Live stats and report data are out of sync.",
       recommendation:
-        "Trigger a fresh Meta sync from Settings → Integrations and compare the current period to the report period before drawing conclusions.",
+        "Trigger a fresh Meta sync from the client profile → Integrations tab and compare the current period to the report period before drawing conclusions.",
       blocked:
         "Do not assume lead volume is zero. Verify the sync window matches the reporting period.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      relatedAction: { label: "Client Profile", href: `/clients/${client.id}` },
     });
   }
 
@@ -688,10 +674,10 @@ function detectAdditionalDataConflicts(
       likelyCause:
         "GHL location connected but the pipeline has not been configured or the pipeline ID was not saved. Without this, contact stage tracking and booking data cannot flow.",
       recommendation:
-        "Verify the GHL Pipeline ID in Settings → Integrations. Confirm the correct pipeline is mapped for this client.",
+        "Verify the GHL Pipeline ID in the client profile → Integrations tab. Confirm the correct pipeline is mapped for this client.",
       blocked:
         "Do not assume GHL follow-up is fully operational without a confirmed pipeline ID.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      relatedAction: { label: "Client Profile", href: `/clients/${client.id}` },
     });
   }
 
@@ -828,9 +814,9 @@ function computeClientHealthScore(data: {
     criticals.length > 0
       ? criticals[0].recommendation
       : !integrations.metaConnected
-      ? "Connect Meta Ad Account in Settings → Integrations"
+      ? "Connect Meta Ad Account — open the client profile → Integrations tab"
       : !integrations.ghlConnected
-      ? "Connect GHL Location in Settings → Integrations"
+      ? "Connect GHL Location — open the client profile → Integrations tab"
       : approvedAssets.length === 0
       ? "Upload and approve creative assets in Creative Library"
       : !hasDraftReady
@@ -876,7 +862,7 @@ function classifyBottleneck(data: {
       proofData: `Missing: ${setupGaps.join(", ")}. Launch readiness: ${launchReadiness.score}/${launchReadiness.maxScore}.`,
       likelyMeaning:
         "Client onboarding is incomplete. Ads cannot run effectively — or at all — without these items in place.",
-      nextAction: `Complete setup for: ${setupGaps.slice(0, 2).join(" and ")}. Use Settings → Integrations for credentials, Creative Library for assets.`,
+      nextAction: `Complete setup for: ${setupGaps.slice(0, 2).join(" and ")}. Open the client profile → Integrations tab for credentials; Creative Library for assets.`,
       notToDo:
         "Do not generate campaign drafts for Meta submission until integrations are connected. Do not run ads without an approved creative.",
       dataConfidence: "high",
@@ -982,7 +968,7 @@ function classifyBottleneck(data: {
       likelyMeaning:
         "Visibility is limited. Missing or conflicting data makes accurate diagnosis and reliable optimization decisions impossible.",
       nextAction: hasDataConflictDiag
-        ? "Verify integration credentials in Settings → Integrations. Reconcile any mismatched IDs before assuming the data is correct."
+        ? "Verify integration credentials in the client profile → Integrations tab. Reconcile any mismatched IDs before assuming the data is correct."
         : "Generate a weekly report draft to establish a performance baseline for this client.",
       notToDo:
         "Do not make ad performance decisions based on conflicting or missing data.",
@@ -2743,7 +2729,7 @@ function _mockVeronicaBaseResponse(
       const recommendedAction = bn.type !== "none"
         ? bn.nextAction
         : lr.missing.length > 0
-        ? `Complete: ${lr.missing.slice(0, 3).join(", ")}. Use Settings → Integrations for credentials and Creative Library for assets.`
+        ? `Complete: ${lr.missing.slice(0, 3).join(", ")}. Open the client profile → Integrations tab for credentials; Creative Library for assets.`
         : "All requirements met. Generate a campaign draft and submit for approval.";
 
       const notToDo = bn.type !== "none" ? bn.notToDo : (criticals[0]?.blocked ?? warnings[0]?.blocked);

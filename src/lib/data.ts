@@ -1,6 +1,6 @@
 // Single source of truth for all Vault Co client data
 
-export type ClientStatus = "active" | "setup" | "onboarding" | "paused";
+export type ClientStatus = "active" | "setup" | "onboarding" | "paused" | "archived";
 export type CampaignStatus = "active" | "paused" | "draft";
 export type ApprovalPriority = "high" | "medium" | "low";
 export type ApprovalIconType = "campaign" | "copy" | "budget" | "creative" | "report" | "workflow";
@@ -397,6 +397,7 @@ export const clientStatusVariant: Record<ClientStatus, "success" | "warning" | "
   setup: "blue",
   onboarding: "orange",
   paused: "warning",
+  archived: "neutral",
 };
 
 export const campaignStatusVariant: Record<CampaignStatus, "success" | "warning" | "danger" | "neutral" | "blue" | "orange"> = {

@@ -9,11 +9,17 @@ import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import {
   buildVeronicaSystemPrompt,
+  buildSynthesisPrompt,
+  routeToAgents,
+  runSelectedAgents,
+  assembleApprovalGating,
+  aggregateDataConfidence,
   mockVeronicaResponse,
   type VeronicaConsoleResponse,
   type VeronicaPortalContext,
   type IntegrationConnection,
 } from "@/lib/ai/veronica";
+import { AGENT_DISPLAY_NAMES } from "@/lib/ai/veronica-agents";
 
 export async function POST(req: NextRequest) {
   // ── 1. Server-side auth + role resolution ────────────────────────────────
@@ -135,13 +141,25 @@ export async function POST(req: NextRequest) {
         integrationConnections.length > 0 ? integrationConnections : undefined,
     };
 
+    // ── Agent routing phase (always runs, both live and mock) ────────────────
+    const routing = routeToAgents(message, clients);
+    const bundles = runSelectedAgents(routing, ctx);
+    const gating = assembleApprovalGating(bundles);
+    const dataConfidence = aggregateDataConfidence(bundles);
+    const agentsUsed = bundles.map((b) => b.agentId);
+
     // Try Anthropic when configured
-    const provider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
+    const aiProvider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
 
-    if (provider === "anthropic" && apiKey) {
+    if (aiProvider === "anthropic" && apiKey) {
       try {
-        const systemPrompt = buildVeronicaSystemPrompt(ctx);
+        // Use compact synthesis prompt (agent outputs as context) instead of full portal dump
+        const synthesisPrompt = buildSynthesisPrompt(message, routing, bundles, ctx);
+
+        // Build a legacy system prompt as fallback context only
+        const legacySystemPrompt = buildVeronicaSystemPrompt(ctx);
+        void legacySystemPrompt; // kept for reference; synthesis replaces it
 
         const response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -153,7 +171,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             model: "claude-sonnet-4-6",
             max_tokens: 2048,
-            system: systemPrompt,
+            system: synthesisPrompt,
             messages: [
               {
                 role: "user",
@@ -188,6 +206,14 @@ export async function POST(req: NextRequest) {
           actionSuggested: parsed.actionSuggested ?? undefined,
           mockMode: false,
           provider: "anthropic",
+          // Merge deterministic agent gating fields
+          agentsUsed,
+          approvalRequired: gating.approvalRequired,
+          suggestedApprovalDestination: gating.suggestedApprovalDestination,
+          whatVeronicaCanDoNow: gating.whatVeronicaCanDoNow,
+          whatRequiresHumanApproval: gating.whatRequiresHumanApproval,
+          whatIsBlocked: gating.whatIsBlocked,
+          dataConfidence,
         };
 
         return NextResponse.json(result);
@@ -197,8 +223,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mock fallback (data-aware)
+    // Mock fallback (data-aware + agent-enriched)
     const mockResult = mockVeronicaResponse(message, ctx);
+    // Agent data already merged by mockVeronicaResponse wrapper — return as-is
+    void AGENT_DISPLAY_NAMES; // imported for route-level use if needed
     return NextResponse.json(mockResult);
   } catch (err) {
     console.error("[POST /api/veronica]", err);

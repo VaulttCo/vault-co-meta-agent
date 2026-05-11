@@ -1295,6 +1295,19 @@ export function routeToAgents(
     msg.includes("followup") || msg.includes("pipeline") || msg.includes("workflow")
   ) agents.push("ghl_followup");
 
+  // Integration status queries — "Is X connected?", "GHL status", "integration status"
+  if (
+    msg.includes("connected") || msg.includes("not connected") ||
+    msg.includes("integration status") || msg.includes("integration") ||
+    msg.includes("ghl status") || msg.includes("meta status")
+  ) {
+    if (!agents.includes("launch_readiness")) agents.push("launch_readiness");
+    if (!agents.includes("client_health")) agents.push("client_health");
+    if (msg.includes("integration status") || msg.includes("integration")) {
+      if (!agents.includes("data_quality")) agents.push("data_quality");
+    }
+  }
+
   if (
     msg.includes("booking") || msg.includes("convert") || msg.includes("close") ||
     msg.includes("leads") || msg.includes("contact") || msg.includes("appointment") ||

@@ -315,8 +315,13 @@ export function runClientHealthAgent(brain: ClientBrain): ClientHealthOutput {
 // 2. Launch Readiness Agent
 export function runLaunchReadinessAgent(brain: ClientBrain): LaunchReadinessOutput {
   const { launchReadiness: lr, integrations: i } = brain;
+  // Exclude "Campaign draft approved or ready" from the external-blocker list —
+  // Veronica can prepare the draft now; it is a launch requirement, not a drafting blocker.
+  const externalBlockers = lr.blockingItems.filter(
+    (item) => item !== "Campaign draft approved or ready"
+  );
   const whatNotToDoYet = lr.blockingItems.length > 0
-    ? `Veronica can prepare an approval-ready campaign draft now — drafting and internal review do not require these blockers to be cleared. The draft cannot be launched, activated, or sent to Meta until resolved: ${lr.blockingItems.join(", ")}.`
+    ? `Veronica can prepare an approval-ready campaign draft now. Launch, activation, and Meta submission remain blocked until external setup and human approval are complete${externalBlockers.length > 0 ? `: ${externalBlockers.join(", ")}` : ""}.`
     : lr.missing.length > 0
     ? `Drafting and strategy work can proceed. Do not assume full launch readiness — ${lr.missing.length} non-blocking item(s) still outstanding.`
     : "Ready for launch consideration. Do not increase ad spend before confirming baseline reporting is in place.";

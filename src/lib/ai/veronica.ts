@@ -1244,14 +1244,17 @@ export function routeToAgents(
 
   if (
     msg.includes("priority") || msg.includes("this week") || msg.includes("next week") ||
-    msg.includes("today") || msg.includes("what should i") || msg.includes("focus") ||
+    msg.includes("what should i") || msg.includes("focus") ||
     msg.includes("operator") || msg.includes("overview") || msg.includes("portfolio") ||
-    (!detectedClientId && (msg.includes("all clients") || msg.includes("which client")))
+    (!detectedClientId && (
+      msg.includes("today") || msg.includes("all clients") || msg.includes("which client")
+    ))
   ) agents.push("operator_priority");
 
   if (
     msg.includes("data quality") || msg.includes("data conflict") || msg.includes("missing data") ||
-    msg.includes("mismatch") || msg.includes("unreliable")
+    msg.includes("mismatch") || msg.includes("unreliable") ||
+    msg.includes("trust") || msg.includes("reliable") || msg.includes("accurate")
   ) agents.push("data_quality");
 
   if (
@@ -1262,12 +1265,13 @@ export function routeToAgents(
   if (
     msg.includes("launch") || msg.includes("ready") || msg.includes("setup") ||
     msg.includes("missing") || msg.includes("complete") || msg.includes("onboarding") ||
-    msg.includes("not ready")
+    msg.includes("not ready") || msg.includes("draft") || msg.includes("campaign") ||
+    msg.includes("generate")
   ) agents.push("launch_readiness");
 
   if (
     msg.includes("intelligence") || msg.includes("buyer") || msg.includes("objection") ||
-    msg.includes("positioning") || msg.includes("intake")
+    msg.includes("positioning") || msg.includes("intake") || msg.includes(" ads")
   ) agents.push("client_intelligence");
 
   if (
@@ -1308,7 +1312,9 @@ export function routeToAgents(
   if (
     msg.includes("hook") || msg.includes("copy") || msg.includes("messaging") ||
     msg.includes("offer") || msg.includes("angle") || msg.includes("headline") ||
-    msg.includes("ad copy")
+    msg.includes("ad copy") || msg.includes("draft") || msg.includes("campaign") ||
+    msg.includes(" ads") || msg.includes("say in") || msg.includes("tell them") ||
+    msg.includes("what to write") || msg.includes("what to say")
   ) agents.push("offer_messaging");
 
   if (msg.includes("report") || msg.includes("reporting") || msg.includes("weekly")) {
@@ -1347,11 +1353,13 @@ export function routeToAgents(
 
   if (
     msg.includes("client message") || msg.includes("client communication") ||
-    msg.includes("what to say") || msg.includes("client update") || msg.includes("draft message")
+    msg.includes("what to say") || msg.includes("client update") || msg.includes("draft message") ||
+    msg.includes("tell") || msg.includes("say to") || msg.includes("communicate") ||
+    msg.includes("message to client") || msg.includes("client message")
   ) agents.push("client_communication");
 
   if (
-    msg.includes("build workflow") || msg.includes("ghl workflow") ||
+    (msg.includes("build") && msg.includes("workflow")) || msg.includes("ghl workflow") ||
     msg.includes("automation") || msg.includes("trigger") || msg.includes("speed-to-lead")
   ) agents.push("ghl_workflow_builder");
 

@@ -1,6 +1,6 @@
-// Server-side only — client profile update route.
-// Updates basic contact/profile fields only.
-// Never modifies Meta/GHL IDs, campaign data, or creative assets.
+// Server-side only — client profile read/update route.
+// GET returns the current client row from Supabase (for refresh after edit).
+// PATCH updates safe profile fields only — never touches Meta/GHL APIs, campaigns, or assets.
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
@@ -8,6 +8,66 @@ import { can } from "@/lib/auth/permissions";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+// ── GET — load current client row ─────────────────────────────────────────────
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id: clientId } = await params;
+  if (!clientId) return NextResponse.json({ error: "Client ID required" }, { status: 400 });
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = getSupabaseServerClient() as any;
+    if (!supabase) return NextResponse.json({ client: null });
+
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("id", clientId)
+      .single();
+
+    if (error || !data) return NextResponse.json({ client: null });
+
+    // Map ClientRow → Client (mirrors SupabaseDataProvider.rowToClient)
+    const client = {
+      id: data.id,
+      name: data.company_name,
+      owner: data.owner_name,
+      email: data.email ?? "",
+      phone: data.phone ?? "",
+      website: data.website ?? "",
+      market: (data.service_areas ?? [])[0] ?? "",
+      services: data.services_offered ?? [],
+      avgJobValue: data.average_job_value ?? "",
+      monthlyBudget: data.monthly_ad_budget ?? "",
+      offer: data.offer ?? "",
+      brandTone: data.brand_tone ?? "",
+      status: data.status,
+      notes: data.notes ?? "",
+      metaAccountId: data.meta_ad_account_id ?? "",
+      pixelId: data.meta_pixel_id ?? "",
+      fbPageId: data.facebook_page_id ?? "",
+      instagramId: data.instagram_account_id ?? "",
+      ghlLocationId: data.ghl_location_id ?? "",
+      ghlPipelineId: data.ghl_pipeline_id ?? "",
+      stats: { leads: 0, booked: 0, cpl: "$0", cpba: "$0", showRate: "0%", pipeline: "$0", revenue: "$0", spend: "$0" },
+      campaigns: [],
+    };
+
+    return NextResponse.json({ client });
+  } catch (err) {
+    console.error("[GET /api/clients/[id]]", err);
+    return NextResponse.json({ client: null });
+  }
+}
+
+// ── PATCH — update safe profile fields ───────────────────────────────────────
 
 interface EditClientBody {
   name?: string;
@@ -17,6 +77,11 @@ interface EditClientBody {
   website?: string;
   market?: string;
   notes?: string;
+  // Integration ID backfill — reference fields only; no Meta/GHL API writes
+  ghlPipelineId?: string;
+  metaAccountId?: string;
+  pixelId?: string;
+  fbPageId?: string;
 }
 
 export async function PATCH(
@@ -71,6 +136,11 @@ export async function PATCH(
     dbUpdates.service_areas = body.market.trim() ? [body.market.trim()] : [];
   }
   if (body.notes !== undefined) dbUpdates.notes = body.notes.trim() || null;
+  // Integration ID backfill fields — stored in clients table, not sent to any external API
+  if (body.ghlPipelineId !== undefined) dbUpdates.ghl_pipeline_id = body.ghlPipelineId.trim() || null;
+  if (body.metaAccountId !== undefined) dbUpdates.meta_ad_account_id = body.metaAccountId.trim() || null;
+  if (body.pixelId !== undefined) dbUpdates.meta_pixel_id = body.pixelId.trim() || null;
+  if (body.fbPageId !== undefined) dbUpdates.facebook_page_id = body.fbPageId.trim() || null;
 
   if (Object.keys(dbUpdates).length === 0) {
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

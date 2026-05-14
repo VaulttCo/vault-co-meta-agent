@@ -49,7 +49,6 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { getClient, clientStatusVariant, campaignStatusVariant } from "@/lib/data";
 import type { Client, ClientStatus } from "@/lib/data";
-import { getDataProvider } from "@/lib/data/data-provider";
 import { useIntelligence } from "@/components/IntelligenceProvider";
 import { useAuth } from "@/components/AuthProvider";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
@@ -1070,6 +1069,11 @@ interface EditFormState {
   website: string;
   market: string;
   notes: string;
+  // Integration ID backfill — stored in clients table only, no API writes
+  ghlPipelineId: string;
+  metaAccountId: string;
+  pixelId: string;
+  fbPageId: string;
 }
 
 function EditClientModal({
@@ -1091,6 +1095,10 @@ function EditClientModal({
     website: client.website,
     market: client.market,
     notes: client.notes,
+    ghlPipelineId: client.ghlPipelineId ?? "",
+    metaAccountId: client.metaAccountId ?? "",
+    pixelId: client.pixelId ?? "",
+    fbPageId: client.fbPageId ?? "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1134,6 +1142,10 @@ function EditClientModal({
         website: form.website,
         market: form.market,
         notes: form.notes,
+        ghlPipelineId: form.ghlPipelineId,
+        metaAccountId: form.metaAccountId,
+        pixelId: form.pixelId,
+        fbPageId: form.fbPageId,
       });
       setTimeout(() => onClose(), 800);
     } catch {
@@ -1243,6 +1255,50 @@ function EditClientModal({
               onChange={(e) => field("notes", e.target.value)}
               placeholder="Internal notes about this client…"
             />
+          </div>
+          {/* Integration ID backfill — reference fields only, no API writes */}
+          <div className="border-t border-[rgba(0,129,242,0.08)] pt-4">
+            <p className="text-[10px] font-semibold text-[#6b7a99] uppercase tracking-wider mb-3">Platform ID Backfill</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Meta Ad Account ID</label>
+                <input
+                  className={inputCls}
+                  value={form.metaAccountId}
+                  onChange={(e) => field("metaAccountId", e.target.value)}
+                  placeholder="act_123456789"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Meta Pixel ID</label>
+                <input
+                  className={inputCls}
+                  value={form.pixelId}
+                  onChange={(e) => field("pixelId", e.target.value)}
+                  placeholder="123456789012345"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className={labelCls}>Facebook Page ID</label>
+                <input
+                  className={inputCls}
+                  value={form.fbPageId}
+                  onChange={(e) => field("fbPageId", e.target.value)}
+                  placeholder="YourPageName"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>GHL Pipeline ID</label>
+                <input
+                  className={inputCls}
+                  value={form.ghlPipelineId}
+                  onChange={(e) => field("ghlPipelineId", e.target.value)}
+                  placeholder="pipeline-id"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1395,11 +1451,13 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
   const [clientLoading, setClientLoading] = useState(!getClient(clientId));
 
   useEffect(() => {
-    if (client) return; // already found in mock data
-    getDataProvider()
-      .getClient(clientId)
-      .then((c) => { setClient(c); setClientLoading(false); })
-      .catch(() => setClientLoading(false));
+    // Always fetch from server — gets current Supabase data even for mock-seeded clients.
+    // This ensures edits persist visually after refresh.
+    fetch(`/api/clients/${clientId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.client) setClient(data.client); })
+      .catch(() => {}) // keep existing mock data on error
+      .finally(() => setClientLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 

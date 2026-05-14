@@ -357,7 +357,7 @@ function runDiagnosticsForClient(
       recommendation:
         "Audit when the first SMS fires after lead submission (should be under 60 seconds). Verify setter calls within 5 minutes. Check if AI voice trigger is active at the 10-minute window.",
       blocked: "Do not change ad targeting or pause the campaign — CPL is on target.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      relatedAction: { label: "Client Profile → Integrations", href: `/clients/${client.id}` },
     });
   }
 
@@ -373,7 +373,7 @@ function runDiagnosticsForClient(
       recommendation:
         "Verify the GHL location ID is correct and the pipeline is configured. Check if the immediate SMS and setter task are triggering. Confirm leads are appearing in the GHL pipeline.",
       blocked: "Do not stop ad campaigns until the follow-up breakdown is identified.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      relatedAction: { label: "Client Profile → Integrations", href: `/clients/${client.id}` },
     });
   }
 
@@ -421,7 +421,7 @@ function runDiagnosticsForClient(
       recommendation:
         "Verify the GHL location is active and the pipeline is configured. Check if the immediate SMS and setter task trigger are firing when leads come in.",
       blocked: "Do not modify GHL workflows directly — flag for the operations team.",
-      relatedAction: { label: "Settings & Integrations", href: "/settings" },
+      relatedAction: { label: "Client Profile → Integrations", href: `/clients/${client.id}` },
     });
   }
 
@@ -669,14 +669,14 @@ function detectAdditionalDataConflicts(
       clientId: client.id,
       clientName: client.name,
       signal:
-        "This is a data mismatch, not a performance issue. GHL sync is active but GHL Pipeline ID is missing or pending in the client profile.",
+        "GHL is connected and synced. The missing GHL Pipeline ID is a configuration cleanup item that limits workflow routing/pipeline auditing until backfilled.",
       severity: "warning",
       likelyCause:
-        "GHL location connected but the pipeline has not been configured or the pipeline ID was not saved. Without this, contact stage tracking and booking data cannot flow.",
+        "GHL location is connected but the pipeline ID was not saved to the client profile after setup. This does not affect the GHL connection — it limits pipeline stage tracking and workflow routing audit until the ID is backfilled.",
       recommendation:
-        "Verify the GHL Pipeline ID in the client profile → Integrations tab. Confirm the correct pipeline is mapped for this client.",
+        "Find the pipeline ID in GHL and save it to the client profile → Integrations tab. Confirm the correct pipeline is mapped for this client.",
       blocked:
-        "Do not assume GHL follow-up is fully operational without a confirmed pipeline ID.",
+        "Do not flag GHL as disconnected or non-operational. The missing pipeline ID is a configuration cleanup item — not a connection failure.",
       relatedAction: { label: "Client Profile", href: `/clients/${client.id}` },
     });
   }
@@ -1612,9 +1612,11 @@ Respond ONLY with a valid JSON object. No text before or after. No markdown code
 }
 Rules:
 - dataSources: only sources actually used — clients, reports, campaign_drafts, approvals, client_intelligence, creative_assets, integration_connections
-- relatedLinks: max 3, directly relevant. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent, /settings
+- relatedLinks: max 3, directly relevant. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent. Never use /settings for integration navigation — use /clients/[id] instead.
 - actionSuggested: omit if no clear next operator action
-- reply: synthesize agent findings; do not dump raw JSON`;
+- reply: synthesize agent findings; do not dump raw JSON
+- CRITICAL: Always use the exact client owner name from agent outputs (e.g. "Stanley Kaczmar", not a misspelling). Never paraphrase or alter proper names.
+- CRITICAL: For integration navigation, always say "Open the client profile → Integrations tab" — never "Settings → Integrations" or "Review in settings".`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2281,7 +2283,7 @@ function _mockVeronicaBaseResponse(
       reply,
       dataSources: ["clients", "integration_connections", "reports"],
       relatedLinks: [
-        { label: "Settings & Integrations", href: "/settings" },
+        { label: "Client Profiles → Integrations", href: "/clients" },
         { label: "Analytics Dashboard", href: "/analytics" },
       ],
       mockMode: true,
@@ -2384,7 +2386,7 @@ function _mockVeronicaBaseResponse(
       ),
       dataSources: ["clients", "integration_connections"],
       relatedLinks: [
-        { label: "Settings & Integrations", href: "/settings" },
+        { label: "Client Profiles → Integrations", href: "/clients" },
         { label: "Analytics Dashboard", href: "/analytics" },
       ],
       mockMode: true,
@@ -2419,7 +2421,7 @@ function _mockVeronicaBaseResponse(
     }
 
     const relatedLinks: VeronicaRelatedLink[] = [
-      { label: "Settings & Integrations", href: "/settings" },
+      { label: "Client Profiles → Integrations", href: "/clients" },
       { label: "Creative Library", href: "/creatives" },
     ];
     if (notReady.some((b) => b.launchReadiness.missing.includes("Campaign draft approved or ready"))) {
@@ -2820,7 +2822,7 @@ function _mockVeronicaBaseResponse(
         dataSources: ["clients", "campaign_drafts", "creative_assets", "client_intelligence"],
         relatedLinks: [
           { label: `View ${c.name}`, href: `/clients/${c.id}` },
-          { label: "Settings & Integrations", href: "/settings" },
+          { label: "Client Profile → Integrations", href: `/clients/${c.id}` },
         ],
         actionSuggested:
           lr.missing.includes("Campaign draft approved or ready")

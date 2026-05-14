@@ -21,6 +21,46 @@ import {
   type IntegrationConnection,
 } from "@/lib/ai/veronica";
 import { AGENT_DISPLAY_NAMES } from "@/lib/ai/veronica-agents";
+import type { ClientIntelligence } from "@/lib/clientIntelligence";
+
+// Read client intelligence using the service role key so RLS is not a barrier.
+// The browser client (used by SupabaseDataProvider) is unauthenticated on the server
+// because auth sessions are cookie-based via @supabase/ssr, not localStorage.
+async function readIntelligenceServiceRole(clientId: string): Promise<ClientIntelligence | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = getSupabaseServerClient() as any;
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from("client_intelligence")
+      .select("*")
+      .eq("client_id", clientId)
+      .single();
+
+    if (error || !data) return null;
+
+    return {
+      clientId,
+      extractedAt: data.updated_at,
+      onboardingSummary: data.onboarding_summary ?? "",
+      companyProfile: data.company_profile,
+      serviceArea: data.service_area,
+      targetMarket: data.target_market,
+      buyerProfile: data.buyer_profile,
+      marketResearch: data.market_research,
+      offerIntelligence: data.offer_intelligence,
+      salesIntelligence: data.sales_intelligence,
+      brandIntelligence: data.brand_intelligence,
+      kpiBaseline: data.kpi_baseline,
+      salesAudit: data.sales_audit,
+      contentPlanning: data.content_planning,
+      campaignImplications: data.campaign_implications,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   // ── 1. Server-side auth + role resolution ────────────────────────────────
@@ -87,7 +127,7 @@ export async function POST(req: NextRequest) {
     let creativeAssets: any[] = [];
     if (effectiveClientId) {
       [clientIntelligence, creativeAssets] = await Promise.all([
-        db.getClientIntelligence(effectiveClientId),
+        readIntelligenceServiceRole(effectiveClientId),
         db.getCreativeAssets(effectiveClientId),
       ]);
     }

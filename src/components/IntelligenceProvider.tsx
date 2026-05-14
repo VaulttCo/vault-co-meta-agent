@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import { KACZMAR_INTELLIGENCE } from "@/lib/clientIntelligence";
-import { getDataProvider } from "@/lib/data/data-provider";
 
 const STORAGE_KEY = "vc_client_intelligence";
 
@@ -54,10 +53,12 @@ export function IntelligenceProvider({ children }: { children: React.ReactNode }
 
   function saveIntelligence(intel: ClientIntelligence) {
     setIntelligenceMap((prev) => ({ ...prev, [intel.clientId]: intel }));
-    // Fire-and-forget to data provider
-    getDataProvider()
-      .saveClientIntelligence(intel.clientId, intel)
-      .catch(console.error);
+    // Persist via server route — uses service role key, bypasses RLS
+    fetch(`/api/clients/${intel.clientId}/intelligence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(intel),
+    }).catch((err) => console.error("[IntelligenceProvider] save error:", err));
   }
 
   function clearIntelligence(clientId: string) {
@@ -68,16 +69,18 @@ export function IntelligenceProvider({ children }: { children: React.ReactNode }
     });
   }
 
-  // Load intelligence for a specific client from the data provider (Supabase if configured).
+  // Load intelligence for a specific client via server route (service role — bypasses RLS).
   // Called from client profile page on mount so Supabase data wins over stale localStorage.
   const fetchAndCacheIntelligence = useCallback(async (clientId: string) => {
     try {
-      const intel = await getDataProvider().getClientIntelligence(clientId);
-      if (intel) {
-        setIntelligenceMap((prev) => ({ ...prev, [clientId]: intel }));
+      const res = await fetch(`/api/clients/${clientId}/intelligence`);
+      if (!res.ok) return;
+      const { intelligence } = await res.json();
+      if (intelligence) {
+        setIntelligenceMap((prev) => ({ ...prev, [clientId]: intelligence }));
       }
     } catch {
-      // Ignore — in-memory/localStorage data already available
+      // Ignore — in-memory/localStorage data still available
     }
   }, []);
 

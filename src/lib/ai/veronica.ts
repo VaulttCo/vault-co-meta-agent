@@ -1528,7 +1528,7 @@ export function assembleApprovalGating(bundles: AgentOutputBundle[]): {
 
   const agentIds = bundles.map((b) => b.agentId);
   let suggestedApprovalDestination: string | undefined;
-  if (agentIds.includes("ghl_workflow_builder")) suggestedApprovalDestination = "/settings";
+  if (agentIds.includes("ghl_workflow_builder")) suggestedApprovalDestination = "/approvals";
   else if (agentIds.includes("media_buyer") || agentIds.includes("launch_readiness")) suggestedApprovalDestination = "/approvals";
   else if (agentIds.includes("reporting")) suggestedApprovalDestination = "/reports";
   else if (agentIds.includes("creative_strategist")) suggestedApprovalDestination = "/creatives";
@@ -1926,7 +1926,7 @@ For simple factual questions, keep it short. The full format is for strategy, di
 - Generate report draft (for human approval)
 - Review approvals queue
 - Upload creative assets to Creative Library
-- Sync Meta or GHL credentials in Settings
+- Sync Meta or GHL credentials — open the client profile → Integrations tab
 - Complete client setup and onboarding
 - Audit GHL follow-up speed (recommendation only)
 - Install or verify Meta Pixel (recommendation only)
@@ -1955,9 +1955,11 @@ Respond ONLY with a valid JSON object. No text before or after the JSON. No mark
 
 Rules:
 - dataSources: only sources actually used. Options: clients, reports, campaign_drafts, approvals, client_intelligence, creative_assets, integration_connections
-- relatedLinks: max 3, directly relevant only. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent, /settings
+- relatedLinks: max 3, directly relevant only. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent. Never use /settings for integration navigation — use /clients/[id] instead.
 - actionSuggested: omit entirely (do not include the key) if there is no clear next operator action
-- reply: must reference real data from the portal context. Never fabricate metrics or client details`;
+- reply: must reference real data from the portal context. Never fabricate metrics or client details
+- CRITICAL: Always use the exact owner name from the clients data above. Never misspell or paraphrase owner names. The correct name for Kaczmar Builders is "Stanley Kaczmar" — use it exactly as written. If you are drafting a client message, copy the owner name character-for-character from the portal data.
+- CRITICAL: For integration navigation, always say "open the client profile → Integrations tab" — never "Settings → Integrations" or "Review in settings".`;
 
   return prompt;
 }

@@ -1,5 +1,5 @@
-// Server-side only — save Veronica-generated outputs as approval-ready internal drafts.
-// Writes to public.veronica_drafts. Never writes to Meta, GHL, or any external system.
+// Server-side only — read and save Veronica-generated outputs as approval-ready internal drafts.
+// Reads/writes public.veronica_drafts only. Never writes to Meta, GHL, or any external system.
 // Never sends SMS, email, or any notification. Does not publish or activate anything.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,6 +8,61 @@ import { can } from "@/lib/auth/permissions";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+export async function GET(_req: NextRequest) {
+  // ── 1. Auth ───────────────────────────────────────────────────
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // ── 2. Permission ─────────────────────────────────────────────
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // ── 3. Fetch ──────────────────────────────────────────────────
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = getSupabaseServerClient() as any;
+    if (!supabase) {
+      return NextResponse.json({ drafts: [] });
+    }
+
+    // Join clients table to resolve company_name for display
+    const { data, error } = await supabase
+      .from("veronica_drafts")
+      .select("*, clients(company_name)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[GET /api/veronica/drafts]", error);
+      return NextResponse.json({ drafts: [] });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const drafts = (data ?? []).map((row: any) => ({
+      id: row.id,
+      clientId: row.client_id ?? null,
+      clientName: row.clients?.company_name ?? null,
+      draftType: row.draft_type,
+      title: row.title,
+      content: row.content,
+      sourcePrompt: row.source_prompt ?? null,
+      agentsUsed: row.agents_used ?? [],
+      dataSources: row.data_sources ?? [],
+      approvalStatus: row.approval_status,
+      createdBy: row.created_by ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
+    return NextResponse.json({ drafts });
+  } catch (err) {
+    console.error("[GET /api/veronica/drafts]", err);
+    return NextResponse.json({ drafts: [] });
+  }
+}
 
 const ALLOWED_DRAFT_TYPES = [
   "campaign_draft",

@@ -58,6 +58,8 @@ export interface VeronicaConsoleResponse {
   whatRequiresHumanApproval?: string[];
   whatIsBlocked?: string[];
   dataConfidence?: "high" | "medium" | "low";
+  // Client detected from the message — used by Save Draft to attribute the draft to a client
+  detectedClientId?: string;
 }
 
 export interface IntegrationConnection {

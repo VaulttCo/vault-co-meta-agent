@@ -557,6 +557,65 @@ create policy "Authenticated update veronica drafts"
 
 ---
 
+## 12. operator_tasks
+
+Internal execution queue for Vault Co tasks. Operator-only — not client-facing.
+Stores tasks created manually or saved from Veronica recommendations.
+No row in this table represents a live external action — it is a tracking record only.
+
+```sql
+create table public.operator_tasks (
+  id              text primary key default gen_random_uuid()::text,
+  client_id       text references public.clients(id) on delete set null,
+  title           text not null,
+  description     text,
+  task_type       text not null default 'internal_admin'
+                    check (task_type in (
+                      'integration','creative','campaign','ghl_workflow',
+                      'client_message','reporting','follow_up',
+                      'sales_process','data_cleanup','internal_admin'
+                    )),
+  priority        text not null default 'medium'
+                    check (priority in ('urgent','high','medium','low')),
+  status          text not null default 'open'
+                    check (status in ('open','in_progress','blocked','done','archived')),
+  source          text not null default 'manual'
+                    check (source in ('manual','veronica')),
+  source_agent    text,
+  source_draft_id text references public.veronica_drafts(id) on delete set null,
+  due_date        date,
+  assigned_to     text,
+  created_by      text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index operator_tasks_client_id_idx  on public.operator_tasks(client_id);
+create index operator_tasks_status_idx     on public.operator_tasks(status);
+create index operator_tasks_priority_idx   on public.operator_tasks(priority);
+create index operator_tasks_created_at_idx on public.operator_tasks(created_at desc);
+
+create trigger operator_tasks_updated_at
+  before update on public.operator_tasks
+  for each row execute procedure update_updated_at();
+
+alter table public.operator_tasks enable row level security;
+
+create policy "Authenticated read operator tasks"
+  on public.operator_tasks for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert operator tasks"
+  on public.operator_tasks for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update operator tasks"
+  on public.operator_tasks for update
+  using (auth.role() = 'authenticated');
+```
+
+---
+
 ## Run Order
 
 Execute the SQL blocks in this order:
@@ -574,6 +633,7 @@ Execute the SQL blocks in this order:
 11. `meta_campaign_snapshots` table
 12. `ghl_pipeline_snapshots` table
 13. `veronica_drafts` table
+14. `operator_tasks` table
 
 ## Seed Data — 4 Demo Clients
 

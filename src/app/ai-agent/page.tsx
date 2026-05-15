@@ -34,6 +34,7 @@ import {
   RadioTower,
   XCircle,
   Archive,
+  ListChecks,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
@@ -750,6 +751,114 @@ function SaveDraftMenu({ msg, clientName }: { msg: ConsoleMsg; clientName?: stri
         </>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Save as Task — creates an operator queue task from a Veronica response
+// ─────────────────────────────────────────────────────────────
+
+function inferTaskPriority(content: string): "urgent" | "high" | "medium" {
+  if (/critical|blocker|blocked|cannot launch|launch blocked|urgent/i.test(content)) return "urgent";
+  if (/launch readiness|client health|at.risk|high.risk|missing|no.*connect/i.test(content)) return "high";
+  return "medium";
+}
+
+function inferTaskType(content: string, agents: string[]): string {
+  if (agents.includes("ghl_workflow_builder") || /ghl workflow|workflow blueprint/i.test(content)) return "ghl_workflow";
+  if (/meta ad account|pixel|facebook page|integration|connect.*meta|connect.*ghl/i.test(content)) return "integration";
+  if (agents.includes("creative_strategist") || /creative|asset|shoot|video|image.*ad/i.test(content)) return "creative";
+  if (/campaign|ad copy|ad set|launch.*campaign/i.test(content)) return "campaign";
+  if (agents.includes("client_communication") || /client message|communication draft/i.test(content)) return "client_message";
+  if (agents.includes("reporting") || /report|weekly update|performance report/i.test(content)) return "reporting";
+  if (agents.includes("data_quality") || /pipeline id|data quality|mismatch|data conflict/i.test(content)) return "data_cleanup";
+  if (agents.includes("ghl_followup") || /follow.up|booking|appointment setter/i.test(content)) return "follow_up";
+  if (agents.includes("sales_conversion") || /sales|close rate|setter process/i.test(content)) return "sales_process";
+  return "internal_admin";
+}
+
+function SaveAsTaskButton({ msg, clientName }: { msg: ConsoleMsg; clientName?: string }) {
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  async function saveTask() {
+    setState("saving");
+
+    const content = msg.text;
+    const agents = msg.agentsUsed ?? [];
+    const priority = inferTaskPriority(content);
+    const taskType = inferTaskType(content, agents);
+
+    // Auto-title: first meaningful line (up to 70 chars), appended with client name
+    const firstLine = (content.split("\n")[0] ?? "").slice(0, 70).trim() || "Veronica Recommendation";
+    const title = clientName ? `${firstLine} — ${clientName}` : firstLine;
+    const sourceAgent = agents[0] ?? undefined;
+
+    try {
+      const res = await fetch("/api/operator-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: msg.detectedClientId,
+          title,
+          description: msg.text,
+          taskType,
+          priority,
+          source: "veronica",
+          sourceAgent,
+        }),
+      });
+      if (res.ok) {
+        setState("saved");
+      } else {
+        setState("error");
+      }
+    } catch {
+      setState("error");
+    }
+  }
+
+  if (state === "saved") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]" style={{ color: "#c9a84c" }}>
+        <CheckCircle2 size={10} />
+        Saved to Operator Queue.
+        <a href="/operator-queue" className="hover:underline" style={{ color: "#a78bfa" }}>
+          View Queue →
+        </a>
+      </div>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]">
+        <AlertCircle size={10} style={{ color: "#ef4444" }} />
+        <span style={{ color: "#ef4444" }}>Failed to save task.</span>
+        <button onClick={() => setState("idle")} className="underline hover:no-underline" style={{ color: "#6b7a99" }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      disabled={state === "saving"}
+      onClick={saveTask}
+      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+      style={{
+        color: "#6b7a99",
+        backgroundColor: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.08)",
+      }}
+    >
+      {state === "saving" ? (
+        <Loader2 size={10} className="animate-spin" />
+      ) : (
+        <ListChecks size={10} />
+      )}
+      {state === "saving" ? "Saving…" : "Save as Task"}
+    </button>
   );
 }
 
@@ -2215,16 +2324,26 @@ function AICampaignBuilderContent() {
                         </a>
                       </div>
                     )}
-                    {/* Save Draft — only for non-error agent responses */}
+                    {/* Save actions — only for non-error agent responses */}
                     {msg.role === "agent" && !msg.isError && (
-                      <SaveDraftMenu
-                        msg={msg}
-                        clientName={
-                          msg.detectedClientId
-                            ? clients.find((c) => c.id === msg.detectedClientId)?.name
-                            : undefined
-                        }
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <SaveDraftMenu
+                          msg={msg}
+                          clientName={
+                            msg.detectedClientId
+                              ? clients.find((c) => c.id === msg.detectedClientId)?.name
+                              : undefined
+                          }
+                        />
+                        <SaveAsTaskButton
+                          msg={msg}
+                          clientName={
+                            msg.detectedClientId
+                              ? clients.find((c) => c.id === msg.detectedClientId)?.name
+                              : undefined
+                          }
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

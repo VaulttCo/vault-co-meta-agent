@@ -245,6 +245,7 @@ export async function POST(req: NextRequest) {
           whatRequiresHumanApproval: gating.whatRequiresHumanApproval,
           whatIsBlocked: gating.whatIsBlocked,
           dataConfidence,
+          detectedClientId: effectiveClientId ?? undefined,
         };
 
         return NextResponse.json(result);
@@ -256,9 +257,8 @@ export async function POST(req: NextRequest) {
 
     // Mock fallback (data-aware + agent-enriched)
     const mockResult = mockVeronicaResponse(message, ctx);
-    // Agent data already merged by mockVeronicaResponse wrapper — return as-is
     void AGENT_DISPLAY_NAMES; // imported for route-level use if needed
-    return NextResponse.json(mockResult);
+    return NextResponse.json({ ...mockResult, detectedClientId: effectiveClientId ?? undefined });
   } catch (err) {
     console.error("[POST /api/veronica]", err);
     return NextResponse.json(

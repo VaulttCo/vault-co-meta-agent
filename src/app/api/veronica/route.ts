@@ -22,6 +22,53 @@ import {
 } from "@/lib/ai/veronica";
 import { AGENT_DISPLAY_NAMES } from "@/lib/ai/veronica-agents";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
+import type { Client } from "@/lib/data";
+
+// Read clients using the service role key so RLS is not a barrier and real UUIDs are returned.
+// SupabaseDataProvider.getClients() uses the browser client which has no server session,
+// causing RLS to block reads and fall back to mock slugs ("kaczmar-builders") instead of UUIDs.
+async function readClientsServiceRole(): Promise<Client[]> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = getSupabaseServerClient() as any;
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order("company_name");
+
+    if (error || !data?.length) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return data.map((row: any): Client => ({
+      id: row.id,
+      name: row.company_name,
+      owner: row.owner_name,
+      email: row.email ?? "",
+      phone: row.phone ?? "",
+      website: row.website ?? "",
+      market: (row.service_areas ?? [])[0] ?? "",
+      services: row.services_offered ?? [],
+      avgJobValue: row.average_job_value ?? "",
+      monthlyBudget: row.monthly_ad_budget ?? "",
+      offer: row.offer ?? "",
+      brandTone: row.brand_tone ?? "",
+      status: row.status,
+      notes: row.notes ?? "",
+      metaAccountId: row.meta_ad_account_id ?? "",
+      pixelId: row.meta_pixel_id ?? "",
+      fbPageId: row.facebook_page_id ?? "",
+      instagramId: row.instagram_account_id ?? "",
+      ghlLocationId: row.ghl_location_id ?? "",
+      ghlPipelineId: row.ghl_pipeline_id ?? "",
+      stats: { leads: 0, booked: 0, cpl: "$0", cpba: "$0", showRate: "0%", pipeline: "$0", revenue: "$0", spend: "$0" },
+      campaigns: [],
+    }));
+  } catch {
+    return [];
+  }
+}
 
 // Read client intelligence using the service role key so RLS is not a barrier.
 // The browser client (used by SupabaseDataProvider) is unauthenticated on the server
@@ -106,13 +153,17 @@ export async function POST(req: NextRequest) {
   try {
     const db = getDataProvider();
 
-    // Fetch all core portal data in parallel
-    const [clients, allDrafts, allApprovals, allReports] = await Promise.all([
-      db.getClients(),
+    // Fetch all core portal data in parallel.
+    // readClientsServiceRole() uses the service role key so Supabase UUIDs are returned
+    // instead of mock slugs (which would cause FK violations when saving drafts).
+    const [supabaseClients, allDrafts, allApprovals, allReports] = await Promise.all([
+      readClientsServiceRole(),
       db.getCampaignDrafts(),
       db.getApprovals(),
       db.getReports(),
     ]);
+    // Fall back to mock clients only when Supabase is not configured or returns nothing
+    const clients = supabaseClients.length > 0 ? supabaseClients : await db.getClients();
 
     // If no explicit clientId, detect a mentioned client from the message text (fuzzy)
     let effectiveClientId = clientId;

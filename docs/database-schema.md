@@ -497,6 +497,66 @@ create policy "Authenticated read ghl snapshots"
 
 ---
 
+## 11. veronica_drafts
+
+Approval-ready work products saved from the Veronica Console. Stores the full text of
+Veronica-generated outputs (blueprints, messaging drafts, briefs, task lists) for operator
+review. This is internal only — no row here triggers any external action.
+
+```sql
+create table public.veronica_drafts (
+  id              text        primary key default gen_random_uuid()::text,
+  client_id       text        references public.clients(id) on delete set null,
+  draft_type      text        not null
+                    check (draft_type in (
+                      'campaign_draft',
+                      'ghl_workflow_blueprint',
+                      'client_message_draft',
+                      'creative_brief',
+                      'internal_task_list',
+                      'report_draft',
+                      'ad_copy_draft'
+                    )),
+  title           text        not null,
+  content         text        not null,
+  source_prompt   text,
+  agents_used     text[]      not null default '{}',
+  data_sources    text[]      not null default '{}',
+  approval_status text        not null default 'needs_review'
+                    check (approval_status in (
+                      'needs_review', 'approved', 'changes_requested', 'archived'
+                    )),
+  created_by      text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create index veronica_drafts_client_id_idx  on public.veronica_drafts(client_id);
+create index veronica_drafts_type_idx       on public.veronica_drafts(draft_type);
+create index veronica_drafts_status_idx     on public.veronica_drafts(approval_status);
+create index veronica_drafts_created_at_idx on public.veronica_drafts(created_at desc);
+
+create trigger veronica_drafts_updated_at
+  before update on public.veronica_drafts
+  for each row execute procedure update_updated_at();
+
+alter table public.veronica_drafts enable row level security;
+
+create policy "Authenticated read veronica drafts"
+  on public.veronica_drafts for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert veronica drafts"
+  on public.veronica_drafts for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update veronica drafts"
+  on public.veronica_drafts for update
+  using (auth.role() = 'authenticated');
+```
+
+---
+
 ## Run Order
 
 Execute the SQL blocks in this order:
@@ -513,6 +573,7 @@ Execute the SQL blocks in this order:
 10. `client_integration_credentials` table
 11. `meta_campaign_snapshots` table
 12. `ghl_pipeline_snapshots` table
+13. `veronica_drafts` table
 
 ## Seed Data — 4 Demo Clients
 

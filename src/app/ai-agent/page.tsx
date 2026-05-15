@@ -857,7 +857,210 @@ function SaveAsTaskButton({ msg, clientName }: { msg: ConsoleMsg; clientName?: s
       ) : (
         <ListChecks size={10} />
       )}
-      {state === "saving" ? "Saving…" : "Save as Task"}
+      {state === "saving" ? "Saving…" : "Save as Single Task"}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Generate Task List — deterministic extraction from Veronica response
+// ─────────────────────────────────────────────────────────────
+
+interface ExtractedTask {
+  title: string;
+  description: string;
+  priority: "urgent" | "high" | "medium" | "low";
+  taskType: string;
+}
+
+interface TaskRule {
+  match: RegExp;
+  title: (clientName?: string) => string;
+  priority: "urgent" | "high" | "medium" | "low";
+  taskType: string;
+}
+
+const TASK_RULES: TaskRule[] = [
+  {
+    match: /✗\s*Meta Ad Account connected/,
+    title: (c) => `Connect Meta Ad Account${c ? ` for ${c}` : ""}`,
+    priority: "urgent",
+    taskType: "integration",
+  },
+  {
+    match: /✗\s*Meta Pixel installed/,
+    title: (c) => `Install Meta Pixel${c ? ` for ${c}` : ""}`,
+    priority: "urgent",
+    taskType: "integration",
+  },
+  {
+    match: /✗\s*Facebook Page connected/,
+    title: (c) => `Connect Facebook Page${c ? ` for ${c}` : ""}`,
+    priority: "high",
+    taskType: "integration",
+  },
+  {
+    match: /✗\s*GHL Location connected/,
+    title: (c) => `Connect GHL Location${c ? ` for ${c}` : ""}`,
+    priority: "urgent",
+    taskType: "integration",
+  },
+  {
+    match: /✗\s*GHL sync active/,
+    title: (c) => `Activate GHL sync${c ? ` for ${c}` : ""}`,
+    priority: "high",
+    taskType: "integration",
+  },
+  {
+    match: /✗\s*Approved creative asset/,
+    title: (c) => `Upload and approve creative assets${c ? ` for ${c}` : ""}`,
+    priority: "high",
+    taskType: "creative",
+  },
+  {
+    match: /✗\s*Campaign draft approved or ready/,
+    title: (c) => `Prepare approval-ready campaign draft${c ? ` for ${c}` : ""}`,
+    priority: "high",
+    taskType: "campaign",
+  },
+  {
+    match: /GHL Pipeline ID/i,
+    title: (c) => `Backfill GHL Pipeline ID${c ? ` for ${c}` : ""}`,
+    priority: "medium",
+    taskType: "data_cleanup",
+  },
+  {
+    match: /ghl workflow|workflow blueprint/i,
+    title: (c) => `Configure GHL follow-up workflow${c ? ` for ${c}` : ""}`,
+    priority: "medium",
+    taskType: "ghl_workflow",
+  },
+  {
+    match: /performance report|weekly update|monthly report/i,
+    title: (c) => `Generate performance report${c ? ` for ${c}` : ""}`,
+    priority: "medium",
+    taskType: "reporting",
+  },
+  {
+    match: /communication draft|client message|follow.?up message/i,
+    title: (c) => `Review and finalize client communication${c ? ` for ${c}` : ""}`,
+    priority: "medium",
+    taskType: "client_message",
+  },
+];
+
+function extractOperatorTasksFromResponse({
+  text,
+  clientName,
+}: {
+  text: string;
+  clientName?: string;
+}): ExtractedTask[] {
+  const tasks: ExtractedTask[] = [];
+
+  for (const rule of TASK_RULES) {
+    if (!rule.match.test(text)) continue;
+    const matchIndex = text.search(rule.match);
+    const start = Math.max(0, matchIndex - 40);
+    const end = Math.min(text.length, matchIndex + 120);
+    const excerpt = text.slice(start, end).replace(/\s+/g, " ").trim();
+    tasks.push({
+      title: rule.title(clientName),
+      description: `${excerpt}\n\nInternal task only. No external action has been performed.`,
+      priority: rule.priority,
+      taskType: rule.taskType,
+    });
+  }
+
+  if (tasks.length === 0) {
+    const firstLine = (text.split("\n").find((l) => l.trim().length > 10) ?? "").slice(0, 80).trim();
+    tasks.push({
+      title: clientName ? `Review Veronica analysis for ${clientName}` : "Review Veronica analysis",
+      description: `${firstLine}\n\nInternal task only. No external action has been performed.`,
+      priority: "medium",
+      taskType: "internal_admin",
+    });
+  }
+
+  return tasks;
+}
+
+function GenerateTaskListButton({ msg, clientName }: { msg: ConsoleMsg; clientName?: string }) {
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [savedCount, setSavedCount] = useState(0);
+
+  const tasks = extractOperatorTasksFromResponse({ text: msg.text, clientName });
+
+  async function generateTasks() {
+    setState("saving");
+    let count = 0;
+    try {
+      await Promise.all(
+        tasks.map(async (task) => {
+          const res = await fetch("/api/operator-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clientId: msg.detectedClientId,
+              title: task.title,
+              description: task.description,
+              taskType: task.taskType,
+              priority: task.priority,
+              source: "veronica",
+              sourceAgent: msg.agentsUsed?.[0],
+            }),
+          });
+          if (res.ok) count++;
+        })
+      );
+      setSavedCount(count);
+      setState(count > 0 ? "saved" : "error");
+    } catch {
+      setState("error");
+    }
+  }
+
+  if (state === "saved") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]" style={{ color: "#c9a84c" }}>
+        <CheckCircle2 size={10} />
+        Saved {savedCount} task{savedCount !== 1 ? "s" : ""} to Operator Queue.
+        <a href="/operator-queue" className="hover:underline" style={{ color: "#a78bfa" }}>
+          View Queue →
+        </a>
+      </div>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]">
+        <AlertCircle size={10} style={{ color: "#ef4444" }} />
+        <span style={{ color: "#ef4444" }}>Failed to generate tasks.</span>
+        <button onClick={() => setState("idle")} className="underline hover:no-underline" style={{ color: "#6b7a99" }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      disabled={state === "saving"}
+      onClick={generateTasks}
+      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+      style={{
+        color: "#c9a84c",
+        backgroundColor: "rgba(201, 168, 76, 0.06)",
+        border: "1px solid rgba(201, 168, 76, 0.18)",
+      }}
+    >
+      {state === "saving" ? (
+        <Loader2 size={10} className="animate-spin" />
+      ) : (
+        <Sparkles size={10} />
+      )}
+      {state === "saving" ? "Generating…" : `Generate Task List (${tasks.length})`}
     </button>
   );
 }
@@ -2336,6 +2539,14 @@ function AICampaignBuilderContent() {
                           }
                         />
                         <SaveAsTaskButton
+                          msg={msg}
+                          clientName={
+                            msg.detectedClientId
+                              ? clients.find((c) => c.id === msg.detectedClientId)?.name
+                              : undefined
+                          }
+                        />
+                        <GenerateTaskListButton
                           msg={msg}
                           clientName={
                             msg.detectedClientId

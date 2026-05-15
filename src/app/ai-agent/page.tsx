@@ -33,6 +33,7 @@ import {
   Tag,
   RadioTower,
   XCircle,
+  Archive,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
@@ -479,6 +480,8 @@ interface ConsoleMsg {
   whatRequiresHumanApproval?: string[];
   whatIsBlocked?: string[];
   dataConfidence?: "high" | "medium" | "low";
+  // Client Veronica detected from the message — used by Save Draft
+  detectedClientId?: string;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -607,6 +610,144 @@ function ApprovalBar({
         <div className={`${btn} text-[#22c55e] bg-[#22c55e]/10 border border-[#22c55e]/20`}>
           <CheckCircle2 size={ico} />Ready for Meta
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Save Draft menu (Veronica Console)
+// ─────────────────────────────────────────────────────────────
+
+const VERONICA_DRAFT_TYPES = [
+  { value: "campaign_draft",        label: "Campaign Draft" },
+  { value: "ghl_workflow_blueprint", label: "GHL Workflow Blueprint" },
+  { value: "client_message_draft",  label: "Client Message Draft" },
+  { value: "creative_brief",        label: "Creative Brief" },
+  { value: "internal_task_list",    label: "Internal Task List" },
+  { value: "report_draft",          label: "Report Draft" },
+  { value: "ad_copy_draft",         label: "Ad Copy Draft" },
+] as const;
+
+type VeroniaDraftTypeValue = (typeof VERONICA_DRAFT_TYPES)[number]["value"];
+
+function SaveDraftMenu({ msg, clientName }: { msg: ConsoleMsg; clientName?: string }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function save(draftType: VeroniaDraftTypeValue) {
+    setOpen(false);
+    setSaving(true);
+    setSaveError(null);
+
+    const typeLabel = VERONICA_DRAFT_TYPES.find((t) => t.value === draftType)?.label ?? draftType;
+    const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const title = clientName
+      ? `${typeLabel} — ${clientName} — ${date}`
+      : `${typeLabel} — ${date}`;
+
+    try {
+      const res = await fetch("/api/veronica/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: msg.detectedClientId,
+          draftType,
+          title,
+          content: msg.text,
+          agentsUsed: msg.agentsUsed ?? [],
+          dataSources: msg.dataSources ?? [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveError(data.error ?? "Save failed. Please try again.");
+        return;
+      }
+      setSavedId(data.id ?? "saved");
+    } catch {
+      setSaveError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (savedId) {
+    return (
+      <div className="flex items-center gap-2 text-[11px]" style={{ color: "#22c55e" }}>
+        <CheckCircle2 size={10} />
+        Saved as approval-ready draft.
+        <a href="/approvals" className="hover:underline" style={{ color: "#a78bfa" }}>
+          Review in Approvals →
+        </a>
+      </div>
+    );
+  }
+
+  if (saveError) {
+    return (
+      <div className="flex items-center gap-2 text-[11px]">
+        <AlertCircle size={10} style={{ color: "#ef4444" }} />
+        <span style={{ color: "#ef4444" }}>{saveError}</span>
+        <button
+          onClick={() => setSaveError(null)}
+          className="underline hover:no-underline"
+          style={{ color: "#6b7a99" }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (saving) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "#6b7a99" }}>
+        <Loader2 size={10} className="animate-spin" />
+        Saving draft…
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-colors"
+        style={{
+          color: open ? "#eef1f8" : "#6b7a99",
+          backgroundColor: open ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <Archive size={10} />
+        Save as Draft
+        <ChevronDown size={8} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
+      </button>
+      {open && (
+        <>
+          {/* Click-away overlay */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            className="absolute bottom-full mb-1 left-0 z-20 rounded-xl overflow-hidden shadow-2xl"
+            style={{ background: "#13151c", border: "1px solid #2a2e42", minWidth: "210px" }}
+          >
+            {VERONICA_DRAFT_TYPES.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => save(t.value)}
+                className="w-full text-left px-4 py-2.5 text-[12px] transition-colors"
+                style={{ color: "#eef1f8" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#1a1d27"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = ""; }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -805,6 +946,7 @@ function AICampaignBuilderContent() {
           whatRequiresHumanApproval: data.whatRequiresHumanApproval,
           whatIsBlocked: data.whatIsBlocked,
           dataConfidence: data.dataConfidence,
+          detectedClientId: data.detectedClientId,
         },
       ]);
     } catch {
@@ -2072,6 +2214,17 @@ function AICampaignBuilderContent() {
                           {msg.actionSuggested.label}
                         </a>
                       </div>
+                    )}
+                    {/* Save Draft — only for non-error agent responses */}
+                    {msg.role === "agent" && !msg.isError && (
+                      <SaveDraftMenu
+                        msg={msg}
+                        clientName={
+                          msg.detectedClientId
+                            ? clients.find((c) => c.id === msg.detectedClientId)?.name
+                            : undefined
+                        }
+                      />
                     )}
                   </div>
                 </div>

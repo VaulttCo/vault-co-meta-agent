@@ -16,6 +16,7 @@ import {
   Sparkles,
   LogOut,
   ClipboardList,
+  ListChecks,
   X,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
@@ -38,7 +39,8 @@ const allNavItems: NavItem[] = [
   { label: "Creatives",        href: "/creatives", icon: ImageIcon,       permission: "canViewCreatives" },
   { label: "Analytics",        href: "/analytics", icon: BarChart3,       permission: "canViewAnalytics" },
   { label: "Reports",          href: "/reports",   icon: FileText,        permission: "canViewReports" },
-  { label: "Approvals",        href: "/approvals", icon: CheckSquare,     permission: "canViewApprovals" },
+  { label: "Approvals",        href: "/approvals",      icon: CheckSquare, permission: "canViewApprovals" },
+  { label: "Operator Queue",   href: "/operator-queue", icon: ListChecks,  permission: "canViewAiBuilder" },
 ];
 
 const settingsItem: NavItem = {

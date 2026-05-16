@@ -10,6 +10,7 @@ import { can } from "@/lib/auth/permissions";
 import {
   buildVeronicaSystemPrompt,
   buildSynthesisPrompt,
+  buildOperatorTaskSuggestions,
   routeToAgents,
   runSelectedAgents,
   assembleApprovalGating,
@@ -230,6 +231,17 @@ export async function POST(req: NextRequest) {
     const dataConfidence = aggregateDataConfidence(bundles);
     const agentsUsed = bundles.map((b) => b.agentId);
 
+    // Build deterministic operator task suggestions from structured agent outputs.
+    // Done once here so both Anthropic and mock paths get the same structured data.
+    const detectedClient = effectiveClientId
+      ? (clients.find((c) => c.id === effectiveClientId) ?? null)
+      : null;
+    const operatorTaskSuggestions = buildOperatorTaskSuggestions(
+      bundles,
+      detectedClient?.name ?? null,
+      effectiveClientId ?? null
+    );
+
     // Try Anthropic when configured
     const aiProvider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
@@ -297,6 +309,7 @@ export async function POST(req: NextRequest) {
           whatIsBlocked: gating.whatIsBlocked,
           dataConfidence,
           detectedClientId: effectiveClientId ?? undefined,
+          operatorTaskSuggestions: operatorTaskSuggestions.length > 0 ? operatorTaskSuggestions : undefined,
         };
 
         return NextResponse.json(result);
@@ -309,7 +322,11 @@ export async function POST(req: NextRequest) {
     // Mock fallback (data-aware + agent-enriched)
     const mockResult = mockVeronicaResponse(message, ctx);
     void AGENT_DISPLAY_NAMES; // imported for route-level use if needed
-    return NextResponse.json({ ...mockResult, detectedClientId: effectiveClientId ?? undefined });
+    return NextResponse.json({
+      ...mockResult,
+      detectedClientId: effectiveClientId ?? undefined,
+      operatorTaskSuggestions: operatorTaskSuggestions.length > 0 ? operatorTaskSuggestions : undefined,
+    });
   } catch (err) {
     console.error("[POST /api/veronica]", err);
     return NextResponse.json(

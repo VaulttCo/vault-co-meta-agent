@@ -882,67 +882,83 @@ interface TaskRule {
 
 const TASK_RULES: TaskRule[] = [
   {
-    match: /✗\s*Meta Ad Account connected/,
+    // Matches: "✗ Meta Ad Account connected", "Meta Ad Account not connected",
+    // "meta ad account missing", "Missing: Meta Ad Account", "connect meta ad account"
+    match: /meta\s+ad\s+account\s*(not\s+connected|missing|disconnected)|ad\s+account\s+missing|connect\s+meta\s+ad\s+account|✗\s*meta\s+ad\s+account/i,
     title: (c) => `Connect Meta Ad Account${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    match: /✗\s*Meta Pixel installed/,
+    // Matches: "✗ Meta Pixel installed", "Meta Pixel not installed", "pixel missing",
+    // "install meta pixel", "Meta Pixel"  (in Missing: list)
+    match: /meta\s+pixel\s*(not\s+installed|missing)|pixel\s+(not\s+installed|missing)|install\s+meta\s+pixel|✗\s*meta\s+pixel/i,
     title: (c) => `Install Meta Pixel${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    match: /✗\s*Facebook Page connected/,
+    // Matches: "✗ Facebook Page connected", "Facebook Page not connected",
+    // "facebook page missing", "connect facebook page", "Missing: Facebook Page"
+    match: /facebook\s+page\s*(not\s+connected|missing|disconnected)|page\s+not\s+connected|connect\s+facebook\s+page|✗\s*facebook\s+page/i,
     title: (c) => `Connect Facebook Page${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "integration",
   },
   {
-    match: /✗\s*GHL Location connected/,
+    // Matches: "✗ GHL Location connected", "GHL Location not connected",
+    // "ghl location missing", "Missing: GHL Location"
+    match: /ghl\s+location\s*(not\s+connected|missing|disconnected)|connect\s+ghl\s+location|✗\s*ghl\s+location/i,
     title: (c) => `Connect GHL Location${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    match: /✗\s*GHL sync active/,
-    title: (c) => `Activate GHL sync${c ? ` for ${c}` : ""}`,
-    priority: "high",
-    taskType: "integration",
-  },
-  {
-    match: /✗\s*Approved creative asset/,
+    // Matches: "✗ Approved creative asset", "No approved creative asset",
+    // "approved creative missing", "upload creative", "approve creative"
+    match: /no\s+approved\s+creative\s+assets?|approved\s+creative\s+(missing|not\s+found)|upload\s+creative|approve\s+creative|✗\s*approved\s+creative/i,
     title: (c) => `Upload and approve creative assets${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "creative",
   },
   {
-    match: /✗\s*Campaign draft approved or ready/,
+    // Matches: "✗ Campaign draft approved or ready", "No approved campaign draft",
+    // "campaign draft missing", "no approved draft", "prepare campaign draft"
+    match: /no\s+(approved\s+)?campaign\s+draft|campaign\s+draft\s+(missing|not\s+approved|not\s+ready|approved\s+or\s+ready)|no\s+approved\s+draft|prepare\s+campaign\s+draft|✗\s*campaign\s+draft/i,
     title: (c) => `Prepare approval-ready campaign draft${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "campaign",
   },
   {
-    match: /GHL Pipeline ID/i,
+    // Matches: "GHL Pipeline ID missing", "pipeline id needs cleanup",
+    // "pipeline id mismatch", "backfill ghl pipeline id"
+    match: /(ghl\s+)?pipeline\s+id\s*(missing|needs?\s+cleanup|needs?\s+backfill|mismatch)|backfill\s+(ghl\s+)?pipeline\s+id/i,
     title: (c) => `Backfill GHL Pipeline ID${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "data_cleanup",
   },
   {
-    match: /ghl workflow|workflow blueprint/i,
+    // Matches: "Last sync", "stale sync", "data may be stale", "fresh sync recommended",
+    // "✗ GHL sync confirmed" (actual mock label), "trigger a fresh sync"
+    match: /last\s+sync|stale\s+sync|data\s+may\s+be\s+stale|trigger\s+a?\s*fresh\s+sync|fresh\s+sync\s+recommended|✗\s*ghl\s+sync/i,
+    title: (c) => `Trigger fresh GHL sync${c ? ` for ${c}` : ""}`,
+    priority: "medium",
+    taskType: "data_cleanup",
+  },
+  {
+    match: /ghl\s+workflow\s+blueprint|follow.?up\s+workflow|speed.?to.?lead\s+workflow|workflow\s+builder/i,
     title: (c) => `Configure GHL follow-up workflow${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "ghl_workflow",
   },
   {
-    match: /performance report|weekly update|monthly report/i,
+    match: /performance\s+report|weekly\s+update|monthly\s+report/i,
     title: (c) => `Generate performance report${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "reporting",
   },
   {
-    match: /communication draft|client message|follow.?up message/i,
+    match: /communication\s+draft|client\s+message|follow.?up\s+message/i,
     title: (c) => `Review and finalize client communication${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "client_message",
@@ -956,22 +972,27 @@ function extractOperatorTasksFromResponse({
   text: string;
   clientName?: string;
 }): ExtractedTask[] {
+  const seen = new Set<string>();
   const tasks: ExtractedTask[] = [];
 
   for (const rule of TASK_RULES) {
     if (!rule.match.test(text)) continue;
+    const title = rule.title(clientName);
+    if (seen.has(title)) continue;
+    seen.add(title);
     const matchIndex = text.search(rule.match);
     const start = Math.max(0, matchIndex - 40);
     const end = Math.min(text.length, matchIndex + 120);
     const excerpt = text.slice(start, end).replace(/\s+/g, " ").trim();
     tasks.push({
-      title: rule.title(clientName),
+      title,
       description: `${excerpt}\n\nInternal task only. No external action has been performed.`,
       priority: rule.priority,
       taskType: rule.taskType,
     });
   }
 
+  // Fallback only when no specific rule matched
   if (tasks.length === 0) {
     const firstLine = (text.split("\n").find((l) => l.trim().length > 10) ?? "").slice(0, 80).trim();
     tasks.push({

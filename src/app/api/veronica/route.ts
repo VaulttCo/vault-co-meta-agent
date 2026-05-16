@@ -309,6 +309,7 @@ export async function POST(req: NextRequest) {
           whatIsBlocked: gating.whatIsBlocked,
           dataConfidence,
           detectedClientId: effectiveClientId ?? undefined,
+          detectedClientName: detectedClient?.name ?? undefined,
           operatorTaskSuggestions: operatorTaskSuggestions.length > 0 ? operatorTaskSuggestions : undefined,
         };
 
@@ -325,6 +326,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ...mockResult,
       detectedClientId: effectiveClientId ?? undefined,
+      detectedClientName: detectedClient?.name ?? undefined,
       operatorTaskSuggestions: operatorTaskSuggestions.length > 0 ? operatorTaskSuggestions : undefined,
     });
   } catch (err) {

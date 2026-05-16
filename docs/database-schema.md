@@ -586,6 +586,7 @@ create table public.operator_tasks (
   due_date        date,
   assigned_to     text,
   created_by      text,
+  checklist       jsonb not null default '[]',
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -754,3 +755,18 @@ Creative asset files (images, videos) are stored in Supabase Storage, not in the
 | `creative-thumbnails` | Yes | Compressed thumbnail previews |
 
 RLS policies for the `creative-assets` bucket should mirror the table policies: authenticated users can read and write.
+
+---
+
+## Migrations
+
+### Phase 3 — Operator Queue Guided Execution Steps
+
+Add checklist column to `operator_tasks`. Run this in the Supabase SQL editor **after** the base table has been created:
+
+```sql
+alter table public.operator_tasks
+  add column if not exists checklist jsonb not null default '[]';
+```
+
+This is safe to run on an existing table with rows — existing tasks get an empty checklist (`[]`) and the UI falls back to the per-task-type default template until the operator checks a step (which then saves the checklist to the DB).

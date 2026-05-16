@@ -72,8 +72,11 @@ export interface VeronicaConsoleResponse {
   whatRequiresHumanApproval?: string[];
   whatIsBlocked?: string[];
   dataConfidence?: "high" | "medium" | "low";
-  // Client detected from the message — used by Save Draft to attribute the draft to a client
+  // Client detected from the message — used by Save Draft to attribute the draft to a client.
+  // detectedClientName is the official saved name from Supabase — always use this over the
+  // user's typed spelling, which may be a misspelling caught by fuzzy matching.
   detectedClientId?: string;
+  detectedClientName?: string;
   // Deterministic operator task suggestions derived from structured agent outputs
   operatorTaskSuggestions?: OperatorTaskSuggestion[];
 }

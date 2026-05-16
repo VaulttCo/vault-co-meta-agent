@@ -466,6 +466,17 @@ const agentSuggestions = [
 // Console message type
 // ─────────────────────────────────────────────────────────────
 
+// Mirrors OperatorTaskSuggestion from veronica.ts — defined locally to keep this client component
+// free of server-only imports.
+interface OperatorTaskSuggestion {
+  title: string;
+  description: string;
+  taskType: string;
+  priority: "urgent" | "high" | "medium" | "low";
+  clientId?: string | null;
+  sourceAgent?: string;
+}
+
 interface ConsoleMsg {
   role: "user" | "agent";
   text: string;
@@ -483,6 +494,8 @@ interface ConsoleMsg {
   dataConfidence?: "high" | "medium" | "low";
   // Client Veronica detected from the message — used by Save Draft
   detectedClientId?: string;
+  // Deterministic task suggestions from structured agent outputs
+  operatorTaskSuggestions?: OperatorTaskSuggestion[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -997,7 +1010,19 @@ function GenerateTaskListButton({ msg, clientName }: { msg: ConsoleMsg; clientNa
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [savedCount, setSavedCount] = useState(0);
 
-  const tasks = extractOperatorTasksFromResponse({ text: msg.text, clientName });
+  // Prefer structured suggestions from agent outputs (deterministic, exact labels).
+  // Fall back to regex extraction from the synthesized response text only when no
+  // structured suggestions are available (e.g. older response or non-client query).
+  // Normalize both into a common shape so the POST logic is uniform.
+  type TaskPost = { title: string; description: string; taskType: string; priority: string; clientId?: string | null; sourceAgent?: string };
+  const structuredTasks = msg.operatorTaskSuggestions ?? [];
+  const tasks: TaskPost[] = structuredTasks.length > 0
+    ? structuredTasks
+    : extractOperatorTasksFromResponse({ text: msg.text, clientName }).map((t) => ({
+        ...t,
+        clientId: msg.detectedClientId,
+        sourceAgent: msg.agentsUsed?.[0],
+      }));
 
   async function generateTasks() {
     setState("saving");
@@ -1009,13 +1034,13 @@ function GenerateTaskListButton({ msg, clientName }: { msg: ConsoleMsg; clientNa
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              clientId: msg.detectedClientId,
+              clientId: task.clientId ?? msg.detectedClientId,
               title: task.title,
               description: task.description,
               taskType: task.taskType,
               priority: task.priority,
               source: "veronica",
-              sourceAgent: msg.agentsUsed?.[0],
+              sourceAgent: task.sourceAgent ?? msg.agentsUsed?.[0],
             }),
           });
           if (res.ok) count++;
@@ -1267,6 +1292,7 @@ function AICampaignBuilderContent() {
           whatIsBlocked: data.whatIsBlocked,
           dataConfidence: data.dataConfidence,
           detectedClientId: data.detectedClientId,
+          operatorTaskSuggestions: data.operatorTaskSuggestions,
         },
       ]);
     } catch {

@@ -24,6 +24,12 @@ import type { Client } from "@/lib/data";
 
 // ── Types ─────────────────────────────────────────────────────
 
+interface ChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
 interface OperatorTask {
   id: string;
   clientId: string | null;
@@ -39,6 +45,7 @@ interface OperatorTask {
   dueDate: string | null;
   assignedTo: string | null;
   createdBy: string | null;
+  checklist: ChecklistItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -102,17 +109,162 @@ const AGENT_LABELS: Record<string, string> = {
   ghl_workflow_builder: "GHL Workflow Builder",
 };
 
+// ── Checklist step templates ──────────────────────────────────
+
+function makeSteps(labels: string[]): ChecklistItem[] {
+  return labels.map((label, i) => ({ id: `step-${i}`, label, done: false }));
+}
+
+function getDefaultChecklist(taskType: string, title: string): ChecklistItem[] {
+  const t = title.toLowerCase();
+
+  if (taskType === "integration") {
+    if (t.includes("meta ad account")) {
+      return makeSteps([
+        "Open the client profile",
+        "Go to Integrations tab",
+        "Open Meta connection section",
+        "Enter or confirm Meta Ad Account ID",
+        "Run/test connection",
+        "Confirm status shows connected",
+        "Ask Veronica to re-check launch readiness",
+        "Mark task done",
+      ]);
+    }
+    if (t.includes("meta pixel") || t.includes("pixel")) {
+      return makeSteps([
+        "Open client profile",
+        "Go to Integrations tab",
+        "Confirm Meta Ad Account is connected first",
+        "Add or confirm Meta Pixel ID",
+        "Install/verify Pixel on landing page",
+        "Confirm Pixel status in Meta Events Manager",
+        "Ask Veronica to re-check launch readiness",
+        "Mark task done",
+      ]);
+    }
+    if (t.includes("facebook page")) {
+      return makeSteps([
+        "Open client profile",
+        "Go to Integrations tab",
+        "Add or confirm Facebook Page ID/access",
+        "Confirm page is attached to correct Meta Business Manager",
+        "Run/test connection",
+        "Ask Veronica to re-check launch readiness",
+        "Mark task done",
+      ]);
+    }
+    if (t.includes("ghl location")) {
+      return makeSteps([
+        "Open client profile",
+        "Go to Integrations tab",
+        "Enter or confirm GHL Location ID",
+        "Add or confirm API credentials",
+        "Run/test connection",
+        "Confirm status shows connected",
+        "Ask Veronica to re-check launch readiness",
+        "Mark task done",
+      ]);
+    }
+  }
+
+  if (taskType === "creative") {
+    return makeSteps([
+      "Open Creative Library",
+      "Filter/select the client",
+      "Upload or review assets",
+      "Check asset quality and relevance",
+      "Mark approved for ads if acceptable",
+      "Ask Veronica for creative recommendation",
+      "Mark task done",
+    ]);
+  }
+
+  if (taskType === "campaign") {
+    return makeSteps([
+      "Open Veronica Console",
+      "Ask Veronica to prepare approval-ready campaign draft",
+      "Review ad copy, offer, compliance, lead form, and GHL workflow",
+      "Save as Campaign Draft or send to Approvals",
+      "Approve internally",
+      "Do not launch until integrations are complete",
+      "Mark task done",
+    ]);
+  }
+
+  if (taskType === "ghl_workflow") {
+    return makeSteps([
+      "Open approved GHL workflow blueprint",
+      "Open GHL sub-account manually",
+      "Build workflow from blueprint",
+      "Verify triggers, waits, SMS/email copy, stop conditions",
+      "Test with internal lead",
+      "Do not activate until approved",
+      "Mark task done",
+    ]);
+  }
+
+  if (taskType === "data_cleanup") {
+    if (t.includes("pipeline id") || t.includes("backfill")) {
+      return makeSteps([
+        "Open client profile",
+        "Click Edit Client",
+        "Backfill GHL Pipeline ID",
+        "Save",
+        "Go to Integrations tab",
+        "Trigger fresh sync",
+        "Ask Veronica to re-check data quality",
+        "Mark task done",
+      ]);
+    }
+    if (t.includes("ghl sync") || t.includes("sync")) {
+      return makeSteps([
+        "Open client profile",
+        "Go to Integrations tab",
+        "Trigger fresh GHL sync",
+        "Wait for sync to complete",
+        "Confirm sync status shows updated timestamp",
+        "Ask Veronica to re-check data quality",
+        "Mark task done",
+      ]);
+    }
+  }
+
+  return [];
+}
+
 // ── Task card ─────────────────────────────────────────────────
 
 function TaskCard({
   task,
   onStatusChange,
+  onChecklistChange,
 }: {
   task: OperatorTask;
   onStatusChange: (id: string, status: OperatorTask["status"]) => Promise<void>;
+  onChecklistChange: (id: string, checklist: ChecklistItem[]) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
+
+  // Effective checklist: use saved DB value if non-empty, else fall back to template.
+  // First step-toggle saves the full checklist to DB via PATCH.
+  const effectiveChecklist =
+    task.checklist.length > 0
+      ? task.checklist
+      : getDefaultChecklist(task.taskType, task.title);
+
+  const hasSteps = effectiveChecklist.length > 0;
+  const doneCount = effectiveChecklist.filter((s) => s.done).length;
+  const allStepsDone = hasSteps && doneCount === effectiveChecklist.length;
+
+  async function toggleStep(stepId: string) {
+    const updated = effectiveChecklist.map((s) =>
+      s.id === stepId ? { ...s, done: !s.done } : s
+    );
+    await onChecklistChange(task.id, updated);
+  }
 
   const priorityColor = PRIORITY_COLORS[task.priority] ?? "#6b7a99";
 
@@ -294,6 +446,83 @@ function TaskCard({
               )}
             </div>
           )}
+
+          {/* Steps checklist */}
+          {hasSteps && (
+            <div className="mt-2.5">
+              <button
+                onClick={() => setStepsOpen((v) => !v)}
+                className="flex items-center gap-1.5 text-[10px] font-semibold rounded-md px-2 py-1 transition-colors"
+                style={{
+                  color: allStepsDone ? "#22c55e" : "var(--t-dim)",
+                  backgroundColor: allStepsDone ? "rgba(34,197,94,0.08)" : "var(--t-surface-2)",
+                  border: `1px solid ${allStepsDone ? "rgba(34,197,94,0.2)" : "var(--t-border)"}`,
+                }}
+              >
+                {stepsOpen ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+                Steps ({doneCount}/{effectiveChecklist.length})
+              </button>
+
+              {stepsOpen && (
+                <div
+                  className="mt-2 rounded-lg p-2.5 space-y-1.5"
+                  style={{
+                    backgroundColor: "var(--t-surface-2)",
+                    border: "1px solid var(--t-border)",
+                  }}
+                >
+                  {effectiveChecklist.map((step) => (
+                    <button
+                      key={step.id}
+                      onClick={() => toggleStep(step.id)}
+                      className="w-full flex items-start gap-2 text-left group"
+                    >
+                      <span className="flex-shrink-0 mt-0.5">
+                        {step.done ? (
+                          <CheckCircle2 size={12} style={{ color: "#22c55e" }} />
+                        ) : (
+                          <Circle size={12} style={{ color: "var(--t-dim)" }} className="group-hover:text-[#22c55e]" />
+                        )}
+                      </span>
+                      <span
+                        className="text-[11px] leading-snug"
+                        style={{
+                          color: step.done ? "var(--t-dim)" : "var(--t-muted)",
+                          textDecoration: step.done ? "line-through" : "none",
+                          opacity: step.done ? 0.6 : 1,
+                        }}
+                      >
+                        {step.label}
+                      </span>
+                    </button>
+                  ))}
+
+                  {/* All-steps-done prompt */}
+                  {allStepsDone && task.status !== "done" && (
+                    <div
+                      className="mt-2 pt-2 flex items-center gap-2"
+                      style={{ borderTop: "1px solid var(--t-border)" }}
+                    >
+                      <span className="text-[10px] font-medium" style={{ color: "#22c55e" }}>
+                        All steps complete.
+                      </span>
+                      <button
+                        disabled={updating}
+                        onClick={async () => {
+                          setUpdating(true);
+                          try { await onStatusChange(task.id, "done"); }
+                          finally { setUpdating(false); }
+                        }}
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#22c55e] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                      >
+                        Mark task done
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}
@@ -469,6 +698,7 @@ function NewTaskModal({
         dueDate: form.dueDate || null,
         assignedTo: form.assignedTo.trim() || null,
         createdBy: null,
+        checklist: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -776,6 +1006,16 @@ export default function OperatorQueuePage() {
     }
   }
 
+  async function handleChecklistChange(id: string, checklist: ChecklistItem[]) {
+    // Optimistic update so the UI responds immediately
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, checklist } : t)));
+    await fetch(`/api/operator-tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checklist }),
+    });
+  }
+
   function handleCreated(task: OperatorTask) {
     setTasks((prev) => [task, ...prev]);
   }
@@ -948,7 +1188,7 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {urgentHigh.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                 ))}
               </div>
             </section>
@@ -965,7 +1205,7 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {openMedLow.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                 ))}
               </div>
             </section>
@@ -982,7 +1222,7 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {inProgress.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                 ))}
               </div>
             </section>
@@ -999,7 +1239,7 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {blocked.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                 ))}
               </div>
             </section>
@@ -1020,7 +1260,7 @@ export default function OperatorQueuePage() {
               {showDone && (
                 <div className="space-y-2.5">
                   {done.map((t) => (
-                    <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                    <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                   ))}
                 </div>
               )}
@@ -1044,7 +1284,7 @@ export default function OperatorQueuePage() {
                   {tasks
                     .filter((t) => t.status === "archived")
                     .map((t) => (
-                      <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} />
+                      <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
                     ))}
                 </div>
               )}

@@ -40,6 +40,20 @@ export interface VeronicaRelatedLink {
   href: string;
 }
 
+export type OperatorTaskType =
+  | "integration" | "creative" | "campaign" | "ghl_workflow"
+  | "client_message" | "reporting" | "follow_up" | "sales_process"
+  | "data_cleanup" | "internal_admin";
+
+export interface OperatorTaskSuggestion {
+  title: string;
+  description: string;
+  taskType: OperatorTaskType;
+  priority: "urgent" | "high" | "medium" | "low";
+  clientId?: string | null;
+  sourceAgent?: string;
+}
+
 export interface VeronicaConsoleResponse {
   reply: string;
   dataSources: string[];
@@ -60,6 +74,8 @@ export interface VeronicaConsoleResponse {
   dataConfidence?: "high" | "medium" | "low";
   // Client detected from the message — used by Save Draft to attribute the draft to a client
   detectedClientId?: string;
+  // Deterministic operator task suggestions derived from structured agent outputs
+  operatorTaskSuggestions?: OperatorTaskSuggestion[];
 }
 
 export interface IntegrationConnection {
@@ -1553,6 +1569,89 @@ export function aggregateDataConfidence(bundles: AgentOutputBundle[]): "high" | 
   if (confidences.includes("low")) return "low";
   if (confidences.includes("medium")) return "medium";
   return "high";
+}
+
+// ─────────────────────────────────────────────────────────────
+// Operator task suggestions — deterministic, from structured agent outputs
+// Never touches Meta/GHL/SMS/email. Creating a task != work was performed externally.
+// ─────────────────────────────────────────────────────────────
+
+export function buildOperatorTaskSuggestions(
+  bundles: AgentOutputBundle[],
+  clientName?: string | null,
+  clientId?: string | null
+): OperatorTaskSuggestion[] {
+  const seen = new Set<string>();
+  const suggestions: OperatorTaskSuggestion[] = [];
+  const sfx = clientName ? ` for ${clientName}` : "";
+
+  function add(
+    title: string,
+    taskType: OperatorTaskType,
+    priority: OperatorTaskSuggestion["priority"],
+    description: string,
+    sourceAgent: string
+  ) {
+    if (seen.has(title)) return;
+    seen.add(title);
+    suggestions.push({ title, description, taskType, priority, clientId: clientId ?? null, sourceAgent });
+  }
+
+  // Map a blocking item label or risk reason string → task suggestion.
+  // Uses simple includes() checks on the lowercased string — no regex, no synthesis text parsing.
+  function mapLabel(label: string, sourceAgent: string, context: "blocker" | "risk") {
+    const low = label.toLowerCase();
+    const prefix = context === "blocker" ? "Launch blocker" : "Health risk";
+    const desc = `${prefix}: ${label}. Internal task only. No external action has been performed.`;
+    if (low.includes("meta ad account")) {
+      add(`Connect Meta Ad Account${sfx}`, "integration", "urgent", desc, sourceAgent);
+    } else if (low.includes("meta pixel") || low.includes("pixel installed") || low.includes("pixel not installed")) {
+      add(`Install Meta Pixel${sfx}`, "integration", "urgent", desc, sourceAgent);
+    } else if (low.includes("facebook page")) {
+      add(`Connect Facebook Page${sfx}`, "integration", "high", desc, sourceAgent);
+    } else if (low.includes("ghl location")) {
+      add(`Connect GHL Location${sfx}`, "integration", "urgent", desc, sourceAgent);
+    } else if (low.includes("ghl sync") || (low.includes("sync") && low.includes("confirmed"))) {
+      add(`Trigger fresh GHL sync${sfx}`, "data_cleanup", "medium", desc, sourceAgent);
+    } else if (low.includes("approved creative") || low.includes("creative asset")) {
+      add(`Upload and approve creative assets${sfx}`, "creative", "high", desc, sourceAgent);
+    } else if (low.includes("campaign draft")) {
+      add(`Prepare approval-ready campaign draft${sfx}`, "campaign", "high", desc, sourceAgent);
+    }
+  }
+
+  for (const bundle of bundles) {
+    const { agentId, output } = bundle;
+
+    if (agentId === "launch_readiness") {
+      const lr = output as { blockingItems?: string[] };
+      for (const item of lr.blockingItems ?? []) {
+        mapLabel(item, agentId, "blocker");
+      }
+    }
+
+    if (agentId === "client_health") {
+      const ch = output as { riskReasons?: string[] };
+      for (const reason of ch.riskReasons ?? []) {
+        // Strip scoring suffix like " (-8)"
+        mapLabel(reason.replace(/ \(-\d+\)$/, ""), agentId, "risk");
+      }
+    }
+
+    if (agentId === "ghl_followup") {
+      const ghl = output as { ghlStaleDays?: number | null; pipelineIssue?: string | null };
+      if (typeof ghl.ghlStaleDays === "number" && ghl.ghlStaleDays > 3) {
+        add(
+          `Trigger fresh GHL sync${sfx}`,
+          "data_cleanup", "medium",
+          `GHL data is ${ghl.ghlStaleDays} days stale. Internal task only. No external action has been performed.`,
+          agentId
+        );
+      }
+    }
+  }
+
+  return suggestions;
 }
 
 export function buildSynthesisPrompt(

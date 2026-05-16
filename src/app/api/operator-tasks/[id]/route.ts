@@ -1,5 +1,5 @@
 // Server-side only — update a single operator_tasks row.
-// Only updates status, priority, title, description, due_date, assigned_to.
+// Only updates status, priority, title, description, due_date, assigned_to, checklist.
 // No Meta, GHL, SMS, email, or external action. Saving does not mean work was done externally.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,6 +15,12 @@ const ALLOWED_PRIORITIES = ["urgent", "high", "medium", "low"] as const;
 type AllowedStatus = (typeof ALLOWED_STATUSES)[number];
 type AllowedPriority = (typeof ALLOWED_PRIORITIES)[number];
 
+interface ChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
 interface PatchBody {
   status?: string;
   priority?: string;
@@ -22,6 +28,7 @@ interface PatchBody {
   description?: string;
   dueDate?: string;
   assignedTo?: string;
+  checklist?: unknown;
 }
 
 export async function PATCH(
@@ -97,6 +104,27 @@ export async function PATCH(
 
   if (body.assignedTo !== undefined) {
     updates.assigned_to = typeof body.assignedTo === "string" ? body.assignedTo.trim().slice(0, 200) || null : null;
+  }
+
+  if (body.checklist !== undefined) {
+    if (!Array.isArray(body.checklist)) {
+      return NextResponse.json({ error: "checklist must be an array" }, { status: 400 });
+    }
+    if (body.checklist.length > 50) {
+      return NextResponse.json({ error: "checklist cannot exceed 50 items" }, { status: 400 });
+    }
+    const sanitized: ChecklistItem[] = [];
+    for (const item of body.checklist) {
+      if (typeof item !== "object" || item === null) continue;
+      const it = item as Record<string, unknown>;
+      if (typeof it.id !== "string" || typeof it.label !== "string") continue;
+      sanitized.push({
+        id: it.id.trim().slice(0, 100),
+        label: it.label.trim().slice(0, 500),
+        done: it.done === true,
+      });
+    }
+    updates.checklist = sanitized;
   }
 
   // Reject no-op patches (only updated_at set)

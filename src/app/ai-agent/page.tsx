@@ -880,67 +880,54 @@ interface TaskRule {
   taskType: string;
 }
 
+// Each `match` tolerates flexible natural language between the noun phrase and the
+// negative indicator — `[^✓\n]{0,60}` allows colons, "has", "is", dashes, parens, etc.
+// while stopping at a ✓ (completed item) or newline to avoid cross-sentence matches.
 const TASK_RULES: TaskRule[] = [
   {
-    // Matches: "✗ Meta Ad Account connected", "Meta Ad Account not connected",
-    // "meta ad account missing", "Missing: Meta Ad Account", "connect meta ad account"
-    match: /meta\s+ad\s+account\s*(not\s+connected|missing|disconnected)|ad\s+account\s+missing|connect\s+meta\s+ad\s+account|✗\s*meta\s+ad\s+account/i,
+    match: /✗[^\n]*meta\s+ad\s+account|no\s+(?:\w+\s+){0,3}meta\s+ad\s+account|meta\s+(?:ad\s+)?account[^✓\n]{0,60}(?:not\b|missing|pending|disconnected|unconnected)|\bad\s+account[^✓\n]{0,60}(?:not\s+connected|missing|disconnected)|connect\s+(?:the\s+)?meta\s+(?:ad\s+)?account/i,
     title: (c) => `Connect Meta Ad Account${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    // Matches: "✗ Meta Pixel installed", "Meta Pixel not installed", "pixel missing",
-    // "install meta pixel", "Meta Pixel"  (in Missing: list)
-    match: /meta\s+pixel\s*(not\s+installed|missing)|pixel\s+(not\s+installed|missing)|install\s+meta\s+pixel|✗\s*meta\s+pixel/i,
+    match: /✗[^\n]*meta\s+pixel|no\s+(?:\w+\s+){0,3}meta\s+pixel|meta\s+pixel[^✓\n]{0,60}(?:not\b|missing|pending|not\s+installed)|pixel[^✓\n]{0,40}(?:not\s+installed|missing|pending)|install\s+(?:the\s+)?meta\s+pixel/i,
     title: (c) => `Install Meta Pixel${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    // Matches: "✗ Facebook Page connected", "Facebook Page not connected",
-    // "facebook page missing", "connect facebook page", "Missing: Facebook Page"
-    match: /facebook\s+page\s*(not\s+connected|missing|disconnected)|page\s+not\s+connected|connect\s+facebook\s+page|✗\s*facebook\s+page/i,
+    match: /✗[^\n]*facebook\s+page|no\s+(?:\w+\s+){0,3}facebook\s+page|facebook\s+page[^✓\n]{0,60}(?:not\b|missing|pending|disconnected)|connect\s+(?:the\s+)?facebook\s+page/i,
     title: (c) => `Connect Facebook Page${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "integration",
   },
   {
-    // Matches: "✗ GHL Location connected", "GHL Location not connected",
-    // "ghl location missing", "Missing: GHL Location"
-    match: /ghl\s+location\s*(not\s+connected|missing|disconnected)|connect\s+ghl\s+location|✗\s*ghl\s+location/i,
+    match: /✗[^\n]*ghl\s+location|no\s+(?:\w+\s+){0,3}ghl\s+location|ghl\s+location[^✓\n]{0,60}(?:not\b|missing|pending|disconnected)|connect\s+(?:the\s+)?ghl\s+location/i,
     title: (c) => `Connect GHL Location${c ? ` for ${c}` : ""}`,
     priority: "urgent",
     taskType: "integration",
   },
   {
-    // Matches: "✗ Approved creative asset", "No approved creative asset",
-    // "approved creative missing", "upload creative", "approve creative"
-    match: /no\s+approved\s+creative\s+assets?|approved\s+creative\s+(missing|not\s+found)|upload\s+creative|approve\s+creative|✗\s*approved\s+creative/i,
+    match: /no\s+approved\s+creative\s+assets?|✗[^\n]*approved\s+creative|no\s+creative\s+assets?|approved\s+creative\s+assets?[^✓\n]{0,60}(?:not\b|missing|pending)|upload\s+(?:and\s+approve\s+)?creative/i,
     title: (c) => `Upload and approve creative assets${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "creative",
   },
   {
-    // Matches: "✗ Campaign draft approved or ready", "No approved campaign draft",
-    // "campaign draft missing", "no approved draft", "prepare campaign draft"
-    match: /no\s+(approved\s+)?campaign\s+draft|campaign\s+draft\s+(missing|not\s+approved|not\s+ready|approved\s+or\s+ready)|no\s+approved\s+draft|prepare\s+campaign\s+draft|✗\s*campaign\s+draft/i,
+    match: /no\s+(?:approved\s+)?campaign\s+draft|✗[^\n]*campaign\s+draft|campaign\s+draft[^✓\n]{0,60}(?:not\b|missing|pending|approved\s+or\s+ready)|prepare\s+(?:a\s+)?campaign\s+draft/i,
     title: (c) => `Prepare approval-ready campaign draft${c ? ` for ${c}` : ""}`,
     priority: "high",
     taskType: "campaign",
   },
   {
-    // Matches: "GHL Pipeline ID missing", "pipeline id needs cleanup",
-    // "pipeline id mismatch", "backfill ghl pipeline id"
-    match: /(ghl\s+)?pipeline\s+id\s*(missing|needs?\s+cleanup|needs?\s+backfill|mismatch)|backfill\s+(ghl\s+)?pipeline\s+id/i,
+    match: /pipeline\s+id[^✓\n]{0,40}(?:missing|pending|needs?|mismatch)|backfill\s+(?:ghl\s+)?pipeline/i,
     title: (c) => `Backfill GHL Pipeline ID${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "data_cleanup",
   },
   {
-    // Matches: "Last sync", "stale sync", "data may be stale", "fresh sync recommended",
-    // "✗ GHL sync confirmed" (actual mock label), "trigger a fresh sync"
-    match: /last\s+sync|stale\s+sync|data\s+may\s+be\s+stale|trigger\s+a?\s*fresh\s+sync|fresh\s+sync\s+recommended|✗\s*ghl\s+sync/i,
+    match: /last\s+sync|stale\s+sync|data\s+may\s+be\s+stale|fresh\s+sync\s+recommended|trigger\s+(?:a\s+)?fresh\s+sync|✗[^\n]*ghl\s+sync/i,
     title: (c) => `Trigger fresh GHL sync${c ? ` for ${c}` : ""}`,
     priority: "medium",
     taskType: "data_cleanup",

@@ -106,10 +106,12 @@ function VeronicaDraftCard({
   draft,
   canApprove,
   onStatusChange,
+  feedback,
 }: {
   draft: VeronicaDraft;
   canApprove: boolean;
   onStatusChange: (id: string, status: VeronicaDraft["approvalStatus"]) => Promise<void>;
+  feedback?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -293,6 +295,13 @@ function VeronicaDraftCard({
               {expanded ? "Collapse" : "Review Draft"}
             </button>
           </div>
+
+          {feedback && (
+            <div className="mt-2 flex items-center gap-1.5 text-[11px] text-[#22c55e]">
+              <CheckCircle2 size={11} />
+              {feedback}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -693,6 +702,7 @@ export default function ApprovalsPage() {
   // Veronica drafts state
   const [veronicaDrafts, setVeronicaDrafts] = useState<VeronicaDraft[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [draftFeedback, setDraftFeedback] = useState<Record<string, string>>({});
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -717,6 +727,15 @@ export default function ApprovalsPage() {
       setVeronicaDrafts((prev) =>
         prev.map((d) => (d.id === id ? { ...d, approvalStatus: status } : d))
       );
+      if (status === "approved") {
+        const body = await res.json().catch(() => ({}));
+        const msg = body.taskAlreadyExists
+          ? "Draft approved. Operator task already exists."
+          : body.createdTaskId
+          ? "Draft approved. Operator task created."
+          : "Draft approved.";
+        setDraftFeedback((prev) => ({ ...prev, [id]: msg }));
+      }
     }
   }
 
@@ -941,6 +960,7 @@ export default function ApprovalsPage() {
                 draft={draft}
                 canApprove={canApprove}
                 onStatusChange={handleVeronicaStatusChange}
+                feedback={draftFeedback[draft.id]}
               />
             ))}
           </div>
@@ -965,6 +985,7 @@ export default function ApprovalsPage() {
                   draft={draft}
                   canApprove={canApprove}
                   onStatusChange={handleVeronicaStatusChange}
+                  feedback={draftFeedback[draft.id]}
                 />
               ))}
             </div>
@@ -999,6 +1020,7 @@ export default function ApprovalsPage() {
                     draft={draft}
                     canApprove={canApprove}
                     onStatusChange={handleVeronicaStatusChange}
+                    feedback={draftFeedback[draft.id]}
                   />
                 ))}
               </div>

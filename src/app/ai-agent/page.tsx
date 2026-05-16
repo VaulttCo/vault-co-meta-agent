@@ -492,8 +492,11 @@ interface ConsoleMsg {
   whatRequiresHumanApproval?: string[];
   whatIsBlocked?: string[];
   dataConfidence?: "high" | "medium" | "low";
-  // Client Veronica detected from the message — used by Save Draft
+  // Client Veronica detected from the message — used by Save Draft.
+  // detectedClientName is the official saved name from Supabase — always prefer this over
+  // any client-side lookup, which can fail when IDs differ between mock and live data.
   detectedClientId?: string;
+  detectedClientName?: string;
   // Deterministic task suggestions from structured agent outputs
   operatorTaskSuggestions?: OperatorTaskSuggestion[];
 }
@@ -1292,6 +1295,7 @@ function AICampaignBuilderContent() {
           whatIsBlocked: data.whatIsBlocked,
           dataConfidence: data.dataConfidence,
           detectedClientId: data.detectedClientId,
+          detectedClientName: data.detectedClientName,
           operatorTaskSuggestions: data.operatorTaskSuggestions,
         },
       ]);
@@ -2567,25 +2571,28 @@ function AICampaignBuilderContent() {
                         <SaveDraftMenu
                           msg={msg}
                           clientName={
-                            msg.detectedClientId
+                            msg.detectedClientName ??
+                            (msg.detectedClientId
                               ? clients.find((c) => c.id === msg.detectedClientId)?.name
-                              : undefined
+                              : undefined)
                           }
                         />
                         <SaveAsTaskButton
                           msg={msg}
                           clientName={
-                            msg.detectedClientId
+                            msg.detectedClientName ??
+                            (msg.detectedClientId
                               ? clients.find((c) => c.id === msg.detectedClientId)?.name
-                              : undefined
+                              : undefined)
                           }
                         />
                         <GenerateTaskListButton
                           msg={msg}
                           clientName={
-                            msg.detectedClientId
+                            msg.detectedClientName ??
+                            (msg.detectedClientId
                               ? clients.find((c) => c.id === msg.detectedClientId)?.name
-                              : undefined
+                              : undefined)
                           }
                         />
                       </div>

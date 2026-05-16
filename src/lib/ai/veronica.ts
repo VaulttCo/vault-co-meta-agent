@@ -1597,26 +1597,35 @@ export function buildOperatorTaskSuggestions(
     suggestions.push({ title, description, taskType, priority, clientId: clientId ?? null, sourceAgent });
   }
 
+  const tail = " Internal task only. No external action has been performed.";
+
   // Map a blocking item label or risk reason string → task suggestion.
   // Uses simple includes() checks on the lowercased string — no regex, no synthesis text parsing.
-  function mapLabel(label: string, sourceAgent: string, context: "blocker" | "risk") {
+  // Descriptions use hardcoded negative-form wording so the task clearly states what is MISSING,
+  // not the check label (which is written as a passing condition and would be misleading if echoed).
+  function mapLabel(label: string, sourceAgent: string) {
     const low = label.toLowerCase();
-    const prefix = context === "blocker" ? "Launch blocker" : "Health risk";
-    const desc = `${prefix}: ${label}. Internal task only. No external action has been performed.`;
     if (low.includes("meta ad account")) {
-      add(`Connect Meta Ad Account${sfx}`, "integration", "urgent", desc, sourceAgent);
+      add(`Connect Meta Ad Account${sfx}`, "integration", "urgent",
+        `Launch blocker: Meta Ad Account not connected.${tail}`, sourceAgent);
     } else if (low.includes("meta pixel") || low.includes("pixel installed") || low.includes("pixel not installed")) {
-      add(`Install Meta Pixel${sfx}`, "integration", "urgent", desc, sourceAgent);
+      add(`Install Meta Pixel${sfx}`, "integration", "urgent",
+        `Launch blocker: Meta Pixel not installed.${tail}`, sourceAgent);
     } else if (low.includes("facebook page")) {
-      add(`Connect Facebook Page${sfx}`, "integration", "high", desc, sourceAgent);
+      add(`Connect Facebook Page${sfx}`, "integration", "high",
+        `Launch blocker: Facebook Page not connected.${tail}`, sourceAgent);
     } else if (low.includes("ghl location")) {
-      add(`Connect GHL Location${sfx}`, "integration", "urgent", desc, sourceAgent);
+      add(`Connect GHL Location${sfx}`, "integration", "urgent",
+        `Launch blocker: GHL Location not connected.${tail}`, sourceAgent);
     } else if (low.includes("ghl sync") || (low.includes("sync") && low.includes("confirmed"))) {
-      add(`Trigger fresh GHL sync${sfx}`, "data_cleanup", "medium", desc, sourceAgent);
+      add(`Trigger fresh GHL sync${sfx}`, "data_cleanup", "medium",
+        `Launch blocker: GHL sync has not been confirmed. Trigger an initial sync from the client profile → Integrations tab.${tail}`, sourceAgent);
     } else if (low.includes("approved creative") || low.includes("creative asset")) {
-      add(`Upload and approve creative assets${sfx}`, "creative", "high", desc, sourceAgent);
+      add(`Upload and approve creative assets${sfx}`, "creative", "high",
+        `Launch blocker: No approved creative assets on file.${tail}`, sourceAgent);
     } else if (low.includes("campaign draft")) {
-      add(`Prepare approval-ready campaign draft${sfx}`, "campaign", "high", desc, sourceAgent);
+      add(`Prepare approval-ready campaign draft${sfx}`, "campaign", "high",
+        `Launch blocker: No approved campaign draft on file.${tail}`, sourceAgent);
     }
   }
 
@@ -1626,15 +1635,15 @@ export function buildOperatorTaskSuggestions(
     if (agentId === "launch_readiness") {
       const lr = output as { blockingItems?: string[] };
       for (const item of lr.blockingItems ?? []) {
-        mapLabel(item, agentId, "blocker");
+        mapLabel(item, agentId);
       }
     }
 
     if (agentId === "client_health") {
       const ch = output as { riskReasons?: string[] };
       for (const reason of ch.riskReasons ?? []) {
-        // Strip scoring suffix like " (-8)"
-        mapLabel(reason.replace(/ \(-\d+\)$/, ""), agentId, "risk");
+        // Strip scoring suffix like " (-8)" before routing
+        mapLabel(reason.replace(/ \(-\d+\)$/, ""), agentId);
       }
     }
 
@@ -1644,9 +1653,22 @@ export function buildOperatorTaskSuggestions(
         add(
           `Trigger fresh GHL sync${sfx}`,
           "data_cleanup", "medium",
-          `GHL data is ${ghl.ghlStaleDays} days stale. Internal task only. No external action has been performed.`,
+          `Data cleanup: GHL sync is stale and should be refreshed from the client profile Integrations tab.${tail}`,
           agentId
         );
+      }
+    }
+
+    if (agentId === "data_quality") {
+      const dq = output as { requiredFixBeforeDecision?: string[]; conflictingData?: string[] };
+      const allItems = [...(dq.requiredFixBeforeDecision ?? []), ...(dq.conflictingData ?? [])];
+      for (const item of allItems) {
+        const low = item.toLowerCase();
+        if (low.includes("pipeline id") || (low.includes("pipeline") && low.includes("backfill"))) {
+          add(`Backfill GHL Pipeline ID${sfx}`, "data_cleanup", "medium",
+            `Configuration cleanup: GHL Pipeline ID needs to be backfilled.${tail}`,
+            agentId);
+        }
       }
     }
   }

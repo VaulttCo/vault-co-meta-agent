@@ -77,6 +77,7 @@ export async function GET(_req: NextRequest) {
       dueDate: row.due_date ?? null,
       assignedTo: row.assigned_to ?? null,
       createdBy: row.created_by ?? null,
+      checklist: Array.isArray(row.checklist) ? row.checklist : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));

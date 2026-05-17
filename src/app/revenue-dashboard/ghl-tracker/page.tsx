@@ -1,20 +1,21 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, AlertCircle, Info, Loader2 } from "lucide-react";
+import { RefreshCw, AlertCircle, Info, Loader2, Eye } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
 import {
   makeDefaultSettings,
   type ClientRevenueSettings,
   type MonthlyRevenueSnapshot,
+  type GHLPreviewResult,
 } from "@/lib/revenue/types";
 import {
   GOLD, GOLD_BG, GOLD_BORDER, fmtCurrency,
 } from "@/lib/revenue/calculations";
 import {
   RevenuePageHeader, SectionCard, SectionHeader, TableEmpty,
-  InvoiceStatusBadge, RecurringToggle, PhaseBadge, BillingEmptyState, SafetyNote,
+  RecurringToggle, PhaseBadge, BillingEmptyState, SafetyNote,
   PageErrorState,
 } from "../_components";
 
@@ -49,10 +50,16 @@ function ReviewStatusBadge({ status }: { status: "draft" | "reviewed" | "locked"
   );
 }
 
+type GHLPreviewEntry =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; result: GHLPreviewResult }
+  | { status: "error"; error: string };
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GhlTrackerPage() {
-  // ── Clients + settings (existing Phase 2A) ────────────────────────────────
+  // ── Clients + settings ────────────────────────────────────────────────────
   const [clients, setClients]               = useState<Client[]>([]);
   const [loading, setLoading]               = useState(true);
   const [clientsError, setClientsError]     = useState<string | null>(null);
@@ -61,14 +68,19 @@ export default function GhlTrackerPage() {
   const [settingsError, setSettingsError]   = useState<string | null>(null);
   const [savingToggle, setSavingToggle]     = useState<Record<string, boolean>>({});
 
-  // ── Phase 2B: monthly revenue snapshots ───────────────────────────────────
-  const [billingMonth, setBillingMonth]     = useState<string>(currentYearMonth);
-  const [snapshotsMap, setSnapshotsMap]     = useState<Record<string, MonthlyRevenueSnapshot>>({});
+  // ── Phase 2B: manual snapshots ────────────────────────────────────────────
+  const [billingMonth, setBillingMonth]         = useState<string>(currentYearMonth);
+  const [manualSnapshotsMap, setManualSnapshotsMap] = useState<Record<string, MonthlyRevenueSnapshot>>({});
+  const [ghlSnapshotsMap, setGhlSnapshotsMap]   = useState<Record<string, MonthlyRevenueSnapshot>>({});
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
-  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
-  const [revenueInputs, setRevenueInputs]   = useState<Record<string, string>>({});
-  const [notesInputs, setNotesInputs]       = useState<Record<string, string>>({});
-  const [savingSnapshot, setSavingSnapshot] = useState<Record<string, boolean>>({});
+  const [snapshotsError, setSnapshotsError]     = useState<string | null>(null);
+  const [revenueInputs, setRevenueInputs]       = useState<Record<string, string>>({});
+  const [notesInputs, setNotesInputs]           = useState<Record<string, string>>({});
+  const [savingSnapshot, setSavingSnapshot]     = useState<Record<string, boolean>>({});
+
+  // ── Phase 2C: GHL preview state ───────────────────────────────────────────
+  const [ghlPreviews, setGhlPreviews]   = useState<Record<string, GHLPreviewEntry>>({});
+  const [savingGhl, setSavingGhl]       = useState<Record<string, boolean>>({});
 
   // ── Load clients ──────────────────────────────────────────────────────────
   function loadClients() {
@@ -90,7 +102,7 @@ export default function GhlTrackerPage() {
 
   useEffect(() => loadClients(), []);
 
-  // ── Load revenue settings (with 10s timeout) ─────────────────────────────
+  // ── Load revenue settings (10s timeout) ──────────────────────────────────
   useEffect(() => {
     setSettingsLoading(true);
     setSettingsError(null);
@@ -111,21 +123,20 @@ export default function GhlTrackerPage() {
           setSettingsError(isAbort ? "Settings request timed out." : "Unable to load billing settings.");
         }
       })
-      .finally(() => {
-        clearTimeout(tid);
-        if (!cancelled) setSettingsLoading(false);
-      });
+      .finally(() => { clearTimeout(tid); if (!cancelled) setSettingsLoading(false); });
 
     return () => { cancelled = true; controller.abort(); clearTimeout(tid); };
   }, []);
 
-  // ── Load snapshots when billing month changes (with 10s timeout) ──────────
+  // ── Load snapshots when billing month changes (10s timeout) ──────────────
   useEffect(() => {
     setSnapshotsLoading(true);
     setSnapshotsError(null);
-    setSnapshotsMap({});
+    setManualSnapshotsMap({});
+    setGhlSnapshotsMap({});
     setRevenueInputs({});
     setNotesInputs({});
+    setGhlPreviews({});
 
     let cancelled = false;
     const controller = new AbortController();
@@ -134,16 +145,24 @@ export default function GhlTrackerPage() {
     fetch(`/api/revenue-snapshots?billing_month=${toBillingMonthDate(billingMonth)}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : { snapshots: [] }))
       .then(({ snapshots }: { snapshots: MonthlyRevenueSnapshot[] }) => {
-        const map: Record<string, MonthlyRevenueSnapshot> = {};
-        const inputs: Record<string, string> = {};
-        const notes: Record<string, string> = {};
+        const manualMap: Record<string, MonthlyRevenueSnapshot> = {};
+        const ghlMap:    Record<string, MonthlyRevenueSnapshot> = {};
+        const inputs:    Record<string, string> = {};
+        const notes:     Record<string, string> = {};
+
         (snapshots ?? []).forEach((s) => {
-          map[s.clientId] = s;
-          inputs[s.clientId] = s.closedWonRevenue > 0 ? String(s.closedWonRevenue) : "";
-          notes[s.clientId]  = s.notes ?? "";
+          if (s.source === "ghl") {
+            ghlMap[s.clientId] = s;
+          } else {
+            manualMap[s.clientId] = s;
+            inputs[s.clientId] = s.closedWonRevenue > 0 ? String(s.closedWonRevenue) : "";
+            notes[s.clientId]  = s.notes ?? "";
+          }
         });
+
         if (!cancelled) {
-          setSnapshotsMap(map);
+          setManualSnapshotsMap(manualMap);
+          setGhlSnapshotsMap(ghlMap);
           setRevenueInputs(inputs);
           setNotesInputs(notes);
         }
@@ -154,15 +173,12 @@ export default function GhlTrackerPage() {
           setSnapshotsError(isAbort ? "Snapshots request timed out." : "Unable to load revenue snapshots.");
         }
       })
-      .finally(() => {
-        clearTimeout(tid);
-        if (!cancelled) setSnapshotsLoading(false);
-      });
+      .finally(() => { clearTimeout(tid); if (!cancelled) setSnapshotsLoading(false); });
 
     return () => { cancelled = true; controller.abort(); clearTimeout(tid); };
   }, [billingMonth]);
 
-  // ── Toggle recurring billing (Phase 2A) ───────────────────────────────────
+  // ── Toggle recurring billing ──────────────────────────────────────────────
   async function handleToggleRecurring(clientId: string) {
     const current = settingsMap[clientId]?.recurringBillingActive ?? false;
     const next = !current;
@@ -198,11 +214,11 @@ export default function GhlTrackerPage() {
     }
   }
 
-  // ── Save revenue snapshot (Phase 2B) ──────────────────────────────────────
+  // ── Save manual snapshot (Phase 2B) ──────────────────────────────────────
   async function handleSaveSnapshot(clientId: string) {
     const closedWonRevenue = parseFloat(revenueInputs[clientId] ?? "") || 0;
     const notes = notesInputs[clientId]?.trim() || null;
-    const existingSnapshot = snapshotsMap[clientId];
+    const existingSnapshot = manualSnapshotsMap[clientId];
 
     setSavingSnapshot((prev) => ({ ...prev, [clientId]: true }));
 
@@ -230,18 +246,80 @@ export default function GhlTrackerPage() {
 
       if (res.ok) {
         const { snapshot } = await res.json();
-        if (snapshot) setSnapshotsMap((prev) => ({ ...prev, [clientId]: snapshot }));
+        if (snapshot) setManualSnapshotsMap((prev) => ({ ...prev, [clientId]: snapshot }));
       }
     } catch {
-      // silent fail — no destructive rollback needed (read-only snapshot)
+      // silent fail — snapshot UI will retain its input values
     } finally {
       setSavingSnapshot((prev) => ({ ...prev, [clientId]: false }));
     }
   }
 
+  // ── Phase 2C: Preview GHL Closed Won ─────────────────────────────────────
+  async function handlePreviewGHL(clientId: string) {
+    setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loading" } }));
+
+    try {
+      const res = await fetch("/api/revenue-snapshots/ghl-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, billingMonth: toBillingMonthDate(billingMonth) }),
+      });
+
+      const data = await res.json() as { preview?: GHLPreviewResult; error?: string };
+
+      if (res.ok && data.preview) {
+        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview! } }));
+      } else {
+        setGhlPreviews((prev) => ({
+          ...prev,
+          [clientId]: { status: "error", error: data.error ?? "Unable to fetch GHL data." },
+        }));
+      }
+    } catch (err) {
+      setGhlPreviews((prev) => ({
+        ...prev,
+        [clientId]: { status: "error", error: err instanceof Error ? err.message : "Network error." },
+      }));
+    }
+  }
+
+  // ── Phase 2C: Save GHL snapshot ───────────────────────────────────────────
+  async function handleSaveGHLSnapshot(clientId: string) {
+    const preview = ghlPreviews[clientId];
+    if (preview?.status !== "loaded") return;
+
+    const { result } = preview;
+    setSavingGhl((prev) => ({ ...prev, [clientId]: true }));
+
+    try {
+      const res = await fetch("/api/revenue-snapshots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          billingMonth: toBillingMonthDate(billingMonth),
+          closedWonRevenue: result.closedWonRevenue,
+          source: "ghl",
+          dealCount: result.closedWonDealsCount,
+          sourcePayload: { dealPreview: result.dealPreview, ghlLocationId: result.ghlLocationId, ghlPipelineId: result.ghlPipelineId },
+        }),
+      });
+
+      if (res.ok) {
+        const { snapshot } = await res.json();
+        if (snapshot) setGhlSnapshotsMap((prev) => ({ ...prev, [clientId]: snapshot }));
+        // Clear preview after save so the table shows the saved snapshot
+        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "idle" } }));
+      }
+    } catch {
+      // silent fail
+    } finally {
+      setSavingGhl((prev) => ({ ...prev, [clientId]: false }));
+    }
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
-  // Show all non-archived clients so admins can enable recurring billing
-  // for clients at any pipeline stage, not just those with status="active".
   const pipelineClients = useMemo(() => clients.filter((c) => c.status !== "archived"), [clients]);
   const recurringActiveCount = useMemo(
     () => pipelineClients.filter((c) => settingsMap[c.id]?.recurringBillingActive).length,
@@ -249,32 +327,49 @@ export default function GhlTrackerPage() {
   );
 
   const monthTotals = useMemo(() => {
-    const snaps = Object.values(snapshotsMap);
+    const manualSnaps = Object.values(manualSnapshotsMap);
+    const ghlSnaps    = Object.values(ghlSnapshotsMap);
+    const allSnaps    = [...manualSnaps, ...ghlSnaps];
     return {
-      closedWonRevenue: snaps.reduce((s, x) => s + x.closedWonRevenue, 0),
-      vaultCoFee:       snaps.reduce((s, x) => s + x.vaultCoFee, 0),
-      nickEarnings:     snaps.reduce((s, x) => s + x.nickRecurringEarnings, 0),
-      reviewed:         snaps.filter((x) => x.reviewStatus !== "draft").length,
-      draft:            snaps.filter((x) => x.reviewStatus === "draft").length,
-      total:            snaps.length,
+      manual: {
+        closedWonRevenue: manualSnaps.reduce((s, x) => s + x.closedWonRevenue, 0),
+        vaultCoFee:       manualSnaps.reduce((s, x) => s + x.vaultCoFee, 0),
+        nickEarnings:     manualSnaps.reduce((s, x) => s + x.nickRecurringEarnings, 0),
+        count:            manualSnaps.length,
+      },
+      ghl: {
+        closedWonRevenue: ghlSnaps.reduce((s, x) => s + x.closedWonRevenue, 0),
+        vaultCoFee:       ghlSnaps.reduce((s, x) => s + x.vaultCoFee, 0),
+        nickEarnings:     ghlSnaps.reduce((s, x) => s + x.nickRecurringEarnings, 0),
+        count:            ghlSnaps.length,
+        dealCount:        ghlSnaps.reduce((s, x) => s + (x.dealCount ?? 0), 0),
+      },
+      combined: {
+        closedWonRevenue: allSnaps.reduce((s, x) => s + x.closedWonRevenue, 0),
+        vaultCoFee:       allSnaps.reduce((s, x) => s + x.vaultCoFee, 0),
+        nickEarnings:     allSnaps.reduce((s, x) => s + x.nickRecurringEarnings, 0),
+        reviewed:         allSnaps.filter((x) => x.reviewStatus !== "draft").length,
+        draft:            allSnaps.filter((x) => x.reviewStatus === "draft").length,
+        total:            allSnaps.length,
+      },
     };
-  }, [snapshotsMap]);
+  }, [manualSnapshotsMap, ghlSnapshotsMap]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <RevenuePageHeader
         title="GHL Revenue Share Tracker"
-        subtitle="Manual revenue snapshots · recurring billing toggles · Phase 2C will add live GHL sync and Stripe draft invoices"
-        badge={<PhaseBadge label="PHASE 2B" />}
+        subtitle="Manual revenue entry · GHL Closed Won read-only sync · recurring billing management"
+        badge={<PhaseBadge label="PHASE 2C" />}
       />
 
       <SectionCard>
         <SectionHeader
           icon={RefreshCw}
           title="GHL Revenue Share Tracker"
-          subtitle="Enter client Closed Won revenue manually. Vault Co 5% fee and Nick recurring earnings are computed server-side."
-          badge={<PhaseBadge label="PHASE 2B" />}
+          subtitle="Enter revenue manually or pull Closed Won data from GHL. Vault Co 5% fee and Nick recurring earnings are computed server-side."
+          badge={<PhaseBadge label="PHASE 2C" />}
         />
 
         {/* ── Billing Month Selector ──────────────────────────────────────── */}
@@ -307,47 +402,104 @@ export default function GhlTrackerPage() {
         </div>
 
         {/* ── Monthly Totals ──────────────────────────────────────────────── */}
-        {monthTotals.total > 0 && (
+        {monthTotals.combined.total > 0 && (
           <div className="px-5 py-4 border-b" style={{ borderColor: "var(--t-border-nav)" }}>
             <div className="text-[9px] font-bold uppercase tracking-widest mb-3"
               style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
               {formatBillingMonthLabel(billingMonth)} — Snapshot Totals
               <span className="ml-2 normal-case font-normal" style={{ color: "rgba(107,122,153,0.5)" }}>
-                (manual snapshots only — not confirmed revenue)
+                (snapshots only — not confirmed revenue)
               </span>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              {[
-                { label: "Client Closed Won Revenue", value: fmtCurrency(monthTotals.closedWonRevenue), color: "var(--t-text)", note: "Client revenue — not Vault Co's" },
-                { label: "Vault Co 5% Fee",           value: fmtCurrency(monthTotals.vaultCoFee),       color: GOLD,           note: "Estimated fee — not collected"  },
-                { label: "Nick Recurring Earnings",   value: fmtCurrency(monthTotals.nickEarnings),     color: "#a78bfa",      note: "= Vault Co fee (100%)"          },
-                { label: "Jaxon Recurring Earnings",  value: fmtCurrency(0),                            color: "rgba(107,122,153,0.5)", note: "$0 per business model" },
-                { label: "Snapshots",
-                  value: `${monthTotals.reviewed} reviewed · ${monthTotals.draft} draft`,
-                  color: monthTotals.reviewed > 0 ? "#22c55e" : "rgba(107,122,153,0.6)",
-                  note: "Review status" },
-              ].map((item) => (
-                <div key={item.label} className="rounded-lg p-3"
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Manual totals */}
+              {monthTotals.manual.count > 0 && (
+                <div className="rounded-lg p-3.5 space-y-2"
                   style={{ backgroundColor: "rgba(0,129,242,0.03)", border: "1px solid rgba(61,79,110,0.12)" }}>
-                  <div className="text-[13px] font-bold"
-                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: item.color }}>
-                    {item.value}
+                  <div className="text-[9px] font-bold uppercase tracking-widest"
+                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
+                    Manual Entry ({monthTotals.manual.count} snapshot{monthTotals.manual.count !== 1 ? "s" : ""})
                   </div>
-                  <div className="text-[9px] mt-0.5 font-medium" style={{ color: "var(--t-dim)" }}>{item.label}</div>
-                  <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.45)" }}>{item.note}</div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Client Closed Won", value: fmtCurrency(monthTotals.manual.closedWonRevenue), color: "var(--t-text)" },
+                      { label: "Vault Co 5% Fee",   value: fmtCurrency(monthTotals.manual.vaultCoFee),       color: GOLD           },
+                      { label: "Nick Recurring",     value: fmtCurrency(monthTotals.manual.nickEarnings),     color: "#a78bfa"       },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div className="text-[13px] font-bold"
+                          style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: item.color }}>
+                          {item.value}
+                        </div>
+                        <div className="text-[9px] mt-0.5" style={{ color: "var(--t-dim)" }}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* GHL totals */}
+              {monthTotals.ghl.count > 0 && (
+                <div className="rounded-lg p-3.5 space-y-2"
+                  style={{ backgroundColor: "rgba(34,197,94,0.03)", border: "1px solid rgba(34,197,94,0.12)" }}>
+                  <div className="text-[9px] font-bold uppercase tracking-widest"
+                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#22c55e" }}>
+                    GHL Sync ({monthTotals.ghl.count} snapshot{monthTotals.ghl.count !== 1 ? "s" : ""} · {monthTotals.ghl.dealCount} deal{monthTotals.ghl.dealCount !== 1 ? "s" : ""})
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "GHL Closed Won",  value: fmtCurrency(monthTotals.ghl.closedWonRevenue), color: "var(--t-text)" },
+                      { label: "Vault Co 5% Fee", value: fmtCurrency(monthTotals.ghl.vaultCoFee),       color: GOLD           },
+                      { label: "Nick Recurring",  value: fmtCurrency(monthTotals.ghl.nickEarnings),     color: "#a78bfa"       },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div className="text-[13px] font-bold"
+                          style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: item.color }}>
+                          {item.value}
+                        </div>
+                        <div className="text-[9px] mt-0.5" style={{ color: "var(--t-dim)" }}>{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Combined totals row */}
+            {monthTotals.manual.count > 0 && monthTotals.ghl.count > 0 && (
+              <div className="mt-3 pt-3 border-t flex items-center gap-6 flex-wrap"
+                style={{ borderColor: "var(--t-border-nav)" }}>
+                <span className="text-[9px] font-bold uppercase tracking-widest"
+                  style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
+                  Combined
+                </span>
+                {[
+                  { label: "Total Closed Won", value: fmtCurrency(monthTotals.combined.closedWonRevenue), color: "var(--t-text)" },
+                  { label: "Total Vault Co Fee", value: fmtCurrency(monthTotals.combined.vaultCoFee),    color: GOLD           },
+                  { label: "Total Nick Recurring", value: fmtCurrency(monthTotals.combined.nickEarnings), color: "#a78bfa"     },
+                  { label: "Status", value: `${monthTotals.combined.reviewed} reviewed · ${monthTotals.combined.draft} draft`,
+                    color: monthTotals.combined.reviewed > 0 ? "#22c55e" : "rgba(107,122,153,0.6)" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-1.5">
+                    <span className="text-[12px] font-bold"
+                      style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: item.color }}>
+                      {item.value}
+                    </span>
+                    <span className="text-[9px]" style={{ color: "var(--t-dim)" }}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── Phase 2 Alerts ──────────────────────────────────────────────── */}
+        {/* ── Alerts ──────────────────────────────────────────────────────── */}
         <div className="px-5 pt-4 space-y-2">
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
-            style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)" }}>
-            <AlertCircle size={13} style={{ color: "#f59e0b" }} />
-            <span className="text-[12px]" style={{ color: "#f59e0b" }}>
-              GHL pipeline connection not yet active. Closed Won revenue is entered manually until Phase 2C.
+            style={{ backgroundColor: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}>
+            <AlertCircle size={13} style={{ color: "#22c55e" }} />
+            <span className="text-[12px]" style={{ color: "#22c55e" }}>
+              Phase 2C: GHL read-only sync is active. Click &quot;Preview GHL&quot; to fetch Closed Won revenue for the billing month. Review and save to create a GHL Revenue Snapshot.
             </span>
           </div>
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
@@ -384,12 +536,14 @@ export default function GhlTrackerPage() {
 
         {/* ── Table ───────────────────────────────────────────────────────── */}
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[1100px]">
+          <table className="w-full min-w-[1400px]">
             <thead>
               <tr className="border-b" style={{ borderColor: "var(--t-border-nav)" }}>
-                {["Client", "Recurring Billing", "GHL Connected",
-                  "Client Closed Won Revenue", "Vault Co 5% Fee",
-                  "Nick Recurring", "Source", "Review Status", "Save"].map((h) => (
+                {[
+                  "Client", "Recurring Billing", "GHL Connected",
+                  "Manual Revenue Input", "GHL Closed Won", "Deal Count",
+                  "Vault Co 5% Fee", "Nick Recurring", "Review Status", "Actions",
+                ].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest"
                     style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
                     {h}
@@ -399,33 +553,48 @@ export default function GhlTrackerPage() {
             </thead>
             <tbody>
               {loading ? (
-                <TableEmpty colSpan={9} message="" loading />
+                <TableEmpty colSpan={10} message="" loading />
               ) : clientsError ? (
-                <tr><td colSpan={9}><PageErrorState message="Unable to load clients." detail={clientsError} onRetry={loadClients} /></td></tr>
+                <tr><td colSpan={10}><PageErrorState message="Unable to load clients." detail={clientsError} onRetry={loadClients} /></td></tr>
               ) : pipelineClients.length === 0 ? (
-                <TableEmpty colSpan={9} message="No clients in the pipeline yet. Add clients to begin tracking." />
+                <TableEmpty colSpan={10} message="No clients in the pipeline yet. Add clients to begin tracking." />
               ) : (
                 pipelineClients.map((client) => {
-                  const clientSettings  = settingsMap[client.id];
-                  const isOn            = clientSettings?.recurringBillingActive ?? false;
-                  const isSaving        = savingToggle[client.id] ?? false;
+                  const clientSettings   = settingsMap[client.id];
+                  const isOn             = clientSettings?.recurringBillingActive ?? false;
+                  const isSaving         = savingToggle[client.id] ?? false;
                   const isSnapshotSaving = savingSnapshot[client.id] ?? false;
-                  const hasGHL          = Boolean(clientSettings?.ghlPipelineId ?? client.ghlLocationId);
+                  const isGhlSaving      = savingGhl[client.id] ?? false;
+                  const hasGHL           = Boolean(clientSettings?.ghlLocationId ?? client.ghlLocationId);
                   const isSettingsLoaded = !settingsLoading;
-                  const existingSnapshot = snapshotsMap[client.id];
 
-                  // Live-computed values from current input (not yet saved)
-                  const rawInput      = parseFloat(revenueInputs[client.id] ?? "") || 0;
-                  const liveVaultFee  = Math.round(rawInput * 0.05 * 100) / 100;
-                  const liveNick      = liveVaultFee;
+                  const manualSnapshot   = manualSnapshotsMap[client.id];
+                  const ghlSnapshot      = ghlSnapshotsMap[client.id];
+                  const ghlPreviewEntry  = ghlPreviews[client.id] ?? { status: "idle" };
 
-                  // Display: live if user is editing, else saved snapshot values
-                  const displayFee    = rawInput > 0 || revenueInputs[client.id] !== undefined
-                    ? liveVaultFee
-                    : (existingSnapshot?.vaultCoFee ?? 0);
-                  const displayNick   = rawInput > 0 || revenueInputs[client.id] !== undefined
-                    ? liveNick
-                    : (existingSnapshot?.nickRecurringEarnings ?? 0);
+                  // Manual revenue display values
+                  const rawInput       = parseFloat(revenueInputs[client.id] ?? "") || 0;
+                  const liveVaultFee   = Math.round(rawInput * 0.05 * 100) / 100;
+                  const liveNick       = liveVaultFee;
+                  const displayManualFee  = rawInput > 0 ? liveVaultFee  : (manualSnapshot?.vaultCoFee ?? 0);
+                  const displayManualNick = rawInput > 0 ? liveNick       : (manualSnapshot?.nickRecurringEarnings ?? 0);
+
+                  // GHL revenue display values — prefer saved snapshot, then preview
+                  const ghlRevenue  = ghlSnapshot?.closedWonRevenue
+                    ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.closedWonRevenue : null);
+                  const ghlFee      = ghlSnapshot?.vaultCoFee
+                    ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.vaultCoFee : null);
+                  const ghlNick     = ghlSnapshot?.nickRecurringEarnings
+                    ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.nickRecurringEarnings : null);
+                  const ghlDeals    = ghlSnapshot?.dealCount
+                    ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.closedWonDealsCount : null);
+
+                  // Combined fees for display (prefer GHL snapshot, else manual, else preview)
+                  const displayFee  = (ghlSnapshot?.vaultCoFee ?? (ghlPreviewEntry.status === "loaded" ? ghlFee : null)) ?? displayManualFee;
+                  const displayNick = (ghlSnapshot?.nickRecurringEarnings ?? (ghlPreviewEntry.status === "loaded" ? ghlNick : null)) ?? displayManualNick;
+
+                  // Review status: GHL snapshot takes precedence over manual
+                  const displayReviewStatus = ghlSnapshot?.reviewStatus ?? manualSnapshot?.reviewStatus ?? null;
 
                   return (
                     <tr key={client.id}
@@ -449,7 +618,7 @@ export default function GhlTrackerPage() {
                         />
                       </td>
 
-                      {/* GHL status */}
+                      {/* GHL Connected */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <div className="w-2 h-2 rounded-full flex-shrink-0"
@@ -459,14 +628,19 @@ export default function GhlTrackerPage() {
                             {hasGHL ? "Connected" : "Not Connected"}
                           </span>
                         </div>
+                        {clientSettings?.ghlLocationId && (
+                          <div className="text-[9px] mt-0.5 font-mono truncate max-w-[120px]"
+                            style={{ color: "rgba(107,122,153,0.45)" }}>
+                            {clientSettings.ghlLocationId}
+                          </div>
+                        )}
                       </td>
 
-                      {/* Client Closed Won Revenue — editable */}
+                      {/* Manual Revenue Input */}
                       <td className="px-4 py-3.5">
                         {!isOn ? (
-                          <span className="text-[11px]"
-                            style={{ color: "rgba(107,122,153,0.4)" }}>
-                            Enable recurring billing above
+                          <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.4)" }}>
+                            Enable billing
                           </span>
                         ) : (
                           <div className="space-y-1.5">
@@ -479,7 +653,7 @@ export default function GhlTrackerPage() {
                                 value={revenueInputs[client.id] ?? ""}
                                 onChange={(e) => setRevenueInputs((prev) => ({ ...prev, [client.id]: e.target.value }))}
                                 placeholder="0.00"
-                                className="w-28 px-2 py-1 rounded-md text-[12px] font-semibold bg-transparent outline-none"
+                                className="w-24 px-2 py-1 rounded-md text-[12px] font-semibold bg-transparent outline-none"
                                 style={{
                                   backgroundColor: "rgba(0,129,242,0.04)",
                                   border: "1px solid rgba(61,79,110,0.25)",
@@ -488,15 +662,11 @@ export default function GhlTrackerPage() {
                                 }}
                               />
                             </div>
-                            <div className="text-[9px] font-medium px-0.5"
-                              style={{ color: "rgba(107,122,153,0.5)" }}>
-                              Manual Entry — client's own revenue
-                            </div>
                             <input
                               type="text"
                               value={notesInputs[client.id] ?? ""}
                               onChange={(e) => setNotesInputs((prev) => ({ ...prev, [client.id]: e.target.value }))}
-                              placeholder="Notes (optional)"
+                              placeholder="Notes"
                               className="w-full px-2 py-0.5 rounded text-[10px] bg-transparent outline-none"
                               style={{
                                 backgroundColor: "rgba(0,129,242,0.02)",
@@ -504,11 +674,78 @@ export default function GhlTrackerPage() {
                                 color: "var(--t-dim)",
                               }}
                             />
+                            {manualSnapshot && (
+                              <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                                Saved: {fmtCurrency(manualSnapshot.closedWonRevenue)}
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
 
-                      {/* Vault Co 5% Fee (computed) */}
+                      {/* GHL Closed Won */}
+                      <td className="px-4 py-3.5">
+                        {!isOn ? (
+                          <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
+                        ) : !hasGHL ? (
+                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>No GHL configured</span>
+                        ) : ghlSnapshot ? (
+                          <div className="space-y-0.5">
+                            <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
+                              {fmtCurrency(ghlSnapshot.closedWonRevenue)}
+                            </div>
+                            <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                              GHL Snapshot saved
+                            </div>
+                          </div>
+                        ) : ghlPreviewEntry.status === "idle" ? (
+                          <button
+                            onClick={() => void handlePreviewGHL(client.id)}
+                            className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                            style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                            <Eye size={10} /> Preview GHL
+                          </button>
+                        ) : ghlPreviewEntry.status === "loading" ? (
+                          <div className="flex items-center gap-1.5" style={{ color: "var(--t-dim)" }}>
+                            <Loader2 size={12} className="animate-spin" />
+                            <span className="text-[10px]">Fetching…</span>
+                          </div>
+                        ) : ghlPreviewEntry.status === "error" ? (
+                          <div className="space-y-1">
+                            <div className="text-[10px]" style={{ color: "#ef4444" }}>{ghlPreviewEntry.error}</div>
+                            <button
+                              onClick={() => void handlePreviewGHL(client.id)}
+                              className="text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                              style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                              Retry
+                            </button>
+                          </div>
+                        ) : ghlPreviewEntry.status === "loaded" ? (
+                          <div className="space-y-0.5">
+                            <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
+                              {fmtCurrency(ghlPreviewEntry.result.closedWonRevenue)}
+                            </div>
+                            <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                              GHL Preview — not saved
+                            </div>
+                          </div>
+                        ) : null}
+                      </td>
+
+                      {/* Deal Count */}
+                      <td className="px-4 py-3.5">
+                        <span className="text-[12px] font-semibold"
+                          style={{ color: ghlDeals != null && ghlDeals > 0 ? "#22c55e" : "rgba(107,122,153,0.4)" }}>
+                          {ghlDeals != null ? ghlDeals : "—"}
+                        </span>
+                        {ghlDeals != null && ghlDeals > 0 && (
+                          <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.4)" }}>
+                            {ghlSnapshot ? "saved" : "preview"}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Vault Co 5% Fee */}
                       <td className="px-4 py-3.5">
                         <span className="text-[12px] font-semibold"
                           style={{ color: isOn && displayFee > 0 ? GOLD : "rgba(107,122,153,0.4)" }}>
@@ -516,12 +753,12 @@ export default function GhlTrackerPage() {
                         </span>
                         {isOn && displayFee > 0 && (
                           <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.45)" }}>
-                            Estimated — not collected
+                            Estimated · not collected
                           </div>
                         )}
                       </td>
 
-                      {/* Nick Recurring (= Vault Co fee) */}
+                      {/* Nick Recurring */}
                       <td className="px-4 py-3.5">
                         <span className="text-[12px] font-semibold"
                           style={{ color: isOn && displayNick > 0 ? "#a78bfa" : "rgba(107,122,153,0.4)" }}>
@@ -534,41 +771,60 @@ export default function GhlTrackerPage() {
                         )}
                       </td>
 
-                      {/* Source badge */}
+                      {/* Review Status */}
                       <td className="px-4 py-3.5">
-                        {!isOn ? (
-                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
-                        ) : existingSnapshot ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                            style={{ color: "#0081f2", backgroundColor: "rgba(0,129,242,0.08)", border: "1px solid rgba(0,129,242,0.18)" }}>
-                            {existingSnapshot.source === "ghl" ? "GHL Sync" : "Manual Entry"}
-                          </span>
-                        ) : (
-                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>
-                            No Snapshot
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Review status */}
-                      <td className="px-4 py-3.5">
-                        {existingSnapshot ? (
-                          <ReviewStatusBadge status={existingSnapshot.reviewStatus} />
+                        {displayReviewStatus ? (
+                          <ReviewStatusBadge status={displayReviewStatus} />
                         ) : (
                           <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
                         )}
+                        {ghlSnapshot && manualSnapshot && (
+                          <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.4)" }}>
+                            GHL + Manual
+                          </div>
+                        )}
                       </td>
 
-                      {/* Save */}
+                      {/* Actions */}
                       <td className="px-4 py-3.5">
-                        <button
-                          onClick={() => void handleSaveSnapshot(client.id)}
-                          disabled={!isOn || isSaving || isSnapshotSaving}
-                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
-                          {isSnapshotSaving && <Loader2 size={10} className="animate-spin" />}
-                          {isSnapshotSaving ? "Saving…" : existingSnapshot ? "Update" : "Save Snapshot"}
-                        </button>
+                        <div className="flex flex-col gap-1.5">
+                          {/* Save Manual */}
+                          {isOn && (
+                            <button
+                              onClick={() => void handleSaveSnapshot(client.id)}
+                              disabled={!isOn || isSaving || isSnapshotSaving}
+                              className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                              style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
+                              {isSnapshotSaving && <Loader2 size={10} className="animate-spin" />}
+                              {isSnapshotSaving ? "Saving…" : manualSnapshot ? "Update Manual" : "Save Manual"}
+                            </button>
+                          )}
+                          {/* Save GHL */}
+                          {isOn && hasGHL && ghlPreviewEntry.status === "loaded" && !ghlSnapshot && (
+                            <button
+                              onClick={() => void handleSaveGHLSnapshot(client.id)}
+                              disabled={isGhlSaving}
+                              className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                              style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                              {isGhlSaving && <Loader2 size={10} className="animate-spin" />}
+                              {isGhlSaving ? "Saving…" : "Save GHL Snapshot"}
+                            </button>
+                          )}
+                          {/* Re-preview GHL button (after snapshot saved) */}
+                          {isOn && hasGHL && ghlPreviewEntry.status === "idle" && !ghlSnapshot && (
+                            <button
+                              onClick={() => void handlePreviewGHL(client.id)}
+                              className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 whitespace-nowrap"
+                              style={{ color: "rgba(107,122,153,0.7)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
+                              <Eye size={10} /> Preview GHL
+                            </button>
+                          )}
+                          {ghlSnapshot && (
+                            <div className="text-[9px] px-0.5" style={{ color: "rgba(34,197,94,0.6)" }}>
+                              GHL snapshot saved
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -578,19 +834,18 @@ export default function GhlTrackerPage() {
           </table>
         </div>
 
-        {/* ── Phase 2 safety note ──────────────────────────────────────────── */}
+        {/* ── Phase 2C safety note ─────────────────────────────────────────── */}
         <div className="px-5 py-4 border-t mt-1" style={{ borderColor: "var(--t-border-nav)" }}>
           <div className="flex items-start gap-2.5">
             <Info size={12} className="flex-shrink-0 mt-0.5" style={{ color: "var(--t-dim)" }} />
             <div>
               <p className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--t-muted)" }}>
-                Phase 2B — Manual Revenue Snapshots
+                Phase 2C — GHL Read-Only Sync
               </p>
               <p className="text-[11px] leading-snug" style={{ color: "var(--t-dim)" }}>
-                Revenue snapshots are records of the client&apos;s Closed Won revenue — they are <strong>not</strong> confirmed collected revenue, not invoices, and not Stripe payments.
-                Vault Co 5% fee and partner earnings are estimates computed from these entries.
-                Snapshots default to <strong>Draft</strong> status. Phase 2C will add: GHL Closed Won sync (read-only) ·
-                Review workflow · Stripe draft invoice creation (manual admin approval required, auto-send off by default).
+                GHL Closed Won revenue is fetched read-only from GoHighLevel for the selected billing month. No GHL data is modified.
+                &quot;Preview GHL&quot; fetches and displays deals without saving. &quot;Save GHL Snapshot&quot; creates a <strong>Revenue Snapshot</strong> record — not an invoice, not confirmed collected revenue.
+                Vault Co 5% fee and partner earnings are estimates. Stripe not connected. No invoices are created or sent. Auth unchanged.
               </p>
             </div>
           </div>
@@ -598,7 +853,7 @@ export default function GhlTrackerPage() {
       </SectionCard>
 
       <BillingEmptyState />
-      <SafetyNote text="Revenue snapshots are manual entries only. No Stripe API is called. No invoices are created or sent. No GHL pipeline is modified. These numbers are estimates — not confirmed collected revenue. Auth unchanged." />
+      <SafetyNote text="GHL integration is read-only. No GHL data is modified. No Stripe API is called. No invoices are created or sent. Revenue snapshots are estimates — not confirmed collected revenue. Auth unchanged." />
     </div>
   );
 }

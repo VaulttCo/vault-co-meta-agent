@@ -13,16 +13,32 @@ import {
 } from "@/lib/revenue/calculations";
 import {
   RevenuePageHeader, SectionCard, EarningsRow, ProjectionBadge, BillingEmptyState, SafetyNote,
+  PageErrorState,
 } from "../_components";
 
 export default function PartnerEarningsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  function load() {
+    setLoading(true);
+    setError(null);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        if (!cancelled) setError("Unable to load partner earnings data.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }
+
+  useEffect(() => load(), []);
 
   const activeClients = useMemo(() => clients.filter((c) => c.status === "active"), [clients]);
   const setupClients  = useMemo(() => clients.filter((c) => c.status === "setup"),  [clients]);
@@ -55,6 +71,16 @@ export default function PartnerEarningsPage() {
         subtitle="Jaxon 57% setup · Nick 43% setup + 100% recurring revenue"
         badge={<ProjectionBadge />}
       />
+
+      {error && (
+        <SectionCard>
+          <PageErrorState
+            message="Unable to load partner earnings data."
+            detail="Check your connection or Supabase configuration."
+            onRetry={load}
+          />
+        </SectionCard>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 

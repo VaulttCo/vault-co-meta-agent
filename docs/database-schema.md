@@ -770,3 +770,73 @@ alter table public.operator_tasks
 ```
 
 This is safe to run on an existing table with rows — existing tasks get an empty checklist (`[]`) and the UI falls back to the per-task-type default template until the operator checks a step (which then saves the checklist to the DB).
+
+---
+
+### Phase 2A — Revenue Dashboard: Client Revenue Settings
+
+Creates the `client_revenue_settings` table. Run this in the Supabase SQL editor **after** the `clients` table exists.
+
+```sql
+create table if not exists public.client_revenue_settings (
+  id                           text primary key default gen_random_uuid()::text,
+  client_id                    text not null references public.clients(id) on delete cascade,
+
+  -- Recurring billing
+  recurring_billing_active     boolean not null default false,
+  recurring_billing_start_date date,
+
+  -- Setup fee structure
+  setup_fee_total              numeric(10,2) not null default 7000.00,
+  setup_month_1_amount         numeric(10,2) not null default 3500.00,
+  setup_month_2_amount         numeric(10,2) not null default 3500.00,
+
+  -- Partner split configuration
+  jaxon_setup_split            numeric(6,4) not null default 0.5700,
+  nick_setup_split             numeric(6,4) not null default 0.4300,
+  recurring_fee_percentage     numeric(6,4) not null default 0.0500,
+  nick_recurring_split         numeric(6,4) not null default 1.0000,
+  jaxon_recurring_split        numeric(6,4) not null default 0.0000,
+
+  -- Integrations (reference data only — not used to call external APIs in Phase 2A)
+  ghl_pipeline_id              text,
+  ghl_location_id              text,
+  stripe_customer_id           text,
+
+  -- Invoice automation gates — always false until explicitly approved in a later phase
+  stripe_invoice_auto_create   boolean not null default false,
+  stripe_invoice_auto_send     boolean not null default false,
+
+  -- Manual fallback
+  manual_revenue_entry_enabled boolean not null default true,
+
+  notes                        text,
+  created_at                   timestamptz not null default now(),
+  updated_at                   timestamptz not null default now(),
+
+  constraint client_revenue_settings_client_id_unique unique (client_id)
+);
+
+create trigger client_revenue_settings_updated_at
+  before update on public.client_revenue_settings
+  for each row execute procedure update_updated_at();
+
+alter table public.client_revenue_settings enable row level security;
+
+create policy "Authenticated read revenue settings"
+  on public.client_revenue_settings for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert revenue settings"
+  on public.client_revenue_settings for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update revenue settings"
+  on public.client_revenue_settings for update
+  using (auth.role() = 'authenticated');
+```
+
+**Safety notes:**
+- `stripe_invoice_auto_create` and `stripe_invoice_auto_send` default `false` and are not writable via any Phase 2A API endpoint.
+- `ghl_pipeline_id`, `ghl_location_id`, `stripe_customer_id` are stored as reference data only — no external API is called in Phase 2A.
+- This table has no effect on any existing page. Only `/revenue-dashboard` reads from it.

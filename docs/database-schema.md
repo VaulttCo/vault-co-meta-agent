@@ -914,7 +914,28 @@ create policy "Authenticated update revenue snapshots"
 **Safety notes:**
 - `closed_won_revenue` is the client's own Closed Won revenue. It is not Vault Co's collected revenue, not a confirmed payment, and not an invoice amount.
 - `vault_co_fee` is computed server-side as `closed_won_revenue * recurring_fee_percentage`. It is Vault Co's estimated fee — not a collected or invoiced amount.
-- All rows default to `review_status: 'draft'`. Only `review_status: 'locked'` will be used as a gate for Stripe draft invoice creation in Phase 2C.
-- `source: 'ghl'` rows are reserved for Phase 2C GHL sync. Phase 2B only writes `source: 'manual'` rows.
+- All rows default to `review_status: 'draft'`. Only `review_status: 'locked'` will be used as a gate for Stripe draft invoice creation in a future phase.
+- `source: 'ghl'` rows are written by Phase 2C GHL sync. Phase 2B only writes `source: 'manual'` rows.
 - No Stripe API is called in Phase 2B. No invoice is created or sent. No GHL write is performed.
 - `jaxon_recurring_earnings` is always `0` — Jaxon earns $0 on recurring revenue per the Vault Co business model.
+
+---
+
+### Phase 2C — Revenue Dashboard: GHL Snapshot Metadata
+
+Adds metadata columns to `client_monthly_revenue_snapshots` to support GHL read-only sync previews and deal tracking. Run **after** the Phase 2B migration.
+
+```sql
+alter table public.client_monthly_revenue_snapshots
+  add column if not exists deal_count     integer      not null default 0,
+  add column if not exists source_payload jsonb        not null default '{}'::jsonb,
+  add column if not exists synced_at      timestamptz,
+  add column if not exists reviewed_at    timestamptz;
+```
+
+**Column notes:**
+- `deal_count` — number of Closed Won deals pulled from GHL for this snapshot. `0` for manual entries.
+- `source_payload` — safe JSON summary of the GHL deals (name, amount, status, closedDate). No contact IDs, no personal data, no GHL API tokens.
+- `synced_at` — timestamp of the GHL read-only pull that produced this snapshot. `null` for manual entries.
+- `reviewed_at` — reserved for a future review-lock workflow. Not written by Phase 2C.
+- No invoice columns are added. No Stripe columns are added. No GHL write is performed by Phase 2C.

@@ -12,16 +12,32 @@ import {
 import {
   RevenuePageHeader, SectionCard, SectionHeader, TableHead, TableEmpty,
   PaymentStatusCell, ProjectionBadge, BillingEmptyState, SafetyNote,
+  PageErrorState,
 } from "../_components";
 
 export default function SetupPipelinePage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  function load() {
+    setLoading(true);
+    setError(null);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        if (!cancelled) setError("Unable to load pipeline data.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }
+
+  useEffect(() => load(), []);
 
   const revenueClients = useMemo(
     () => clients.filter((c) => c.status !== "archived"),
@@ -49,8 +65,10 @@ export default function SetupPipelinePage() {
             <tbody>
               {loading ? (
                 <TableEmpty colSpan={8} message="" loading />
+              ) : error ? (
+                <tr><td colSpan={8}><PageErrorState message="Unable to load pipeline data." detail="Check your connection or Supabase configuration." onRetry={load} /></td></tr>
               ) : revenueClients.length === 0 ? (
-                <TableEmpty colSpan={8} message="No clients in revenue pipeline." />
+                <TableEmpty colSpan={8} message="No clients in the pipeline yet." />
               ) : (
                 revenueClients.map((client) => {
                   const phase = getPhase(client.status);

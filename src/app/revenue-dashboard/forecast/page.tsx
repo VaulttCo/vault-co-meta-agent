@@ -37,8 +37,18 @@ export default function ForecastPage() {
   });
 
   useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        // silent — calculator works with $0 defaults on failure
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const activeClients = useMemo(() => clients.filter((c) => c.status === "active"), [clients]);

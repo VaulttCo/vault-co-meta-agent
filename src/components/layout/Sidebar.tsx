@@ -20,7 +20,10 @@ import {
   Mic2,
   TrendingUp,
   ArrowLeft,
-  DollarSign,
+  Layers,
+  Trophy,
+  Calculator,
+  RefreshCw,
   PhoneCall,
   MessageSquare,
   BookOpen,
@@ -72,6 +75,7 @@ export function Sidebar({ onClose }: SidebarProps) {
     if (href === "/") return pathname === "/";
     // Exact match for /ai-agent so the overview and console don't both highlight
     if (href === "/ai-agent") return pathname === "/ai-agent";
+    if (href === "/revenue-dashboard") return pathname === "/revenue-dashboard";
     return pathname === href || pathname.startsWith(href + "/");
   };
 
@@ -223,37 +227,15 @@ export function Sidebar({ onClose }: SidebarProps) {
         {isRevenueDashboard && (
           <>
             <SectionLabel label="Revenue" />
-            <NavLink label="Revenue Dashboard" href="/revenue-dashboard" icon={TrendingUp} />
+            <NavLink label="Revenue Overview"    href="/revenue-dashboard"                  icon={TrendingUp} />
 
-            <SectionLabel label="On This Page" />
-            {[
-              { icon: BarChart3,   label: "Executive Snapshot" },
-              { icon: DollarSign,  label: "Setup Pipeline"     },
-              { icon: Users,       label: "Partner Earnings"   },
-              { icon: TrendingUp,  label: "Leaderboard"        },
-              { icon: Repeat2,     label: "Forecast Calculator"},
-              { icon: BarChart3,   label: "Scenarios"          },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
-                style={{ color: "rgba(107,122,153,0.45)" }}>
-                <Icon size={15} className="flex-shrink-0" />
-                <span className="truncate">{label}</span>
-                <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
-                  style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
-                  on page
-                </span>
-              </div>
-            ))}
-
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
-              style={{ color: "rgba(107,122,153,0.35)" }}>
-              <Repeat2 size={15} className="flex-shrink-0" />
-              <span className="truncate">GHL Revenue Tracker</span>
-              <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.10)", border: "1px solid rgba(61,79,110,0.18)" }}>
-                Phase 2
-              </span>
-            </div>
+            <SectionLabel label="Revenue Portal" />
+            <NavLink label="Setup Pipeline"      href="/revenue-dashboard/setup-pipeline"   icon={Layers}     />
+            <NavLink label="Partner Earnings"    href="/revenue-dashboard/partner-earnings" icon={Users}      />
+            <NavLink label="Leaderboard"         href="/revenue-dashboard/leaderboard"      icon={Trophy}     />
+            <NavLink label="Forecast Calculator" href="/revenue-dashboard/forecast"         icon={Calculator} />
+            <NavLink label="Scenario Modeling"   href="/revenue-dashboard/scenarios"        icon={BarChart3}  />
+            <NavLink label="GHL Revenue Tracker" href="/revenue-dashboard/ghl-tracker"      icon={RefreshCw}  />
           </>
         )}
 

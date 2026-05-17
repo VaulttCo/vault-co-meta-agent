@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
+import {
+  makeDefaultSettings,
+  type ClientRevenueSettings,
+} from "@/lib/revenue/types";
 
 // ─── Business constants ───────────────────────────────────────────────────────
 const SETUP_FEE = 7000;
@@ -256,7 +260,12 @@ function InvoiceStatusBadge({ active, ghlConnected }: { active: boolean; ghlConn
 export default function RevenueDashboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recurringActive, setRecurringActive] = useState<Record<string, boolean>>({});
+
+  // Revenue settings — keyed by clientId, loaded from /api/revenue-settings
+  const [settingsMap, setSettingsMap] = useState<Record<string, ClientRevenueSettings>>({});
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  // Per-client save indicator for the toggle
+  const [savingToggle, setSavingToggle] = useState<Record<string, boolean>>({});
 
   const [calc, setCalc] = useState({
     newPerMonth: 3,
@@ -279,6 +288,71 @@ export default function RevenueDashboardPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // Load persisted revenue settings for all clients
+  useEffect(() => {
+    setSettingsLoading(true);
+    fetch("/api/revenue-settings")
+      .then((r) => (r.ok ? r.json() : { settings: [] }))
+      .then(({ settings }: { settings: ClientRevenueSettings[] }) => {
+        const map: Record<string, ClientRevenueSettings> = {};
+        (settings ?? []).forEach((s) => { map[s.clientId] = s; });
+        setSettingsMap(map);
+      })
+      .catch(() => {})
+      .finally(() => setSettingsLoading(false));
+  }, []);
+
+  // Toggle recurring billing active for a client — persists to Supabase
+  async function handleToggleRecurring(clientId: string) {
+    const current = settingsMap[clientId]?.recurringBillingActive ?? false;
+    const next = !current;
+
+    // Optimistic update
+    setSettingsMap((prev) => ({
+      ...prev,
+      [clientId]: {
+        ...(prev[clientId] ?? makeDefaultSettings(clientId)),
+        recurringBillingActive: next,
+      },
+    }));
+    setSavingToggle((prev) => ({ ...prev, [clientId]: true }));
+
+    try {
+      const res = await fetch(`/api/revenue-settings/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recurringBillingActive: next }),
+      });
+
+      if (res.ok) {
+        const { settings } = await res.json();
+        if (settings) {
+          setSettingsMap((prev) => ({ ...prev, [clientId]: settings }));
+        }
+      } else {
+        // Revert on server error
+        setSettingsMap((prev) => ({
+          ...prev,
+          [clientId]: {
+            ...(prev[clientId] ?? makeDefaultSettings(clientId)),
+            recurringBillingActive: current,
+          },
+        }));
+      }
+    } catch {
+      // Revert on network error
+      setSettingsMap((prev) => ({
+        ...prev,
+        [clientId]: {
+          ...(prev[clientId] ?? makeDefaultSettings(clientId)),
+          recurringBillingActive: current,
+        },
+      }));
+    } finally {
+      setSavingToggle((prev) => ({ ...prev, [clientId]: false }));
+    }
+  }
 
   // ── Derived client groups ─────────────────────────────────────────────────
   const activeClients  = useMemo(() => clients.filter((c) => c.status === "active"), [clients]);
@@ -1014,8 +1088,12 @@ export default function RevenueDashboardPage() {
                   </tr>
                 ) : (
                   activeClients.map((client) => {
-                    const isOn = recurringActive[client.id] ?? false;
-                    const hasGHL = Boolean(client.ghlLocationId);
+                    const clientSettings = settingsMap[client.id];
+                    const isOn = clientSettings?.recurringBillingActive ?? false;
+                    const isSaving = savingToggle[client.id] ?? false;
+                    // GHL connected: check persisted ghlPipelineId from settings first, then client profile
+                    const hasGHL = Boolean(clientSettings?.ghlPipelineId ?? client.ghlLocationId);
+                    const isSettingsLoaded = !settingsLoading;
                     return (
                       <tr key={client.id}
                         className="border-b transition-colors hover:bg-white/[0.01]"
@@ -1026,14 +1104,17 @@ export default function RevenueDashboardPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <button
-                            onClick={() => setRecurringActive((prev) => ({ ...prev, [client.id]: !isOn }))}
-                            className="flex items-center gap-1.5 transition-opacity hover:opacity-80">
-                            {isOn
+                            onClick={() => void handleToggleRecurring(client.id)}
+                            disabled={isSaving || !isSettingsLoaded}
+                            className="flex items-center gap-1.5 transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSaving
+                              ? <Loader2 size={16} className="animate-spin" style={{ color: "rgba(107,122,153,0.5)" }} />
+                              : isOn
                               ? <ToggleRight size={20} style={{ color: "#22c55e" }} />
                               : <ToggleLeft  size={20} style={{ color: "rgba(107,122,153,0.5)" }} />}
                             <span className="text-[10px] font-medium"
                               style={{ color: isOn ? "#22c55e" : "rgba(107,122,153,0.5)" }}>
-                              {isOn ? "Active" : "Off"}
+                              {isSaving ? "Saving…" : isOn ? "Active" : "Off"}
                             </span>
                           </button>
                         </td>
@@ -1049,10 +1130,10 @@ export default function RevenueDashboardPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           {!isOn
-                            ? <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.5)" }}>Recurring Off</span>
+                            ? <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.5)" }}>Recurring Disabled</span>
                             : !hasGHL
-                            ? <span className="text-[11px]" style={{ color: "#f59e0b" }}>GHL Required</span>
-                            : <span className="text-[11px]" style={{ color: "var(--t-dim)" }}>— Connect GHL Phase 2</span>}
+                            ? <span className="text-[11px]" style={{ color: "#f59e0b" }}>Needs GHL Pipeline</span>
+                            : <span className="text-[11px]" style={{ color: "var(--t-dim)" }}>— GHL sync Phase 2B</span>}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className="text-[11px]" style={{ color: isOn && hasGHL ? GOLD : "rgba(107,122,153,0.5)" }}>—</span>
@@ -1068,7 +1149,7 @@ export default function RevenueDashboardPage() {
                             disabled
                             className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg opacity-35 cursor-not-allowed"
                             style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
-                            Phase 2
+                            Phase 2B
                           </button>
                         </td>
                       </tr>

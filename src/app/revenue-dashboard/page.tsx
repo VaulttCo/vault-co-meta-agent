@@ -25,8 +25,18 @@ export default function RevenueDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        // silent — overview shows $0 projections on failure, no blocking error
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const activeClients  = useMemo(() => clients.filter((c) => c.status === "active"),   [clients]);

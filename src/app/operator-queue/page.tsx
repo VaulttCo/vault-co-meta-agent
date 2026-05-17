@@ -981,18 +981,27 @@ export default function OperatorQueuePage() {
   const [filterClient, setFilterClient] = useState("all");
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/operator-tasks")
-        .then((r) => r.ok ? r.json() : { tasks: [] })
-        .then((b) => b.tasks ?? []),
-      getDataProvider().getClients(),
-    ])
-      .then(([taskData, clientData]) => {
-        setTasks(taskData);
-        setClients(clientData);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const [taskData, clientData] = await Promise.all([
+          fetch("/api/operator-tasks")
+            .then((r) => r.ok ? r.json() : { tasks: [] })
+            .then((b) => b.tasks ?? [])
+            .catch(() => [] as OperatorTask[]),
+          getDataProvider().getClients().catch(() => [] as Client[]),
+        ]);
+        if (!cancelled) {
+          setTasks(taskData);
+          setClients(clientData);
+        }
+      } catch {
+        // fall through to empty state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   async function handleStatusChange(id: string, status: OperatorTask["status"]) {

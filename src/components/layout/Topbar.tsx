@@ -19,6 +19,9 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/reports": { title: "Reports", subtitle: "Monthly client performance reports — prepared by Veronica" },
   "/approvals": { title: "Approvals", subtitle: "Pending items awaiting human review" },
   "/settings": { title: "Settings", subtitle: "Account, integrations & AI provider settings" },
+  "/revenue-dashboard": { title: "Revenue Dashboard", subtitle: "Leadership view — client status, fulfillment health, launch blockers, and revenue visibility" },
+  "/victoria": { title: "Victoria AI Sales Coach", subtitle: "Sales coaching system for Vault Co and future client teams — coming soon" },
+  "/operator-queue": { title: "Operator Queue", subtitle: "Open tasks, urgent items, and fulfillment workload" },
 };
 
 interface TopbarProps {

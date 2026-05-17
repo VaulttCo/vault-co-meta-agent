@@ -335,10 +335,18 @@ export default function ClientsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
-    getDataProvider()
-      .getClients()
-      .then((c) => { setAllClients(c); setHasLoaded(true); })
-      .catch(() => setHasLoaded(true));
+    let cancelled = false;
+    (async () => {
+      try {
+        const c = await getDataProvider().getClients();
+        if (!cancelled) setAllClients(c);
+      } catch {
+        // fall through to empty state
+      } finally {
+        if (!cancelled) setHasLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = allClients.filter((c) => {

@@ -10,17 +10,32 @@ import {
 } from "@/lib/revenue/calculations";
 import {
   RevenuePageHeader, SectionCard, SectionHeader, TableHead, TableEmpty,
-  EstimateBadge, SafetyNote,
+  EstimateBadge, SafetyNote, PageErrorState,
 } from "../_components";
 
 export default function LeaderboardPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  function load() {
+    setLoading(true);
+    setError(null);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        if (!cancelled) setError("Unable to load leaderboard data.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }
+
+  useEffect(() => load(), []);
 
   const leaderboard = useMemo(() => {
     const revenueClients = clients.filter((c) => c.status !== "archived");
@@ -57,8 +72,18 @@ export default function LeaderboardPage() {
             <tbody>
               {loading ? (
                 <TableEmpty colSpan={10} message="" loading />
+              ) : error ? (
+                <tr>
+                  <td colSpan={10}>
+                    <PageErrorState
+                      message="Unable to load leaderboard data."
+                      detail="Check your connection or Supabase configuration."
+                      onRetry={load}
+                    />
+                  </td>
+                </tr>
               ) : leaderboard.length === 0 ? (
-                <TableEmpty colSpan={10} message="No clients in revenue pipeline." />
+                <TableEmpty colSpan={10} message="No revenue clients available yet." />
               ) : (
                 leaderboard.map(({ client, jobVal, monthlyClientRevenue, vaultCoRecurring, setupPaid, totalValue }, idx) => {
                   const phase = getPhase(client.status);

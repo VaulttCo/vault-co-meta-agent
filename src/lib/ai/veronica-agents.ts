@@ -119,6 +119,8 @@ export interface GhlFollowUpOutput {
   recommendedFollowUpAudit: string[];
   approvalRequired: boolean;
   dataConfidence: "high" | "medium" | "low";
+  // true when GHL is connected + synced but GHL returned 0 contacts/opportunities — not a sync failure
+  emptyPipelineConfirmed: boolean;
   // GHL opportunity-level pipeline intelligence (populated when ghl_opportunity_snapshots exist)
   opportunityTotal: number | null;
   staleLeadCount: number | null;
@@ -450,34 +452,41 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
   let followUpBottleneck = "No follow-up bottleneck detected.";
   let bookingIssue: string | null = null;
   let pipelineIssue: string | null = null;
+  let emptyPipelineConfirmed = false;
 
-  // GHL state classification — 4 possible states
   const ghlConnected = i.ghlConnected;
   const ghlSynced = !!i.ghlLastSynced;
   const ghlStaleDays = i.ghlLastSynced
     ? Math.round((Date.now() - new Date(i.ghlLastSynced).getTime()) / 86400000)
     : null;
   const ghlStale = ghlStaleDays !== null && ghlStaleDays > 3;
-
-  // Use opportunity-level data for richer diagnosis when available
   const hasOppData = ghlOpps?.hasData ?? false;
 
   if (!ghlConnected) {
+    // State A: not connected at all
     followUpBottleneck = "GHL Location not connected — follow-up system cannot be audited.";
+
   } else if (!ghlSynced && !hasOppData) {
-    // Connected but no sync has run yet
-    followUpBottleneck = "GHL is connected but opportunity-level pipeline data has not been synced yet. Use the GHL Pipeline tab → Sync Opportunities to load pipeline data.";
-    bookingIssue = "GHL connected — waiting for first opportunity sync. Pipeline and contact data will populate after sync runs.";
+    // State B: connected but no sync has ever run
+    followUpBottleneck = "GHL is connected but has not been synced yet. Use the GHL Pipeline tab → Sync Opportunities to load pipeline data.";
+    bookingIssue = "GHL connected — waiting for first sync. Pipeline and contact data will populate after sync runs.";
+
+  } else if (ghlConnected && ghlSynced && !hasOppData) {
+    // State C: connected + synced + GHL returned 0 contacts/opportunities — not a sync failure.
+    // This is the accurate state for a client whose pipeline is empty (no leads yet).
+    emptyPipelineConfirmed = true;
+    followUpBottleneck = "GHL is connected and synced, but no contacts, opportunities, appointments, or pipeline value exist yet. Follow-up performance cannot be audited until leads begin entering the pipeline.";
+    bookingIssue = "There are no GHL opportunities or contacts synced yet, so there are no stale leads to list.";
+    pipelineIssue = "Confirm lead forms are configured to create contacts and opportunities in GHL when a lead submits. Submit a test lead to verify contact/opportunity creation.";
+
   } else if (hasOppData) {
-    // Opportunity-level analysis available
+    // State D: opportunity-level snapshot rows exist — full analysis
     const total = ghlOpps!.total;
     const stale = ghlOpps!.staleCount;
     const openCount = ghlOpps!.byStatus["open"] ?? 0;
     const wonCount = ghlOpps!.byStatus["won"] ?? 0;
 
-    if (total === 0) {
-      followUpBottleneck = "GHL is synced but no opportunities found in the pipeline. Leads may not be entering GHL or the pipeline is not configured.";
-    } else if (stale > 0 && openCount > 0) {
+    if (stale > 0 && openCount > 0) {
       const stalePercent = Math.round((stale / total) * 100);
       followUpBottleneck = `${stale} of ${total} opportunities (${stalePercent}%) have had no activity in 7+ days — follow-up is stalling. ${wonCount} won.`;
       bookingIssue = `${stale} stale leads with no recent activity. Speed-to-lead and follow-up cadence should be audited.`;
@@ -491,12 +500,13 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
       followUpBottleneck = `GHL pipeline active: ${total} total opportunities, ${openCount} open, ${wonCount} won. ${stale > 0 ? `${stale} stale (no activity 7+ days).` : "No stale leads detected."}`;
     }
 
-    // Pipeline issue from stage distribution
     const stageNames = Object.keys(ghlOpps!.byStage);
-    if (stageNames.length === 1) {
-      pipelineIssue = `All ${total} opportunities are stuck in "${stageNames[0]}" — leads may not be progressing through the pipeline.`;
+    if (stageNames.length === 1 && total > 1) {
+      pipelineIssue = `All ${total} opportunities are in "${stageNames[0]}" — leads may not be progressing through the pipeline.`;
     }
+
   } else if (ghlStale) {
+    // State E: no opp data, sync is stale
     followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Open the client profile → GHL Pipeline tab to trigger a fresh sync.`;
   } else if (p.leads > 5 && p.booked === 0) {
     followUpBottleneck = `${p.leads} leads entered the system with zero appointments booked. Speed-to-lead failure or workflow not triggering.`;
@@ -512,18 +522,32 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
       : `Follow-up cadence is days-based ("${sa.followUpCadence}") — home services requires contact within 5 minutes of form submission.`;
   }
 
-  const audit: string[] = [
-    "Verify immediate SMS fires within 60 seconds of form submission.",
-    "Verify setter task is created within 1 minute of lead entry.",
-    "Verify first call is placed within 5 minutes.",
-    "Verify AI voice triggers at the 10-minute mark if no call is logged.",
-    "Confirm GHL pipeline stage updates when lead is contacted and appointment is booked.",
-  ];
-  if (hasOppData && (ghlOpps?.staleCount ?? 0) > 0) {
+  // Audit checklist — context-aware for the empty-pipeline state
+  const audit: string[] = emptyPipelineConfirmed
+    ? [
+        "Prepare the sales script and load it into the GHL setter notification workflow.",
+        "Confirm the speed-to-lead workflow is built and active in GHL (immediate SMS within 60 seconds).",
+        "Submit a test lead via the live lead form to verify a contact and opportunity are created in GHL.",
+        "Verify setter receives a task notification within 1 minute of the test lead.",
+        "Confirm GHL pipeline stage updates as the test lead is worked.",
+      ]
+    : [
+        "Verify immediate SMS fires within 60 seconds of form submission.",
+        "Verify setter task is created within 1 minute of lead entry.",
+        "Verify first call is placed within 5 minutes.",
+        "Verify AI voice triggers at the 10-minute mark if no call is logged.",
+        "Confirm GHL pipeline stage updates when lead is contacted and appointment is booked.",
+      ];
+
+  if (!emptyPipelineConfirmed && hasOppData && (ghlOpps?.staleCount ?? 0) > 0) {
     audit.push(`Review ${ghlOpps!.staleCount} stale opportunities — check last contact date and re-engage or mark lost.`);
   }
-  if (!sa?.hasSalesScript) audit.push("Prepare a call script and load it into the setter notification workflow.");
-  if (sa?.followUpCadence) audit.push(`Review follow-up cadence — current: "${sa.followUpCadence}".`);
+  if (!sa?.hasSalesScript && !emptyPipelineConfirmed) {
+    audit.push("Prepare a call script and load it into the setter notification workflow.");
+  }
+  if (sa?.followUpCadence && !emptyPipelineConfirmed) {
+    audit.push(`Review follow-up cadence — current: "${sa.followUpCadence}".`);
+  }
 
   return {
     ghlConnected,
@@ -534,18 +558,21 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     pipelineIssue,
     recommendedFollowUpAudit: audit,
     approvalRequired: false,
-    dataConfidence: hasOppData && (ghlOpps?.total ?? 0) > 0 ? "high"
+    emptyPipelineConfirmed,
+    dataConfidence: emptyPipelineConfirmed ? "medium"   // connection confirmed, no performance data yet
+      : hasOppData && (ghlOpps?.total ?? 0) > 0 ? "high"
       : i.ghlConnected && p.leads > 5 ? "high"
       : i.ghlConnected && i.ghlLastSynced ? "medium"
       : i.ghlConnected ? "medium"
       : "low",
     // Opportunity-level intelligence
-    opportunityTotal: hasOppData ? (ghlOpps?.total ?? null) : null,
-    staleLeadCount: hasOppData ? (ghlOpps?.staleCount ?? null) : null,
+    // opportunityTotal=0 when emptyPipelineConfirmed to distinguish "confirmed empty" from "never checked"
+    opportunityTotal: emptyPipelineConfirmed ? 0 : hasOppData ? (ghlOpps?.total ?? null) : null,
+    staleLeadCount: emptyPipelineConfirmed ? 0 : hasOppData ? (ghlOpps?.staleCount ?? null) : null,
     pipelineStageSummary: hasOppData && Object.keys(ghlOpps!.byStage).length > 0 ? ghlOpps!.byStage : null,
     opportunityStatusSummary: hasOppData && Object.keys(ghlOpps!.byStatus).length > 0 ? ghlOpps!.byStatus : null,
     lastOpportunitySync: ghlOpps?.lastSyncedAt ?? null,
-    opportunityPipelineValue: hasOppData ? (ghlOpps?.totalValue ?? null) : null,
+    opportunityPipelineValue: emptyPipelineConfirmed ? 0 : hasOppData ? (ghlOpps?.totalValue ?? null) : null,
   };
 }
 

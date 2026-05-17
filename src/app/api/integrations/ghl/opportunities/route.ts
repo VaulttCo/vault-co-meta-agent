@@ -1,0 +1,39 @@
+/**
+ * GET /api/integrations/ghl/opportunities?clientId=xxx
+ * Read stored GHL opportunity snapshots from Supabase.
+ * READ-ONLY — no GHL API calls. Returns what was last synced.
+ */
+import { NextRequest, NextResponse } from "next/server";
+import { readGHLOpportunitySnapshots } from "@/lib/integrations/ghl/client";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+export const runtime = "nodejs";
+
+export async function GET(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!can(auth.role, "canViewAnalytics")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const clientId = searchParams.get("clientId");
+
+  if (!clientId) {
+    return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+  }
+
+  try {
+    const snapshots = await readGHLOpportunitySnapshots(clientId);
+    const lastSyncedAt = snapshots.length > 0 ? snapshots[0].synced_at : null;
+    return NextResponse.json({ snapshots, lastSyncedAt, total: snapshots.length });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      { status: 500 }
+    );
+  }
+}

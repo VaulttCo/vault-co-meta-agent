@@ -15,6 +15,7 @@ import {
 import {
   RevenuePageHeader, SectionCard, SectionHeader, TableEmpty,
   InvoiceStatusBadge, RecurringToggle, PhaseBadge, BillingEmptyState, SafetyNote,
+  PageErrorState,
 } from "../_components";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,46 +55,83 @@ export default function GhlTrackerPage() {
   // ── Clients + settings (existing Phase 2A) ────────────────────────────────
   const [clients, setClients]               = useState<Client[]>([]);
   const [loading, setLoading]               = useState(true);
+  const [clientsError, setClientsError]     = useState<string | null>(null);
   const [settingsMap, setSettingsMap]       = useState<Record<string, ClientRevenueSettings>>({});
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError]   = useState<string | null>(null);
   const [savingToggle, setSavingToggle]     = useState<Record<string, boolean>>({});
 
   // ── Phase 2B: monthly revenue snapshots ───────────────────────────────────
   const [billingMonth, setBillingMonth]     = useState<string>(currentYearMonth);
   const [snapshotsMap, setSnapshotsMap]     = useState<Record<string, MonthlyRevenueSnapshot>>({});
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
   const [revenueInputs, setRevenueInputs]   = useState<Record<string, string>>({});
   const [notesInputs, setNotesInputs]       = useState<Record<string, string>>({});
   const [savingSnapshot, setSavingSnapshot] = useState<Record<string, boolean>>({});
 
   // ── Load clients ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  function loadClients() {
+    setLoading(true);
+    setClientsError(null);
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        if (!cancelled) setClientsError("Unable to load clients. Please refresh.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }
 
-  // ── Load revenue settings ─────────────────────────────────────────────────
+  useEffect(() => loadClients(), []);
+
+  // ── Load revenue settings (with 10s timeout) ─────────────────────────────
   useEffect(() => {
     setSettingsLoading(true);
-    fetch("/api/revenue-settings")
+    setSettingsError(null);
+    let cancelled = false;
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 10_000);
+
+    fetch("/api/revenue-settings", { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : { settings: [] }))
       .then(({ settings }: { settings: ClientRevenueSettings[] }) => {
         const map: Record<string, ClientRevenueSettings> = {};
         (settings ?? []).forEach((s) => { map[s.clientId] = s; });
-        setSettingsMap(map);
+        if (!cancelled) setSettingsMap(map);
       })
-      .catch(() => {})
-      .finally(() => setSettingsLoading(false));
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          setSettingsError(isAbort ? "Settings request timed out." : "Unable to load billing settings.");
+        }
+      })
+      .finally(() => {
+        clearTimeout(tid);
+        if (!cancelled) setSettingsLoading(false);
+      });
+
+    return () => { cancelled = true; controller.abort(); clearTimeout(tid); };
   }, []);
 
-  // ── Load snapshots when billing month changes ─────────────────────────────
+  // ── Load snapshots when billing month changes (with 10s timeout) ──────────
   useEffect(() => {
     setSnapshotsLoading(true);
+    setSnapshotsError(null);
     setSnapshotsMap({});
     setRevenueInputs({});
     setNotesInputs({});
 
-    fetch(`/api/revenue-snapshots?billing_month=${toBillingMonthDate(billingMonth)}`)
+    let cancelled = false;
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 10_000);
+
+    fetch(`/api/revenue-snapshots?billing_month=${toBillingMonthDate(billingMonth)}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : { snapshots: [] }))
       .then(({ snapshots }: { snapshots: MonthlyRevenueSnapshot[] }) => {
         const map: Record<string, MonthlyRevenueSnapshot> = {};
@@ -104,12 +142,24 @@ export default function GhlTrackerPage() {
           inputs[s.clientId] = s.closedWonRevenue > 0 ? String(s.closedWonRevenue) : "";
           notes[s.clientId]  = s.notes ?? "";
         });
-        setSnapshotsMap(map);
-        setRevenueInputs(inputs);
-        setNotesInputs(notes);
+        if (!cancelled) {
+          setSnapshotsMap(map);
+          setRevenueInputs(inputs);
+          setNotesInputs(notes);
+        }
       })
-      .catch(() => {})
-      .finally(() => setSnapshotsLoading(false));
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          setSnapshotsError(isAbort ? "Snapshots request timed out." : "Unable to load revenue snapshots.");
+        }
+      })
+      .finally(() => {
+        clearTimeout(tid);
+        if (!cancelled) setSnapshotsLoading(false);
+      });
+
+    return () => { cancelled = true; controller.abort(); clearTimeout(tid); };
   }, [billingMonth]);
 
   // ── Toggle recurring billing (Phase 2A) ───────────────────────────────────
@@ -190,7 +240,13 @@ export default function GhlTrackerPage() {
   }
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const activeClients = useMemo(() => clients.filter((c) => c.status === "active"), [clients]);
+  // Show all non-archived clients so admins can enable recurring billing
+  // for clients at any pipeline stage, not just those with status="active".
+  const pipelineClients = useMemo(() => clients.filter((c) => c.status !== "archived"), [clients]);
+  const recurringActiveCount = useMemo(
+    () => pipelineClients.filter((c) => settingsMap[c.id]?.recurringBillingActive).length,
+    [pipelineClients, settingsMap]
+  );
 
   const monthTotals = useMemo(() => {
     const snaps = Object.values(snapshotsMap);
@@ -301,6 +357,29 @@ export default function GhlTrackerPage() {
               Stripe not connected. No invoices are created or sent. Revenue snapshots are records only.
             </span>
           </div>
+          {settingsError && (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
+              style={{ backgroundColor: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)" }}>
+              <AlertCircle size={13} style={{ color: "#ef4444" }} />
+              <span className="text-[12px]" style={{ color: "#ef4444" }}>{settingsError} Recurring billing toggles are temporarily unavailable.</span>
+            </div>
+          )}
+          {snapshotsError && (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
+              style={{ backgroundColor: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.18)" }}>
+              <AlertCircle size={13} style={{ color: "#ef4444" }} />
+              <span className="text-[12px]" style={{ color: "#ef4444" }}>{snapshotsError}</span>
+            </div>
+          )}
+          {!loading && !clientsError && pipelineClients.length > 0 && recurringActiveCount === 0 && (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
+              style={{ backgroundColor: "rgba(107,122,153,0.06)", border: "1px solid rgba(107,122,153,0.15)" }}>
+              <AlertCircle size={13} style={{ color: "rgba(107,122,153,0.7)" }} />
+              <span className="text-[12px]" style={{ color: "rgba(107,122,153,0.7)" }}>
+                No clients have recurring billing active yet. Enable recurring billing for eligible clients using the toggle below.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ── Table ───────────────────────────────────────────────────────── */}
@@ -321,10 +400,12 @@ export default function GhlTrackerPage() {
             <tbody>
               {loading ? (
                 <TableEmpty colSpan={9} message="" loading />
-              ) : activeClients.length === 0 ? (
-                <TableEmpty colSpan={9} message="No active clients yet. Recurring billing activates after the 60 day setup period." />
+              ) : clientsError ? (
+                <tr><td colSpan={9}><PageErrorState message="Unable to load clients." detail={clientsError} onRetry={loadClients} /></td></tr>
+              ) : pipelineClients.length === 0 ? (
+                <TableEmpty colSpan={9} message="No clients in the pipeline yet. Add clients to begin tracking." />
               ) : (
-                activeClients.map((client) => {
+                pipelineClients.map((client) => {
                   const clientSettings  = settingsMap[client.id];
                   const isOn            = clientSettings?.recurringBillingActive ?? false;
                   const isSaving        = savingToggle[client.id] ?? false;

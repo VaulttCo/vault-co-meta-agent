@@ -160,6 +160,30 @@ export interface ReportRow {
   updated_at: string;
 }
 
+export interface ClientRevenueSettingsRow {
+  id: string;
+  client_id: string;
+  recurring_billing_active: boolean;
+  recurring_billing_start_date: string | null;
+  setup_fee_total: number;
+  setup_month_1_amount: number;
+  setup_month_2_amount: number;
+  jaxon_setup_split: number;
+  nick_setup_split: number;
+  recurring_fee_percentage: number;
+  nick_recurring_split: number;
+  jaxon_recurring_split: number;
+  ghl_pipeline_id: string | null;
+  ghl_location_id: string | null;
+  stripe_customer_id: string | null;
+  stripe_invoice_auto_create: boolean;
+  stripe_invoice_auto_send: boolean;
+  manual_revenue_entry_enabled: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IntegrationConnectionRow {
   id: string;
   client_id: string;
@@ -229,6 +253,11 @@ export interface Database {
         Row: ReportRow;
         Insert: Omit<ReportRow, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<ReportRow, "id" | "created_at" | "updated_at">>;
+      };
+      client_revenue_settings: {
+        Row: ClientRevenueSettingsRow;
+        Insert: Omit<ClientRevenueSettingsRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<ClientRevenueSettingsRow, "id" | "created_at" | "updated_at">>;
       };
       integration_connections: {
         Row: IntegrationConnectionRow;

@@ -215,6 +215,28 @@ export async function getGHLClosedWonForMonth(
 
     const resp = await ghlGet("/opportunities/search", params, creds);
     if (!resp.ok) {
+      // 422 with a pipeline_id in params means GHL rejected that pipeline filter
+      if (resp.status === 422 && pipelineId) {
+        return {
+          deals: [], totalRevenue: 0, dealCount: 0,
+          locationId: creds.locationId, credentialSource: resolved.source,
+          error: "The Pipeline ID was rejected by GHL. Leave the Pipeline ID field blank to sync all Closed Won opportunities for the connected location.",
+        };
+      }
+      if (resp.status === 401 || resp.status === 403) {
+        return {
+          deals: [], totalRevenue: 0, dealCount: 0,
+          locationId: creds.locationId, credentialSource: resolved.source,
+          error: "GHL credentials were rejected. Check that the API key is valid in the Integrations tab.",
+        };
+      }
+      if (resp.status === 422) {
+        return {
+          deals: [], totalRevenue: 0, dealCount: 0,
+          locationId: creds.locationId, credentialSource: resolved.source,
+          error: "The GHL Location ID could not be validated. Check that it is correct in Revenue Settings.",
+        };
+      }
       const errData = await resp.json().catch(() => ({})) as Record<string, unknown>;
       const msg = typeof errData.message === "string" ? errData.message : resp.statusText;
       return { deals: [], totalRevenue: 0, dealCount: 0, locationId: creds.locationId, credentialSource: resolved.source, error: `GHL API error: ${msg}` };

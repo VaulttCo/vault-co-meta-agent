@@ -183,14 +183,12 @@ export async function GET(req: NextRequest) {
 
     const isGhlConnected = hasApiKey && ghlLocationIdPresent;
 
-    // Compute missingReason
+    // Compute missingReason — pipeline absence is informational only, not a blocker
     let missingReason: string | null = null;
     if (!hasApiKey) {
       missingReason = "No GHL API key configured. Add GHL_API_KEY to environment variables or save per-client GHL credentials in Settings.";
     } else if (!ghlLocationIdPresent) {
       missingReason = "GHL Location ID not found. Set it in Revenue Settings or the client's Settings tab.";
-    } else if (!ghlPipelineIdPresent) {
-      missingReason = "GHL Pipeline ID not set. Add it in Revenue Settings to enable GHL preview.";
     }
 
     ghlStatus[clientId] = {

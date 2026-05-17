@@ -41,18 +41,26 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDataProvider().getClients().then((clients: Client[]) => {
-      const rows: CampaignRow[] = clients.flatMap((client) =>
-        (client.campaigns ?? []).map((c) => ({
-          ...c,
-          clientName: client.name,
-          clientStatus: client.status,
-          market: client.market,
-        }))
-      );
-      setAllCampaigns(rows);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const clients = await getDataProvider().getClients();
+        const rows: CampaignRow[] = clients.flatMap((client) =>
+          (client.campaigns ?? []).map((c) => ({
+            ...c,
+            clientName: client.name,
+            clientStatus: client.status,
+            market: client.market,
+          }))
+        );
+        if (!cancelled) setAllCampaigns(rows);
+      } catch {
+        // fall through to empty state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const activeCount = allCampaigns.filter((c) => c.status === "active").length;

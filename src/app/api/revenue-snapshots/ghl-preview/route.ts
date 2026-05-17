@@ -61,7 +61,10 @@ export async function POST(req: NextRequest) {
       ghlPipelineId = settingsRaw.ghl_pipeline_id ?? null;
       ghlLocationId = settingsRaw.ghl_location_id ?? null;
 
-      if (!settingsRaw.recurring_billing_active) {
+      // Only block if an explicit row exists and has recurring_billing_active = false.
+      // No row means the client hasn't been configured yet — allow preview so the admin
+      // can verify GHL is working before enabling billing.
+      if (settingsRaw.recurring_billing_active === false) {
         return NextResponse.json(
           { error: "Recurring billing is not active for this client. Enable it in Revenue Settings before syncing GHL revenue." },
           { status: 422 }

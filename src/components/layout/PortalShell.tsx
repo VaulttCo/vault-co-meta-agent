@@ -11,6 +11,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isLoginPage = pathname === "/login";
+  const isCommandHub = pathname === "/";
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -36,6 +37,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   // Not yet loaded or redirecting — render nothing to avoid flash
   if (isLoading || !user) {
     return null;
+  }
+
+  // Command Hub: full-screen standalone, no sidebar or topbar
+  if (isCommandHub) {
+    return <>{children}</>;
   }
 
   return (

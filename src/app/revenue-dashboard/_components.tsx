@@ -4,8 +4,51 @@
 // Underscore prefix keeps this file out of Next.js routing.
 
 import Link from "next/link";
-import { ChevronRight, ArrowLeft, CheckCircle2, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
+import { ChevronRight, ArrowLeft, CheckCircle2, ToggleLeft, ToggleRight, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 import { GOLD, GOLD_BG, GOLD_BORDER } from "@/lib/revenue/calculations";
+
+// ─── Page-level loading / error / empty state components ─────────────────────
+
+export function PageLoadingState({ message = "Loading…" }: { message?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <Loader2 size={22} className="animate-spin" style={{ color: GOLD }} />
+      <p className="text-[13px]" style={{ color: "var(--t-dim)" }}>{message}</p>
+    </div>
+  );
+}
+
+export function PageErrorState({
+  message = "Unable to load data.",
+  detail,
+  onRetry,
+}: {
+  message?: string;
+  detail?: string;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+        style={{ backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)" }}>
+        <AlertTriangle size={20} style={{ color: "#ef4444" }} />
+      </div>
+      <div className="text-center space-y-1">
+        <p className="text-[14px] font-semibold" style={{ color: "var(--t-text)" }}>{message}</p>
+        {detail && <p className="text-[12px]" style={{ color: "var(--t-dim)" }}>{detail}</p>}
+      </div>
+      {onRetry && (
+        <button
+          onClick={onRetry}
+          className="flex items-center gap-2 text-[12px] font-semibold px-4 py-2 rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+          style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
+          <RefreshCw size={12} />
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── Layout wrappers ──────────────────────────────────────────────────────────
 

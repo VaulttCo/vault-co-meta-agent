@@ -95,6 +95,9 @@ export interface MonthlyRevenueSnapshot {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+  // Phase 2C
+  dealCount: number;
+  syncedAt: string | null;
 }
 
 // Fields the POST endpoint accepts
@@ -104,6 +107,9 @@ export interface MonthlyRevenueSnapshotInput {
   closedWonRevenue: number;
   notes?: string | null;
   source?: 'manual' | 'ghl';
+  // Phase 2C: GHL snapshot metadata (ignored for manual entries)
+  dealCount?: number;
+  sourcePayload?: Record<string, unknown>;
 }
 
 // Fields the PATCH endpoint accepts
@@ -111,6 +117,30 @@ export interface MonthlyRevenueSnapshotPatchInput {
   closedWonRevenue?: number;
   reviewStatus?: 'draft' | 'reviewed' | 'locked';
   notes?: string | null;
+}
+
+// ── Phase 2C: GHL preview types ────────────────────────────────────────────────
+// Safe deal summary — no contact IDs, no personal data, no GHL tokens.
+
+export interface GHLDealPreview {
+  name: string;
+  amount: number;
+  status: string;
+  closedDate: string | null;
+}
+
+export interface GHLPreviewResult {
+  clientId: string;
+  billingMonth: string;
+  ghlLocationId: string;
+  ghlPipelineId: string | null;
+  closedWonDealsCount: number;
+  closedWonRevenue: number;
+  vaultCoFee: number;
+  nickRecurringEarnings: number;
+  jaxonRecurringEarnings: 0;
+  source: 'ghl';
+  dealPreview: GHLDealPreview[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -130,6 +160,8 @@ export function rowToMonthlyRevenueSnapshot(row: any): MonthlyRevenueSnapshot {
     createdBy:              row.created_by ?? null,
     createdAt:              row.created_at ?? new Date().toISOString(),
     updatedAt:              row.updated_at ?? new Date().toISOString(),
+    dealCount:              Number(row.deal_count ?? 0),
+    syncedAt:               row.synced_at ?? null,
   };
 }
 
@@ -150,6 +182,8 @@ export function makeDefaultSnapshot(clientId: string, billingMonth: string): Mon
     createdBy:              null,
     createdAt:              now,
     updatedAt:              now,
+    dealCount:              0,
+    syncedAt:               null,
   };
 }
 

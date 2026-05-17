@@ -6,7 +6,7 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
 import type { CampaignDraft } from "@/lib/planStore";
 import type { PersistedReport } from "@/lib/data/data-provider";
-import type { MetaCampaignSnapshotRow } from "@/lib/supabase/types";
+import type { MetaCampaignSnapshotRow, GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 import {
   type AgentId,
   type AgentOutputBundle,
@@ -99,6 +99,7 @@ export interface VeronicaPortalContext {
   creativeAssets?: CreativeAsset[];
   integrationConnections?: IntegrationConnection[];
   metaSnapshots?: MetaCampaignSnapshotRow[];
+  ghlOpportunitySnapshots?: GHLOpportunitySnapshotRow[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -164,6 +165,16 @@ export interface LaunchReadinessCheck {
   recommendedLaunchSequence: string[];
 }
 
+export interface GHLOpportunitySummary {
+  hasData: boolean;
+  total: number;
+  byStatus: Record<string, number>;
+  byStage: Record<string, number>;
+  staleCount: number;
+  totalValue: number;
+  lastSyncedAt: string | null;
+}
+
 export interface ClientBrain {
   profile: {
     id: string;
@@ -187,6 +198,7 @@ export interface ClientBrain {
     hasActiveMetaCampaigns: boolean;
     activeCampaignCount: number;
   };
+  ghlOpportunities: GHLOpportunitySummary;
   performance: {
     leads: number;
     booked: number;
@@ -1048,6 +1060,35 @@ export function buildClientBrain(
   const isRoofing = client.services.some((sv) => sv.toLowerCase().includes("roof"));
   const cplBenchmark = isRoofing ? 75 : 150;
 
+  // Build GHL opportunity summary from stored snapshots (read-only, no GHL API call)
+  const clientGhlOpps = (ctx.ghlOpportunitySnapshots ?? []).filter((sn) => sn.client_id === client.id);
+  const ghlOppLastSync = clientGhlOpps.length > 0 ? clientGhlOpps[0].synced_at : null;
+  const STALE_DAYS = 7;
+  const staleThreshold = Date.now() - STALE_DAYS * 86400000;
+  const byStatus: Record<string, number> = {};
+  const byStage: Record<string, number> = {};
+  let ghlTotalValue = 0;
+  let staleCount = 0;
+  for (const opp of clientGhlOpps) {
+    const status = opp.status ?? "unknown";
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    const stage = opp.pipeline_stage_name ?? "Unknown Stage";
+    byStage[stage] = (byStage[stage] ?? 0) + 1;
+    ghlTotalValue += Number(opp.monetary_value ?? 0);
+    const lastActivity = opp.last_activity_at ?? opp.updated_at_ghl;
+    if (lastActivity && new Date(lastActivity).getTime() < staleThreshold) staleCount++;
+    else if (!lastActivity) staleCount++;
+  }
+  const ghlOpportunities: GHLOpportunitySummary = {
+    hasData: clientGhlOpps.length > 0,
+    total: clientGhlOpps.length,
+    byStatus,
+    byStage,
+    staleCount,
+    totalValue: ghlTotalValue,
+    lastSyncedAt: ghlOppLastSync,
+  };
+
   // Override stats with live Meta snapshot data when available.
   // client.stats holds zeros for server-fetched clients; real numbers come from meta_campaign_snapshots.
   const clientSnapshots = (ctx.metaSnapshots ?? []).filter((sn) => sn.client_id === client.id);
@@ -1195,6 +1236,7 @@ export function buildClientBrain(
       notes: client.notes,
     },
     integrations,
+    ghlOpportunities,
     performance,
     intelligence,
     approvedAssets,
@@ -1757,7 +1799,7 @@ Respond ONLY with a valid JSON object. No text before or after. No markdown code
   "actionSuggested": { "label": "Next Action", "href": "/approvals" }
 }
 Rules:
-- dataSources: only sources actually used — clients, reports, campaign_drafts, approvals, client_intelligence, creative_assets, integration_connections
+- dataSources: only sources actually used — clients, reports, campaign_drafts, approvals, client_intelligence, creative_assets, integration_connections, ghl_opportunity_snapshots
 - relatedLinks: max 3, directly relevant. Valid hrefs: /clients, /clients/[id], /campaigns, /approvals, /reports, /creatives, /analytics, /ai-agent. Never use /settings for integration navigation — use /clients/[id] instead.
 - actionSuggested: omit if no clear next operator action
 - reply: synthesize agent findings; do not dump raw JSON

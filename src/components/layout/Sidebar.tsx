@@ -40,14 +40,15 @@ interface NavItem {
 
 // ── Veronica portal nav ───────────────────────────────────────────────────────
 const veronicaNavItems: NavItem[] = [
-  { label: "Veronica AI",    href: "/ai-agent",      icon: Bot,         permission: "canViewAiBuilder" },
-  { label: "Clients",        href: "/clients",        icon: Users,       permission: "canViewClients"   },
-  { label: "Operator Queue", href: "/operator-queue", icon: ListChecks,  permission: "canViewAiBuilder" },
-  { label: "Approvals",      href: "/approvals",      icon: CheckSquare, permission: "canViewApprovals" },
-  { label: "Reports",        href: "/reports",        icon: FileText,    permission: "canViewReports"   },
-  { label: "Campaigns",      href: "/campaigns",      icon: Megaphone,   permission: "canViewCampaigns" },
-  { label: "Creatives",      href: "/creatives",      icon: ImageIcon,   permission: "canViewCreatives" },
-  { label: "Analytics",      href: "/analytics",      icon: BarChart3,   permission: "canViewAnalytics" },
+  { label: "Veronica Overview", href: "/ai-agent",         icon: Bot,         permission: "canViewAiBuilder" },
+  { label: "Veronica Console",  href: "/ai-agent/console", icon: Sparkles,    permission: "canViewAiBuilder" },
+  { label: "Clients",           href: "/clients",           icon: Users,       permission: "canViewClients"   },
+  { label: "Operator Queue",    href: "/operator-queue",    icon: ListChecks,  permission: "canViewAiBuilder" },
+  { label: "Approvals",         href: "/approvals",         icon: CheckSquare, permission: "canViewApprovals" },
+  { label: "Reports",           href: "/reports",           icon: FileText,    permission: "canViewReports"   },
+  { label: "Campaigns",         href: "/campaigns",         icon: Megaphone,   permission: "canViewCampaigns" },
+  { label: "Creatives",         href: "/creatives",         icon: ImageIcon,   permission: "canViewCreatives" },
+  { label: "Analytics",         href: "/analytics",         icon: BarChart3,   permission: "canViewAnalytics" },
 ];
 
 const settingsItem: NavItem = {
@@ -67,8 +68,12 @@ export function Sidebar({ onClose }: SidebarProps) {
     ? plans.filter((p) => p.status === "needs_review").length
     : 0;
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    // Exact match for /ai-agent so the overview and console don't both highlight
+    if (href === "/ai-agent") return pathname === "/ai-agent";
+    return pathname === href || pathname.startsWith(href + "/");
+  };
 
   const roleColor = user ? ROLE_COLORS[user.role] : "#6b7a99";
   const roleLabel = user ? ROLE_LABELS[user.role] : "";
@@ -125,7 +130,7 @@ export function Sidebar({ onClose }: SidebarProps) {
       >
         <Icon size={15} className="flex-shrink-0" style={{ color: active ? "#0081f2" : undefined }} />
         <span className="truncate">{label}</span>
-        {label === "Veronica AI" && (
+        {(label === "Veronica Overview" || label === "Veronica Console") && (
           <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
             style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
             <Sparkles size={7} />AI

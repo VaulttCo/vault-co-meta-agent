@@ -119,6 +119,13 @@ export interface GhlFollowUpOutput {
   recommendedFollowUpAudit: string[];
   approvalRequired: boolean;
   dataConfidence: "high" | "medium" | "low";
+  // GHL opportunity-level pipeline intelligence (populated when ghl_opportunity_snapshots exist)
+  opportunityTotal: number | null;
+  staleLeadCount: number | null;
+  pipelineStageSummary: Record<string, number> | null;
+  opportunityStatusSummary: Record<string, number> | null;
+  lastOpportunitySync: string | null;
+  opportunityPipelineValue: number | null;
 }
 
 export interface SalesConversionOutput {
@@ -437,7 +444,7 @@ export function runMediaBuyerAgent(brain: ClientBrain): MediaBuyerOutput {
 
 // 5. GHL Follow-Up Agent
 export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
-  const { performance: p, integrations: i, intelligence: intel } = brain;
+  const { performance: p, integrations: i, intelligence: intel, ghlOpportunities: ghlOpps } = brain;
   const sa = intel?.salesAudit;
 
   let followUpBottleneck = "No follow-up bottleneck detected.";
@@ -452,14 +459,45 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     : null;
   const ghlStale = ghlStaleDays !== null && ghlStaleDays > 3;
 
+  // Use opportunity-level data for richer diagnosis when available
+  const hasOppData = ghlOpps?.hasData ?? false;
+
   if (!ghlConnected) {
     followUpBottleneck = "GHL Location not connected — follow-up system cannot be audited.";
-  } else if (!ghlSynced) {
+  } else if (!ghlSynced && !hasOppData) {
     // Connected but no sync has run yet
-    followUpBottleneck = "GHL is connected but pipeline data has not synced yet. Workflow auditing will be available once the first sync completes.";
-    bookingIssue = "GHL connected — waiting for first sync. Pipeline and contact data will populate after sync runs.";
+    followUpBottleneck = "GHL is connected but opportunity-level pipeline data has not been synced yet. Use the GHL Pipeline tab → Sync Opportunities to load pipeline data.";
+    bookingIssue = "GHL connected — waiting for first opportunity sync. Pipeline and contact data will populate after sync runs.";
+  } else if (hasOppData) {
+    // Opportunity-level analysis available
+    const total = ghlOpps!.total;
+    const stale = ghlOpps!.staleCount;
+    const openCount = ghlOpps!.byStatus["open"] ?? 0;
+    const wonCount = ghlOpps!.byStatus["won"] ?? 0;
+
+    if (total === 0) {
+      followUpBottleneck = "GHL is synced but no opportunities found in the pipeline. Leads may not be entering GHL or the pipeline is not configured.";
+    } else if (stale > 0 && openCount > 0) {
+      const stalePercent = Math.round((stale / total) * 100);
+      followUpBottleneck = `${stale} of ${total} opportunities (${stalePercent}%) have had no activity in 7+ days — follow-up is stalling. ${wonCount} won.`;
+      bookingIssue = `${stale} stale leads with no recent activity. Speed-to-lead and follow-up cadence should be audited.`;
+    } else if (p.leads > 5 && p.booked === 0) {
+      followUpBottleneck = `${p.leads} leads in system, 0 appointments booked. ${total} opportunities in GHL pipeline — check whether setter tasks are firing and bookings are being logged.`;
+      bookingIssue = "GHL pipeline has opportunities but no bookings recorded — workflow may not be active.";
+    } else if (p.bookingStatus === "below_target") {
+      followUpBottleneck = `Booking rate ${p.bookingRate}% (${p.booked}/${p.leads}) below 30% target. ${total} opportunities in GHL pipeline, ${stale} stale.`;
+      bookingIssue = `Booking rate ${p.bookingRate}% vs 30% target. ${stale} opportunities with no recent activity.`;
+    } else {
+      followUpBottleneck = `GHL pipeline active: ${total} total opportunities, ${openCount} open, ${wonCount} won. ${stale > 0 ? `${stale} stale (no activity 7+ days).` : "No stale leads detected."}`;
+    }
+
+    // Pipeline issue from stage distribution
+    const stageNames = Object.keys(ghlOpps!.byStage);
+    if (stageNames.length === 1) {
+      pipelineIssue = `All ${total} opportunities are stuck in "${stageNames[0]}" — leads may not be progressing through the pipeline.`;
+    }
   } else if (ghlStale) {
-    followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Open the client profile → Integrations tab to trigger a fresh sync.`;
+    followUpBottleneck = `GHL is connected but last sync was ${ghlStaleDays} days ago — data may be stale. Open the client profile → GHL Pipeline tab to trigger a fresh sync.`;
   } else if (p.leads > 5 && p.booked === 0) {
     followUpBottleneck = `${p.leads} leads entered the system with zero appointments booked. Speed-to-lead failure or workflow not triggering.`;
     bookingIssue = "GHL follow-up workflow may not be active or setter tasks are not being created.";
@@ -469,7 +507,9 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
   }
 
   if (sa?.followUpCadence && sa.followUpCadence.toLowerCase().includes("day")) {
-    pipelineIssue = `Follow-up cadence is days-based ("${sa.followUpCadence}") — home services requires contact within 5 minutes of form submission.`;
+    pipelineIssue = pipelineIssue
+      ? `${pipelineIssue} Also: follow-up cadence is days-based ("${sa.followUpCadence}") — home services requires contact within 5 minutes.`
+      : `Follow-up cadence is days-based ("${sa.followUpCadence}") — home services requires contact within 5 minutes of form submission.`;
   }
 
   const audit: string[] = [
@@ -479,6 +519,9 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     "Verify AI voice triggers at the 10-minute mark if no call is logged.",
     "Confirm GHL pipeline stage updates when lead is contacted and appointment is booked.",
   ];
+  if (hasOppData && (ghlOpps?.staleCount ?? 0) > 0) {
+    audit.push(`Review ${ghlOpps!.staleCount} stale opportunities — check last contact date and re-engage or mark lost.`);
+  }
   if (!sa?.hasSalesScript) audit.push("Prepare a call script and load it into the setter notification workflow.");
   if (sa?.followUpCadence) audit.push(`Review follow-up cadence — current: "${sa.followUpCadence}".`);
 
@@ -491,10 +534,18 @@ export function runGhlFollowUpAgent(brain: ClientBrain): GhlFollowUpOutput {
     pipelineIssue,
     recommendedFollowUpAudit: audit,
     approvalRequired: false,
-    dataConfidence: i.ghlConnected && p.leads > 5 ? "high"
+    dataConfidence: hasOppData && (ghlOpps?.total ?? 0) > 0 ? "high"
+      : i.ghlConnected && p.leads > 5 ? "high"
       : i.ghlConnected && i.ghlLastSynced ? "medium"
-      : i.ghlConnected ? "medium"   // connected but no sync yet — still medium, not low
+      : i.ghlConnected ? "medium"
       : "low",
+    // Opportunity-level intelligence
+    opportunityTotal: hasOppData ? (ghlOpps?.total ?? null) : null,
+    staleLeadCount: hasOppData ? (ghlOpps?.staleCount ?? null) : null,
+    pipelineStageSummary: hasOppData && Object.keys(ghlOpps!.byStage).length > 0 ? ghlOpps!.byStage : null,
+    opportunityStatusSummary: hasOppData && Object.keys(ghlOpps!.byStatus).length > 0 ? ghlOpps!.byStatus : null,
+    lastOpportunitySync: ghlOpps?.lastSyncedAt ?? null,
+    opportunityPipelineValue: hasOppData ? (ghlOpps?.totalValue ?? null) : null,
   };
 }
 

@@ -78,7 +78,82 @@ export function makeDefaultSettings(clientId: string): ClientRevenueSettings {
   };
 }
 
-// Row mapper — called inside API routes, never in client components.
+// ── Phase 2B: Monthly Revenue Snapshots ────────────────────────────────────────
+
+export interface MonthlyRevenueSnapshot {
+  id: string;
+  clientId: string;
+  billingMonth: string;           // ISO date, first of month: '2026-05-01'
+  closedWonRevenue: number;
+  vaultCoFee: number;
+  recurringFeePercentage: number;
+  nickRecurringEarnings: number;
+  jaxonRecurringEarnings: number;
+  source: 'manual' | 'ghl';
+  reviewStatus: 'draft' | 'reviewed' | 'locked';
+  notes: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Fields the POST endpoint accepts
+export interface MonthlyRevenueSnapshotInput {
+  clientId: string;
+  billingMonth: string;           // YYYY-MM-DD
+  closedWonRevenue: number;
+  notes?: string | null;
+  source?: 'manual' | 'ghl';
+}
+
+// Fields the PATCH endpoint accepts
+export interface MonthlyRevenueSnapshotPatchInput {
+  closedWonRevenue?: number;
+  reviewStatus?: 'draft' | 'reviewed' | 'locked';
+  notes?: string | null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function rowToMonthlyRevenueSnapshot(row: any): MonthlyRevenueSnapshot {
+  return {
+    id:                     row.id,
+    clientId:               row.client_id,
+    billingMonth:           row.billing_month,
+    closedWonRevenue:       Number(row.closed_won_revenue       ?? 0),
+    vaultCoFee:             Number(row.vault_co_fee             ?? 0),
+    recurringFeePercentage: Number(row.recurring_fee_percentage ?? 0.05),
+    nickRecurringEarnings:  Number(row.nick_recurring_earnings  ?? 0),
+    jaxonRecurringEarnings: Number(row.jaxon_recurring_earnings ?? 0),
+    source:                 (row.source       ?? 'manual') as 'manual' | 'ghl',
+    reviewStatus:           (row.review_status ?? 'draft') as 'draft' | 'reviewed' | 'locked',
+    notes:                  row.notes      ?? null,
+    createdBy:              row.created_by ?? null,
+    createdAt:              row.created_at ?? new Date().toISOString(),
+    updatedAt:              row.updated_at ?? new Date().toISOString(),
+  };
+}
+
+export function makeDefaultSnapshot(clientId: string, billingMonth: string): MonthlyRevenueSnapshot {
+  const now = new Date().toISOString();
+  return {
+    id:                     `mock-${clientId}-${billingMonth}`,
+    clientId,
+    billingMonth,
+    closedWonRevenue:       0,
+    vaultCoFee:             0,
+    recurringFeePercentage: 0.05,
+    nickRecurringEarnings:  0,
+    jaxonRecurringEarnings: 0,
+    source:                 'manual',
+    reviewStatus:           'draft',
+    notes:                  null,
+    createdBy:              null,
+    createdAt:              now,
+    updatedAt:              now,
+  };
+}
+
+// ── Row mapper — called inside API routes, never in client components. ──────────
 // stripeInvoiceAutoCreate and stripeInvoiceAutoSend are hardcoded false
 // at the mapper level so Phase 2A can never accidentally enable invoicing,
 // even if a DB row contains true from a manual edit.

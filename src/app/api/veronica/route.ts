@@ -24,6 +24,7 @@ import {
 import { AGENT_DISPLAY_NAMES } from "@/lib/ai/veronica-agents";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { Client } from "@/lib/data";
+import type { MetaCampaignSnapshotRow } from "@/lib/supabase/types";
 
 // Read clients using the service role key so RLS is not a barrier and real UUIDs are returned.
 // SupabaseDataProvider.getClients() uses the browser client which has no server session,
@@ -208,6 +209,26 @@ export async function POST(req: NextRequest) {
       // integration_connections table may not exist yet — silently skip
     }
 
+    // Fetch Meta campaign snapshots for the target client (read-only)
+    let metaSnapshots: MetaCampaignSnapshotRow[] = [];
+    if (effectiveClientId) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const supabase = getSupabaseServerClient() as any;
+        if (supabase) {
+          const { data: snapshotData } = await supabase
+            .from("meta_campaign_snapshots")
+            .select("id,client_id,meta_account_id,campaign_id,campaign_name,status,objective,spend,impressions,clicks,ctr,cpc,cpm,leads,cpl,date_start,date_end,synced_at,created_at")
+            .eq("client_id", effectiveClientId)
+            .order("synced_at", { ascending: false })
+            .limit(100);
+          if (snapshotData) metaSnapshots = snapshotData as MetaCampaignSnapshotRow[];
+        }
+      } catch {
+        // meta_campaign_snapshots table may not be accessible — silently skip
+      }
+    }
+
     // Setters see clients but not strategy/intelligence data
     // (setter cannot reach this point due to permission check above, but kept for safety)
     const filteredIntelligence = userRole === "setter" ? null : clientIntelligence;
@@ -222,6 +243,7 @@ export async function POST(req: NextRequest) {
       creativeAssets: creativeAssets.length > 0 ? creativeAssets : undefined,
       integrationConnections:
         integrationConnections.length > 0 ? integrationConnections : undefined,
+      metaSnapshots: metaSnapshots.length > 0 ? metaSnapshots : undefined,
     };
 
     // ── Agent routing phase (always runs, both live and mock) ────────────────

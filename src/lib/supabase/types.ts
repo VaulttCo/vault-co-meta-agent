@@ -199,6 +199,11 @@ export interface ClientMonthlyRevenueSnapshotRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Phase 2C: GHL sync metadata
+  deal_count: number;
+  source_payload: Record<string, unknown>;
+  synced_at: string | null;
+  reviewed_at: string | null;
 }
 
 export interface IntegrationConnectionRow {

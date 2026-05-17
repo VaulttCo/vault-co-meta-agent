@@ -19,6 +19,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveGHLCredentials } from "@/lib/integrations/credential-resolver";
 import type { GHLDealPreview } from "@/lib/revenue/types";
+import type { GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 
@@ -82,6 +83,26 @@ export interface GHLSyncResult {
   bookedAppointments: number;
   pipelineValue: number;
   closedRevenue: number;
+  error?: string;
+}
+
+export interface GHLPipelineStage {
+  id: string;
+  name: string;
+  position: number;
+}
+
+export interface GHLPipeline {
+  id: string;
+  name: string;
+  stages: GHLPipelineStage[];
+}
+
+export interface GHLOpportunitySyncResult {
+  success: boolean;
+  clientId: string;
+  locationId: string;
+  upserted: number;
   error?: string;
 }
 
@@ -473,5 +494,190 @@ export async function syncGHLPipelineForClient(clientId: string): Promise<GHLSyn
       closedRevenue: 0,
       error: errorMsg,
     };
+  }
+}
+
+// ─── GHL Pipeline stages ──────────────────────────────────────
+
+/**
+ * Fetch all pipelines and their stages for a GHL location.
+ * Returns a map of stageId → stageName for enriching opportunity snapshots.
+ * READ-ONLY: never writes to GHL.
+ */
+export async function getGHLPipelineStageMap(
+  clientId: string
+): Promise<Map<string, string>> {
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) return new Map();
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
+
+  try {
+    const resp = await ghlGet(
+      "/opportunities/pipelines",
+      { locationId: creds.locationId },
+      creds
+    );
+    if (!resp.ok) return new Map();
+    const data = await resp.json() as { pipelines?: GHLPipeline[] };
+    const pipelines: GHLPipeline[] = data.pipelines ?? [];
+    const stageMap = new Map<string, string>();
+    for (const pipeline of pipelines) {
+      for (const stage of pipeline.stages ?? []) {
+        stageMap.set(stage.id, stage.name);
+      }
+    }
+    return stageMap;
+  } catch {
+    return new Map();
+  }
+}
+
+// ─── Per-opportunity snapshot sync ───────────────────────────
+
+/**
+ * Sync GHL opportunities for a client and upsert per-opportunity snapshot rows.
+ * READ-ONLY from GHL — only writes to Supabase `ghl_opportunity_snapshots` table.
+ * Never creates, updates, or moves opportunities in GHL.
+ */
+export async function syncGHLOpportunitiesForClient(
+  clientId: string
+): Promise<GHLOpportunitySyncResult> {
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) {
+    return {
+      success: false,
+      clientId,
+      locationId: "",
+      upserted: 0,
+      error: "GHL credentials not configured. Add GHL_API_KEY to env vars or save per-client credentials.",
+    };
+  }
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
+
+  try {
+    // Fetch opportunities and pipeline stage map in parallel (read-only GHL calls)
+    const [rawOpportunities, stageMap] = await Promise.all([
+      (async () => {
+        const resp = await ghlGet(
+          "/opportunities/search",
+          { location_id: creds.locationId, limit: "100" },
+          creds
+        );
+        if (!resp.ok) return [];
+        const data = await resp.json() as { opportunities?: Record<string, unknown>[] };
+        return data.opportunities ?? [];
+      })(),
+      getGHLPipelineStageMap(clientId),
+    ]);
+
+    const supabase = getSupabaseServerClient();
+    if (!supabase) {
+      return { success: false, clientId, locationId: creds.locationId, upserted: 0, error: "Supabase not available." };
+    }
+
+    const now = new Date().toISOString();
+    const rows: Omit<GHLOpportunitySnapshotRow, "id" | "created_at">[] = rawOpportunities.map((o) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opp = o as any;
+      const stageName = opp.pipelineStageId ? (stageMap.get(opp.pipelineStageId) ?? null) : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contact = opp.contact as any | null;
+      return {
+        client_id: clientId,
+        ghl_location_id: creds.locationId,
+        opportunity_id: String(opp.id ?? ""),
+        contact_id: opp.contactId ? String(opp.contactId) : null,
+        pipeline_id: opp.pipelineId ? String(opp.pipelineId) : null,
+        pipeline_stage_id: opp.pipelineStageId ? String(opp.pipelineStageId) : null,
+        pipeline_stage_name: stageName,
+        opportunity_name: opp.name ? String(opp.name) : null,
+        contact_name: contact?.name ? String(contact.name) : null,
+        status: opp.status ? String(opp.status) : null,
+        monetary_value: typeof opp.monetaryValue === "number" ? opp.monetaryValue : null,
+        source: opp.source ? String(opp.source) : null,
+        assigned_user: opp.assignedTo ? String(opp.assignedTo) : null,
+        created_at_ghl: opp.createdAt ? String(opp.createdAt) : null,
+        updated_at_ghl: opp.updatedAt ? String(opp.updatedAt) : null,
+        last_activity_at: opp.lastStageChangeAt
+          ? String(opp.lastStageChangeAt)
+          : opp.updatedAt
+          ? String(opp.updatedAt)
+          : null,
+        appointment_status: opp.calendarBookingStatus
+          ? String(opp.calendarBookingStatus)
+          : null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        raw_payload: o as unknown as any,
+        synced_at: now,
+      };
+    });
+
+    if (rows.length === 0) {
+      return { success: true, clientId, locationId: creds.locationId, upserted: 0 };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: upsertError } = await (supabase.from("ghl_opportunity_snapshots") as any).upsert(
+      rows,
+      { onConflict: "client_id,opportunity_id" }
+    );
+
+    if (upsertError) {
+      return {
+        success: false,
+        clientId,
+        locationId: creds.locationId,
+        upserted: 0,
+        error: `Supabase upsert error: ${upsertError.message}`,
+      };
+    }
+
+    // Update integration_connections last_synced_at
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("integration_connections") as any).upsert(
+      {
+        client_id: clientId,
+        provider: "ghl",
+        provider_account_id: creds.locationId,
+        connection_status: "connected",
+        last_synced_at: now,
+      },
+      { onConflict: "client_id,provider" }
+    );
+
+    return { success: true, clientId, locationId: creds.locationId, upserted: rows.length };
+  } catch (err) {
+    return {
+      success: false,
+      clientId,
+      locationId: creds.locationId,
+      upserted: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Read GHL opportunity snapshots for a client from Supabase.
+ * Used by the GET /api/integrations/ghl/opportunities route and Veronica.
+ * READ-ONLY from Supabase — no GHL calls.
+ */
+export async function readGHLOpportunitySnapshots(
+  clientId: string
+): Promise<GHLOpportunitySnapshotRow[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from("ghl_opportunity_snapshots") as any)
+      .select(
+        "id,client_id,ghl_location_id,opportunity_id,contact_id,pipeline_id,pipeline_stage_id,pipeline_stage_name,opportunity_name,contact_name,status,monetary_value,source,assigned_user,created_at_ghl,updated_at_ghl,last_activity_at,appointment_status,synced_at,created_at"
+      )
+      .eq("client_id", clientId)
+      .order("synced_at", { ascending: false })
+      .limit(200);
+    return (data ?? []) as GHLOpportunitySnapshotRow[];
+  } catch {
+    return [];
   }
 }

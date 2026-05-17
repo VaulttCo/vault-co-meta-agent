@@ -55,24 +55,16 @@ function GHLStatusChip({ status }: { status?: GHLConnectionStatus }) {
   if (!status) {
     return <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>Checking…</span>;
   }
-  if (status.isGhlConnected && status.ghlPipelineIdPresent) {
+  if (status.isGhlConnected) {
+    const label = status.connectionSource === "global_env"
+      ? "Connected via Global Config"
+      : status.ghlPipelineIdPresent
+      ? "Connected · Pipeline Filter Active"
+      : "Connected · All Pipelines";
     return (
       <div className="flex items-center gap-1.5">
         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#22c55e" }} />
-        <span className="text-[11px]" style={{ color: "#22c55e" }}>
-          {status.connectionSource === "global_env" ? "Connected via Global Config" : "Connected"}
-        </span>
-      </div>
-    );
-  }
-  if (status.isGhlConnected && !status.ghlPipelineIdPresent) {
-    const label = status.connectionSource === "encrypted_credentials"
-      ? "Credentials Found · Pipeline Needed"
-      : "Location Connected · Pipeline Needed";
-    return (
-      <div className="flex items-center gap-1.5">
-        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#f59e0b" }} />
-        <span className="text-[11px]" style={{ color: "#f59e0b" }}>{label}</span>
+        <span className="text-[11px]" style={{ color: "#22c55e" }}>{label}</span>
       </div>
     );
   }
@@ -349,15 +341,25 @@ export default function GhlTrackerPage() {
       if (res.ok && data.preview) {
         setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview! } }));
       } else {
+        const raw = data.error ?? "";
+        const userMessage = raw.includes("Pipeline ID was rejected")
+          ? "The Pipeline ID appears invalid. Leave it blank to sync all Closed Won opportunities for the connected location."
+          : raw.includes("Location ID could not be validated")
+          ? "The GHL Location ID could not be validated. Check it in GHL Settings."
+          : raw.includes("credentials were rejected")
+          ? "GHL credentials rejected. Check that the API key is valid in the Integrations tab."
+          : raw.includes("Recurring billing")
+          ? raw
+          : raw || "GHL credentials connected, but the request failed. Manual entry is still available.";
         setGhlPreviews((prev) => ({
           ...prev,
-          [clientId]: { status: "error", error: data.error ?? "Unable to fetch GHL data." },
+          [clientId]: { status: "error", error: userMessage },
         }));
       }
     } catch (err) {
       setGhlPreviews((prev) => ({
         ...prev,
-        [clientId]: { status: "error", error: err instanceof Error ? err.message : "Network error." },
+        [clientId]: { status: "error", error: err instanceof Error ? err.message : "Network error. Manual entry is still available." },
       }));
     }
   }
@@ -724,8 +726,8 @@ export default function GhlTrackerPage() {
                   const ghlPreviewEntry  = ghlPreviews[client.id] ?? { status: "idle" };
                   const ghlStatus        = ghlStatusMap[client.id];
 
-                  // GHL can be previewed only when connected + pipeline present
-                  const canPreviewGHL = Boolean(ghlStatus?.isGhlConnected && ghlStatus?.ghlPipelineIdPresent);
+                  // GHL preview requires only a connected location — pipeline is optional
+                  const canPreviewGHL = Boolean(ghlStatus?.isGhlConnected);
 
                   // Manual revenue display values
                   const rawInput       = parseFloat(revenueInputs[client.id] ?? "") || 0;
@@ -783,15 +785,13 @@ export default function GhlTrackerPage() {
                       {/* GHL Connected */}
                       <td className="px-4 py-3.5">
                         <GHLStatusChip status={ghlStatus} />
-                        {ghlStatus?.isGhlConnected && !ghlStatus.ghlPipelineIdPresent && (
-                          <button
-                            onClick={() => handleOpenPanel(client.id)}
-                            className="mt-1.5 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-                            style={{ color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.20)" }}>
-                            <Settings size={8} /> Add Pipeline ID
-                          </button>
+                        {ghlStatus?.missingReason && (
+                          <div className="text-[9px] mt-1 leading-snug max-w-[180px]"
+                            style={{ color: "rgba(107,122,153,0.5)" }}>
+                            {ghlStatus.missingReason}
+                          </div>
                         )}
-                        {!ghlStatus?.isGhlConnected && !ghlStatus?.ghlPipelineIdPresent && ghlStatus?.connectionSource === "missing" && (
+                        {!ghlStatus?.isGhlConnected && ghlStatus?.connectionSource === "missing" && (
                           <button
                             onClick={() => handleOpenPanel(client.id)}
                             className="mt-1.5 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
@@ -856,8 +856,6 @@ export default function GhlTrackerPage() {
                           <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>
                             {!ghlStatus || ghlStatus.connectionSource === "missing"
                               ? "No GHL configured"
-                              : ghlStatus.isGhlConnected
-                              ? "Pipeline ID needed"
                               : "Location ID needed"}
                           </span>
                         ) : ghlSnapshot ? (
@@ -893,11 +891,18 @@ export default function GhlTrackerPage() {
                           </div>
                         ) : ghlPreviewEntry.status === "loaded" ? (
                           <div className="space-y-0.5">
-                            <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
-                              {fmtCurrency(ghlPreviewEntry.result.closedWonRevenue)}
-                            </div>
+                            {ghlPreviewEntry.result.closedWonDealsCount === 0 ? (
+                              <div className="text-[10px]" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                No Closed Won deals found for this month
+                              </div>
+                            ) : (
+                              <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
+                                {fmtCurrency(ghlPreviewEntry.result.closedWonRevenue)}
+                              </div>
+                            )}
                             <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                              GHL Preview — not saved
+                              GHL Preview · {ghlPreviewEntry.result.closedWonDealsCount} deal{ghlPreviewEntry.result.closedWonDealsCount !== 1 ? "s" : ""} · not saved
+                              {!ghlStatus?.ghlPipelineIdPresent && " · all pipelines"}
                             </div>
                           </div>
                         ) : null}
@@ -1054,13 +1059,7 @@ export default function GhlTrackerPage() {
                                   <div>
                                     <label className="text-[10px] font-bold block mb-1"
                                       style={{ color: "var(--t-dim)" }}>
-                                      GHL Pipeline ID
-                                      {!ghlStatus?.ghlPipelineIdPresent && (
-                                        <span className="ml-2 text-[9px] font-normal px-1.5 py-0.5 rounded"
-                                          style={{ color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.08)" }}>
-                                          Required for Preview
-                                        </span>
-                                      )}
+                                      Optional GHL Pipeline ID
                                     </label>
                                     <input
                                       type="text"
@@ -1075,7 +1074,7 @@ export default function GhlTrackerPage() {
                                       }}
                                     />
                                     <p className="text-[9px] mt-1" style={{ color: "rgba(107,122,153,0.5)" }}>
-                                      Find this in GHL → Settings → Pipelines. Required to enable GHL Closed Won preview.
+                                      Leave blank to pull Closed Won opportunities across the connected GHL location. Add a Pipeline ID only if you want to filter to one pipeline.
                                     </p>
                                   </div>
 
@@ -1102,7 +1101,7 @@ export default function GhlTrackerPage() {
                                     />
                                     <p className="text-[9px] mt-1" style={{ color: "rgba(107,122,153,0.5)" }}>
                                       {ghlStatus?.ghlLocationIdPresent
-                                        ? `Location detected via ${ghlStatus.connectionSource.replace("_", " ")}. Override only if incorrect.`
+                                        ? `Location detected via ${ghlStatus.connectionSource.replace("_", " ")}. Only use this if the auto-detected GHL Location ID is wrong.`
                                         : "No location detected. Set it here or save GHL credentials in the Integrations tab."}
                                     </p>
                                   </div>

@@ -184,6 +184,23 @@ export interface ClientRevenueSettingsRow {
   updated_at: string;
 }
 
+export interface ClientMonthlyRevenueSnapshotRow {
+  id: string;
+  client_id: string;
+  billing_month: string;           // date as ISO string: 'YYYY-MM-DD'
+  closed_won_revenue: number;
+  vault_co_fee: number;
+  recurring_fee_percentage: number;
+  nick_recurring_earnings: number;
+  jaxon_recurring_earnings: number;
+  source: 'manual' | 'ghl';
+  review_status: 'draft' | 'reviewed' | 'locked';
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface IntegrationConnectionRow {
   id: string;
   client_id: string;
@@ -258,6 +275,11 @@ export interface Database {
         Row: ClientRevenueSettingsRow;
         Insert: Omit<ClientRevenueSettingsRow, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<ClientRevenueSettingsRow, "id" | "created_at" | "updated_at">>;
+      };
+      client_monthly_revenue_snapshots: {
+        Row: ClientMonthlyRevenueSnapshotRow;
+        Insert: Omit<ClientMonthlyRevenueSnapshotRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<ClientMonthlyRevenueSnapshotRow, "id" | "created_at" | "updated_at">>;
       };
       integration_connections: {
         Row: IntegrationConnectionRow;

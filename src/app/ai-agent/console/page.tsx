@@ -451,6 +451,7 @@ const agentSuggestions = [
   "Which clients are blocked from launch?",
   "Which clients are at risk this week?",
   "What is blocking Kaczmar?",
+  "Create a campaign draft for Kaczmar",
   "Which clients need reports?",
   "Which clients have follow-up bottlenecks?",
   "Should we increase ad spend anywhere?",
@@ -767,6 +768,92 @@ function SaveDraftMenu({ msg, clientName }: { msg: ConsoleMsg; clientName?: stri
         </>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Create Campaign Draft — structured draft into campaign_drafts table
+// ─────────────────────────────────────────────────────────────
+
+function CreateCampaignDraftButton({ msg, clientName }: { msg: ConsoleMsg; clientName?: string }) {
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [draftId, setDraftId] = useState<string | null>(null);
+
+  // Only show when a client is detected
+  if (!msg.detectedClientId) return null;
+
+  async function createDraft() {
+    setState("saving");
+    try {
+      const res = await fetch("/api/campaign-drafts/from-veronica", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: msg.detectedClientId,
+          sourcePrompt: msg.text?.slice(0, 500),
+          agentsUsed: msg.agentsUsed ?? [],
+        }),
+      });
+      const data = await res.json() as { success?: boolean; id?: string; campaignName?: string; error?: string; mockMode?: boolean };
+      if (!res.ok) {
+        console.error("[CreateCampaignDraftButton]", data.error);
+        setState("error");
+        return;
+      }
+      setDraftId(data.id ?? "saved");
+      setState("saved");
+    } catch {
+      setState("error");
+    }
+  }
+
+  if (state === "saved") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]" style={{ color: "#22c55e" }}>
+        <CheckCircle2 size={10} />
+        Campaign draft saved for approval.{" "}
+        {draftId && draftId !== "saved" ? (
+          <a href="/approvals" className="hover:underline" style={{ color: "#a78bfa" }}>
+            Review in Approvals →
+          </a>
+        ) : (
+          <span style={{ color: "#5a6278" }}>(Mock mode)</span>
+        )}
+      </div>
+    );
+  }
+
+  if (state === "error") {
+    return (
+      <div className="flex items-center gap-2 text-[11px]">
+        <AlertCircle size={10} style={{ color: "#ef4444" }} />
+        <span style={{ color: "#ef4444" }}>Draft save failed.</span>
+        <button onClick={() => setState("idle")} className="underline hover:no-underline" style={{ color: "#6b7a99" }}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      disabled={state === "saving"}
+      onClick={createDraft}
+      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+      style={{
+        color: "#c9a84c",
+        backgroundColor: "rgba(201,168,76,0.06)",
+        border: "1px solid rgba(201,168,76,0.20)",
+      }}
+      title={clientName ? `Create campaign draft for ${clientName}` : "Create campaign draft"}
+    >
+      {state === "saving" ? (
+        <Loader2 size={10} className="animate-spin" />
+      ) : (
+        <FileText size={10} />
+      )}
+      {state === "saving" ? "Creating…" : "Create Campaign Draft"}
+    </button>
   );
 }
 
@@ -2568,6 +2655,15 @@ function AICampaignBuilderContent() {
                     {/* Save actions — only for non-error agent responses */}
                     {msg.role === "agent" && !msg.isError && (
                       <div className="flex items-center gap-2 flex-wrap">
+                        <CreateCampaignDraftButton
+                          msg={msg}
+                          clientName={
+                            msg.detectedClientName ??
+                            (msg.detectedClientId
+                              ? clients.find((c) => c.id === msg.detectedClientId)?.name
+                              : undefined)
+                          }
+                        />
                         <SaveDraftMenu
                           msg={msg}
                           clientName={

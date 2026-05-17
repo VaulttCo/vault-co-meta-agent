@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { RefreshCw, AlertCircle, Info, Loader2, Eye } from "lucide-react";
+import { RefreshCw, AlertCircle, Info, Loader2, Eye, Settings, X, CheckCircle2 } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
 import {
@@ -126,6 +126,18 @@ export default function GhlTrackerPage() {
   // ── Phase 2C: GHL preview state ───────────────────────────────────────────
   const [ghlPreviews, setGhlPreviews]   = useState<Record<string, GHLPreviewEntry>>({});
   const [savingGhl, setSavingGhl]       = useState<Record<string, boolean>>({});
+
+  // ── Revenue Settings panel (inline accordion per client) ──────────────────
+  const [openPanel, setOpenPanel]         = useState<string | null>(null);
+  const [panelSaving, setPanelSaving]     = useState<Record<string, boolean>>({});
+  const [panelError, setPanelError]       = useState<Record<string, string | null>>({});
+  const [panelSuccess, setPanelSuccess]   = useState<Record<string, boolean>>({});
+  const [panelForm, setPanelForm]         = useState<Record<string, {
+    ghlPipelineId: string;
+    ghlLocationId: string;
+    recurringBillingStartDate: string;
+    notes: string;
+  }>>({});
 
   // ── Load clients ──────────────────────────────────────────────────────────
   function loadClients() {
@@ -382,6 +394,80 @@ export default function GhlTrackerPage() {
       // silent fail
     } finally {
       setSavingGhl((prev) => ({ ...prev, [clientId]: false }));
+    }
+  }
+
+  // ── Revenue Settings panel handlers ──────────────────────────────────────
+  function handleOpenPanel(clientId: string) {
+    const s = settingsMap[clientId];
+    if (!panelForm[clientId]) {
+      setPanelForm((prev) => ({
+        ...prev,
+        [clientId]: {
+          ghlPipelineId:            s?.ghlPipelineId ?? "",
+          ghlLocationId:            s?.ghlLocationId ?? "",
+          recurringBillingStartDate: s?.recurringBillingStartDate ?? "",
+          notes:                    s?.notes ?? "",
+        },
+      }));
+    }
+    setPanelError((prev) => ({ ...prev, [clientId]: null }));
+    setPanelSuccess((prev) => ({ ...prev, [clientId]: false }));
+    setOpenPanel((prev) => (prev === clientId ? null : clientId));
+  }
+
+  async function handleSaveGHLSettings(clientId: string) {
+    const form = panelForm[clientId];
+    if (!form) return;
+
+    setPanelSaving((prev) => ({ ...prev, [clientId]: true }));
+    setPanelError((prev) => ({ ...prev, [clientId]: null }));
+    setPanelSuccess((prev) => ({ ...prev, [clientId]: false }));
+
+    try {
+      const res = await fetch(`/api/revenue-settings/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ghlPipelineId:             form.ghlPipelineId.trim() || null,
+          ghlLocationId:             form.ghlLocationId.trim() || null,
+          recurringBillingStartDate: form.recurringBillingStartDate || null,
+          notes:                     form.notes.trim() || null,
+        }),
+      });
+
+      const data = await res.json() as { settings?: ClientRevenueSettings; error?: string };
+
+      if (res.ok && data.settings) {
+        // Update local settings map
+        setSettingsMap((prev) => ({ ...prev, [clientId]: data.settings! }));
+        // Sync form to saved values
+        const s = data.settings;
+        setPanelForm((prev) => ({
+          ...prev,
+          [clientId]: {
+            ghlPipelineId:            s.ghlPipelineId ?? "",
+            ghlLocationId:            s.ghlLocationId ?? "",
+            recurringBillingStartDate: s.recurringBillingStartDate ?? "",
+            notes:                    s.notes ?? "",
+          },
+        }));
+        setPanelSuccess((prev) => ({ ...prev, [clientId]: true }));
+
+        // Re-fetch GHL status for this client so the chip updates live
+        fetch(`/api/revenue-settings/ghl-status?clientIds=${clientId}`)
+          .then((r) => r.ok ? r.json() : { ghlStatus: {} })
+          .then(({ ghlStatus }: { ghlStatus: Record<string, GHLConnectionStatus> }) => {
+            setGhlStatusMap((prev) => ({ ...prev, ...ghlStatus }));
+          })
+          .catch(() => {});
+      } else {
+        setPanelError((prev) => ({ ...prev, [clientId]: data.error ?? "Failed to save settings." }));
+      }
+    } catch (err) {
+      setPanelError((prev) => ({ ...prev, [clientId]: err instanceof Error ? err.message : "Network error." }));
+    } finally {
+      setPanelSaving((prev) => ({ ...prev, [clientId]: false }));
     }
   }
 
@@ -663,7 +749,16 @@ export default function GhlTrackerPage() {
                   // Review status: GHL snapshot takes precedence over manual
                   const displayReviewStatus = ghlSnapshot?.reviewStatus ?? manualSnapshot?.reviewStatus ?? null;
 
+                  // Settings panel state for this client
+                  const defaultForm = { ghlPipelineId: "", ghlLocationId: "", recurringBillingStartDate: "", notes: "" };
+                  const form         = panelForm[client.id] ?? defaultForm;
+                  const isSavingPanel = panelSaving[client.id] ?? false;
+                  const panelErr     = panelError[client.id] ?? null;
+                  const panelOk      = panelSuccess[client.id] ?? false;
+                  const isPanelOpen  = openPanel === client.id;
+
                   return (
+                    <>
                     <tr key={client.id}
                       className="border-b transition-colors hover:bg-white/[0.01]"
                       style={{ borderColor: "var(--t-border-nav)" }}>
@@ -688,17 +783,21 @@ export default function GhlTrackerPage() {
                       {/* GHL Connected */}
                       <td className="px-4 py-3.5">
                         <GHLStatusChip status={ghlStatus} />
-                        {ghlStatus?.missingReason && !ghlStatus.isGhlConnected && (
-                          <div className="text-[9px] mt-1 leading-snug max-w-[180px]"
-                            style={{ color: "rgba(107,122,153,0.5)" }}>
-                            {ghlStatus.missingReason}
-                          </div>
+                        {ghlStatus?.isGhlConnected && !ghlStatus.ghlPipelineIdPresent && (
+                          <button
+                            onClick={() => handleOpenPanel(client.id)}
+                            className="mt-1.5 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                            style={{ color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.20)" }}>
+                            <Settings size={8} /> Add Pipeline ID
+                          </button>
                         )}
-                        {ghlStatus?.isGhlConnected && !ghlStatus.ghlPipelineIdPresent && ghlStatus.missingReason && (
-                          <div className="text-[9px] mt-1 leading-snug max-w-[180px]"
-                            style={{ color: "rgba(245,158,11,0.7)" }}>
-                            {ghlStatus.missingReason}
-                          </div>
+                        {!ghlStatus?.isGhlConnected && !ghlStatus?.ghlPipelineIdPresent && ghlStatus?.connectionSource === "missing" && (
+                          <button
+                            onClick={() => handleOpenPanel(client.id)}
+                            className="mt-1.5 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                            style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
+                            <Settings size={8} /> Configure GHL
+                          </button>
                         )}
                       </td>
 
@@ -896,9 +995,249 @@ export default function GhlTrackerPage() {
                               GHL snapshot saved
                             </div>
                           )}
+                          {/* Settings gear — always available for admin */}
+                          <button
+                            onClick={() => handleOpenPanel(client.id)}
+                            className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-80 mt-0.5"
+                            style={{
+                              color: openPanel === client.id ? GOLD : "rgba(107,122,153,0.6)",
+                              backgroundColor: openPanel === client.id ? GOLD_BG : "rgba(61,79,110,0.06)",
+                              border: `1px solid ${openPanel === client.id ? GOLD_BORDER : "rgba(61,79,110,0.12)"}`,
+                            }}>
+                            <Settings size={9} />
+                            {openPanel === client.id ? "Close" : "GHL Settings"}
+                          </button>
                         </div>
                       </td>
                     </tr>
+
+                    {/* ── Inline Revenue Settings Panel ───────────────── */}
+                    {isPanelOpen && (
+                        <tr key={`${client.id}-settings`}
+                          style={{ backgroundColor: "rgba(0,0,0,0.15)" }}>
+                          <td colSpan={10} className="px-0 py-0">
+                            <div className="mx-4 my-3 rounded-xl overflow-hidden"
+                              style={{ border: `1px solid ${GOLD_BORDER}`, backgroundColor: "rgba(201,168,76,0.03)" }}>
+
+                              {/* Panel header */}
+                              <div className="flex items-center justify-between px-5 py-3 border-b"
+                                style={{ borderColor: GOLD_BORDER, backgroundColor: "rgba(201,168,76,0.04)" }}>
+                                <div className="flex items-center gap-2.5">
+                                  <Settings size={13} style={{ color: GOLD }} />
+                                  <span className="text-[12px] font-bold"
+                                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: GOLD }}>
+                                    GHL Revenue Settings — {client.name}
+                                  </span>
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
+                                    style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
+                                    ADMIN ONLY
+                                  </span>
+                                </div>
+                                <button onClick={() => setOpenPanel(null)}
+                                  className="hover:opacity-60 transition-opacity" style={{ color: "var(--t-dim)" }}>
+                                  <X size={14} />
+                                </button>
+                              </div>
+
+                              {/* Panel body — form + status side by side */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-x"
+                                style={{ borderColor: "rgba(61,79,110,0.15)" }}>
+
+                                {/* Left: editable fields */}
+                                <div className="px-5 py-4 space-y-4">
+                                  <div className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
+                                    Editable Fields
+                                  </div>
+
+                                  {/* GHL Pipeline ID */}
+                                  <div>
+                                    <label className="text-[10px] font-bold block mb-1"
+                                      style={{ color: "var(--t-dim)" }}>
+                                      GHL Pipeline ID
+                                      {!ghlStatus?.ghlPipelineIdPresent && (
+                                        <span className="ml-2 text-[9px] font-normal px-1.5 py-0.5 rounded"
+                                          style={{ color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.08)" }}>
+                                          Required for Preview
+                                        </span>
+                                      )}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={form.ghlPipelineId}
+                                      onChange={(e) => setPanelForm((prev) => ({ ...prev, [client.id]: { ...(prev[client.id] ?? defaultForm), ghlPipelineId: e.target.value } }))}
+                                      placeholder="e.g. abc123pipeline"
+                                      className="w-full px-3 py-2 rounded-lg text-[12px] font-mono bg-transparent outline-none"
+                                      style={{
+                                        backgroundColor: "rgba(0,129,242,0.04)",
+                                        border: "1px solid rgba(61,79,110,0.25)",
+                                        color: "var(--t-text)",
+                                      }}
+                                    />
+                                    <p className="text-[9px] mt-1" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                      Find this in GHL → Settings → Pipelines. Required to enable GHL Closed Won preview.
+                                    </p>
+                                  </div>
+
+                                  {/* GHL Location ID override */}
+                                  <div>
+                                    <label className="text-[10px] font-bold block mb-1"
+                                      style={{ color: "var(--t-dim)" }}>
+                                      GHL Location ID Override
+                                      <span className="ml-2 text-[9px] font-normal" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                        Optional — only needed if auto-detection is wrong
+                                      </span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={form.ghlLocationId}
+                                      onChange={(e) => setPanelForm((prev) => ({ ...prev, [client.id]: { ...(prev[client.id] ?? defaultForm), ghlLocationId: e.target.value } }))}
+                                      placeholder={ghlStatus?.ghlLocationIdPresent ? "Auto-detected — leave blank to keep" : "e.g. loc_xyz789"}
+                                      className="w-full px-3 py-2 rounded-lg text-[12px] font-mono bg-transparent outline-none"
+                                      style={{
+                                        backgroundColor: "rgba(0,129,242,0.04)",
+                                        border: "1px solid rgba(61,79,110,0.25)",
+                                        color: "var(--t-text)",
+                                      }}
+                                    />
+                                    <p className="text-[9px] mt-1" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                      {ghlStatus?.ghlLocationIdPresent
+                                        ? `Location detected via ${ghlStatus.connectionSource.replace("_", " ")}. Override only if incorrect.`
+                                        : "No location detected. Set it here or save GHL credentials in the Integrations tab."}
+                                    </p>
+                                  </div>
+
+                                  {/* Recurring Billing Start Date */}
+                                  <div>
+                                    <label className="text-[10px] font-bold block mb-1"
+                                      style={{ color: "var(--t-dim)" }}>
+                                      Recurring Billing Start Date
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={form.recurringBillingStartDate}
+                                      onChange={(e) => setPanelForm((prev) => ({ ...prev, [client.id]: { ...(prev[client.id] ?? defaultForm), recurringBillingStartDate: e.target.value } }))}
+                                      className="px-3 py-2 rounded-lg text-[12px] bg-transparent outline-none"
+                                      style={{
+                                        backgroundColor: "rgba(0,129,242,0.04)",
+                                        border: "1px solid rgba(61,79,110,0.25)",
+                                        color: "var(--t-text)",
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Notes */}
+                                  <div>
+                                    <label className="text-[10px] font-bold block mb-1"
+                                      style={{ color: "var(--t-dim)" }}>
+                                      Notes
+                                    </label>
+                                    <textarea
+                                      value={form.notes}
+                                      onChange={(e) => setPanelForm((prev) => ({ ...prev, [client.id]: { ...(prev[client.id] ?? defaultForm), notes: e.target.value } }))}
+                                      placeholder="Internal notes about this client's GHL setup…"
+                                      rows={2}
+                                      className="w-full px-3 py-2 rounded-lg text-[11px] bg-transparent outline-none resize-none"
+                                      style={{
+                                        backgroundColor: "rgba(0,129,242,0.02)",
+                                        border: "1px solid rgba(61,79,110,0.18)",
+                                        color: "var(--t-dim)",
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Save row */}
+                                  <div className="flex items-center gap-3 pt-1">
+                                    <button
+                                      onClick={() => void handleSaveGHLSettings(client.id)}
+                                      disabled={isSavingPanel}
+                                      className="flex items-center gap-1.5 text-[11px] font-bold px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
+                                      {isSavingPanel && <Loader2 size={11} className="animate-spin" />}
+                                      {isSavingPanel ? "Saving…" : "Save GHL Settings"}
+                                    </button>
+                                    {panelOk && !isSavingPanel && (
+                                      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "#22c55e" }}>
+                                        <CheckCircle2 size={13} /> Saved
+                                      </div>
+                                    )}
+                                    {panelErr && (
+                                      <div className="text-[11px]" style={{ color: "#ef4444" }}>{panelErr}</div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Right: display-only GHL status */}
+                                <div className="px-5 py-4 space-y-3">
+                                  <div className="text-[9px] font-bold uppercase tracking-widest mb-1"
+                                    style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-dim)" }}>
+                                    GHL Connection Status
+                                  </div>
+
+                                  {[
+                                    {
+                                      label: "Credentials Found",
+                                      value: ghlStatus?.isGhlConnected ? "Yes" : "No",
+                                      color: ghlStatus?.isGhlConnected ? "#22c55e" : "#ef4444",
+                                      note: ghlStatus?.connectionSource
+                                        ? `Source: ${ghlStatus.connectionSource.replace(/_/g, " ")}`
+                                        : "No credentials detected",
+                                    },
+                                    {
+                                      label: "Location ID",
+                                      value: ghlStatus?.ghlLocationIdPresent ? "Detected" : "Missing",
+                                      color: ghlStatus?.ghlLocationIdPresent ? "#22c55e" : "#f59e0b",
+                                      note: ghlStatus?.ghlLocationIdPresent
+                                        ? `Via ${ghlStatus.connectionSource?.replace(/_/g, " ")}`
+                                        : "Set it here or in Integrations",
+                                    },
+                                    {
+                                      label: "Pipeline ID",
+                                      value: ghlStatus?.ghlPipelineIdPresent ? "Set" : "Not Set",
+                                      color: ghlStatus?.ghlPipelineIdPresent ? "#22c55e" : "#f59e0b",
+                                      note: ghlStatus?.ghlPipelineIdPresent
+                                        ? "GHL preview is available"
+                                        : "Required to enable GHL preview",
+                                    },
+                                    {
+                                      label: "Preview GHL",
+                                      value: canPreviewGHL ? "Available" : "Unavailable",
+                                      color: canPreviewGHL ? "#22c55e" : "rgba(107,122,153,0.6)",
+                                      note: canPreviewGHL
+                                        ? "Click Preview GHL to fetch Closed Won revenue"
+                                        : (ghlStatus?.missingReason ?? "Connect GHL credentials first"),
+                                    },
+                                  ].map((item) => (
+                                    <div key={item.label} className="flex items-start justify-between gap-4 py-2 border-b"
+                                      style={{ borderColor: "rgba(61,79,110,0.10)" }}>
+                                      <div>
+                                        <div className="text-[10px] font-semibold" style={{ color: "var(--t-dim)" }}>
+                                          {item.label}
+                                        </div>
+                                        <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.45)" }}>
+                                          {item.note}
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-bold flex-shrink-0" style={{ color: item.color }}>
+                                        {item.value}
+                                      </span>
+                                    </div>
+                                  ))}
+
+                                  <div className="pt-2">
+                                    <p className="text-[9px] leading-relaxed" style={{ color: "rgba(107,122,153,0.45)" }}>
+                                      GHL credentials (API keys) are stored encrypted server-side and never shown here.
+                                      To add or update credentials, use the Integrations tab in Client Settings.
+                                      This panel saves pipeline ID, location override, start date, and notes to Revenue Settings only.
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                    )}
+                    </>
                   );
                 })
               )}

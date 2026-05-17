@@ -222,41 +222,33 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* ── Revenue Dashboard portal ───────────────────────────────── */}
         {isRevenueDashboard && (
           <>
-            <SectionLabel label="Leadership View" />
+            <SectionLabel label="Revenue" />
             <NavLink label="Revenue Dashboard" href="/revenue-dashboard" icon={TrendingUp} />
 
-            <SectionLabel label="Dashboard Sections" />
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
-              style={{ color: "rgba(107,122,153,0.45)" }}>
-              <Users size={15} className="flex-shrink-0" />
-              <span className="truncate">Client Status</span>
-              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
-                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
-                on page
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
-              style={{ color: "rgba(107,122,153,0.45)" }}>
-              <BarChart3 size={15} className="flex-shrink-0" />
-              <span className="truncate">Fulfillment Health</span>
-              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
-                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
-                on page
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
-              style={{ color: "rgba(107,122,153,0.45)" }}>
-              <CheckSquare size={15} className="flex-shrink-0" />
-              <span className="truncate">Approvals Summary</span>
-              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
-                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
-                on page
-              </span>
-            </div>
+            <SectionLabel label="On This Page" />
+            {[
+              { icon: BarChart3,   label: "Executive Snapshot" },
+              { icon: DollarSign,  label: "Setup Pipeline"     },
+              { icon: Users,       label: "Partner Earnings"   },
+              { icon: TrendingUp,  label: "Leaderboard"        },
+              { icon: Repeat2,     label: "Forecast Calculator"},
+              { icon: BarChart3,   label: "Scenarios"          },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
+                style={{ color: "rgba(107,122,153,0.45)" }}>
+                <Icon size={15} className="flex-shrink-0" />
+                <span className="truncate">{label}</span>
+                <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
+                  style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
+                  on page
+                </span>
+              </div>
+            ))}
+
             <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
               style={{ color: "rgba(107,122,153,0.35)" }}>
-              <DollarSign size={15} className="flex-shrink-0" />
-              <span className="truncate">Revenue Tracking</span>
+              <Repeat2 size={15} className="flex-shrink-0" />
+              <span className="truncate">GHL Revenue Tracker</span>
               <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
                 style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.10)", border: "1px solid rgba(61,79,110,0.18)" }}>
                 Phase 2

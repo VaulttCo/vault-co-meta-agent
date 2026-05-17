@@ -1441,6 +1441,36 @@ function ClientStatusControl({
 
 // ─── Page ─────────────────────────────────────────────────────
 
+interface MetaSnapshotItem {
+  id: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  status: string | null;
+  objective: string | null;
+  spend: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cpm: number | null;
+  leads: number | null;
+  cpl: number | null;
+  date_start: string;
+  date_end: string;
+  synced_at: string;
+}
+
+interface MetaSnapshotAggregated {
+  totalSpend: number;
+  totalLeads: number;
+  totalImpressions: number;
+  totalClicks: number;
+  avgCpl: number | null;
+  avgCtr: number | null;
+  avgCpm: number | null;
+  lastSyncedAt: string | null;
+  dateRange: { since: string; until: string } | null;
+}
+
 export default function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: clientId } = use(params);
   const { can } = useAuth();
@@ -1449,6 +1479,11 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
   // Start with mock data (fast); fall back to data provider for Supabase-added clients
   const [client, setClient] = useState<Client | null>(getClient(clientId) ?? null);
   const [clientLoading, setClientLoading] = useState(!getClient(clientId));
+
+  // Meta campaign snapshots (live synced data from meta_campaign_snapshots)
+  const [metaSnapshots, setMetaSnapshots] = useState<MetaSnapshotItem[]>([]);
+  const [metaSnapshotAgg, setMetaSnapshotAgg] = useState<MetaSnapshotAggregated | null>(null);
+  const [metaSnapshotsLoading, setMetaSnapshotsLoading] = useState(false);
 
   useEffect(() => {
     // Always fetch from server — gets current Supabase data even for mock-seeded clients.
@@ -1460,6 +1495,20 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       .finally(() => setClientLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
+
+  useEffect(() => {
+    if (activeTab !== "campaigns") return;
+    setMetaSnapshotsLoading(true);
+    fetch(`/api/integrations/meta/snapshots?clientId=${clientId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.snapshots) setMetaSnapshots(data.snapshots);
+        if (data?.aggregated) setMetaSnapshotAgg(data.aggregated);
+      })
+      .catch(() => {})
+      .finally(() => setMetaSnapshotsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, clientId]);
 
   if (clientLoading) {
     return (
@@ -1640,49 +1689,114 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* Campaigns tab */}
+      {/* Campaigns tab — live Meta snapshot data */}
       {activeTab === "campaigns" && (
-        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0, 129, 242, 0.15)]">
-            <div className="flex items-center gap-2">
-              <Megaphone size={13} className="text-[#0081f2]" />
-              <span className="text-[13px] font-semibold text-[#f8f8f7]">Meta Campaigns — {client.name}</span>
+        <div className="space-y-4">
+          {/* Header card */}
+          <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[rgba(0,129,242,0.15)]">
+              <div className="flex items-center gap-2">
+                <Megaphone size={13} className="text-[#0081f2]" />
+                <span className="text-[13px] font-semibold text-[#f8f8f7]">Meta Campaigns — {client.name}</span>
+                {metaSnapshotAgg?.lastSyncedAt && (
+                  <span className="text-[11px] text-[#6b7a99] ml-1">
+                    · synced {new Date(metaSnapshotAgg.lastSyncedAt).toLocaleDateString()}
+                    {metaSnapshotAgg.dateRange && ` · ${metaSnapshotAgg.dateRange.since} → ${metaSnapshotAgg.dateRange.until}`}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setMetaSnapshotsLoading(true);
+                    fetch(`/api/integrations/meta/snapshots?clientId=${clientId}`)
+                      .then((r) => r.ok ? r.json() : null)
+                      .then((data) => {
+                        if (data?.snapshots) setMetaSnapshots(data.snapshots);
+                        if (data?.aggregated) setMetaSnapshotAgg(data.aggregated);
+                      })
+                      .catch(() => {})
+                      .finally(() => setMetaSnapshotsLoading(false));
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[#6b7a99] border border-[rgba(0,129,242,0.15)] rounded-lg hover:text-[#f8f8f7] hover:border-[rgba(0,129,242,0.25)] transition-colors"
+                >
+                  <RefreshCw size={12} className={metaSnapshotsLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <Link href="/ai-agent" className="flex items-center gap-1.5 px-3 py-1.5 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
+                  <Bot size={12} />Build New Campaign
+                </Link>
+              </div>
             </div>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 vc-orange-gradient text-white text-[12px] font-semibold rounded-lg hover:opacity-90 transition-opacity">
-              <Bot size={12} />Build New Campaign
-            </button>
-          </div>
-          {client.campaigns.length === 0 ? (
-            <div className="p-10 text-center">
-              <p className="text-[12px] text-[#6b7a99]">No campaigns yet — use Build with Veronica to get started.</p>
-            </div>
-          ) : (
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b border-[rgba(0, 129, 242, 0.15)]">
-                  {["Campaign", "Type", "Status", "Budget", "Spend", "Leads", "CPL", "Booked"].map((h) => (
-                    <th key={h} className={`px-5 py-3.5 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${h === "Campaign" || h === "Type" ? "text-left" : "text-right"}`}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {client.campaigns.map((c, i) => (
-                  <tr key={c.id} className={`border-b border-[rgba(0, 129, 242, 0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors ${i === client.campaigns.length - 1 ? "border-b-0" : ""}`}>
-                    <td className="px-5 py-3.5 text-[#f8f8f7] font-medium">{c.name}</td>
-                    <td className="px-5 py-3.5 text-[#6b7a99]">{c.type}</td>
-                    <td className="px-5 py-3.5 text-right"><Badge label={c.status} variant={campaignStatusVariant[c.status]} /></td>
-                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.budget}</td>
-                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.spend}</td>
-                    <td className="px-5 py-3.5 text-right text-[#0081f2] font-semibold">{c.leads > 0 ? c.leads : "—"}</td>
-                    <td className="px-5 py-3.5 text-right text-[#f8f8f7]">{c.cpl}</td>
-                    <td className="px-5 py-3.5 text-right text-[#22c55e] font-semibold">{c.booked > 0 ? c.booked : "—"}</td>
-                  </tr>
+
+            {/* Aggregated totals row */}
+            {metaSnapshotAgg && (
+              <div className="grid grid-cols-5 divide-x divide-[rgba(0,129,242,0.1)] border-b border-[rgba(0,129,242,0.15)]">
+                {[
+                  { label: "Total Spend", value: `$${metaSnapshotAgg.totalSpend.toLocaleString(undefined, { maximumFractionDigits: 0 })}` },
+                  { label: "Leads", value: metaSnapshotAgg.totalLeads.toLocaleString() },
+                  { label: "Avg CPL", value: metaSnapshotAgg.avgCpl != null ? `$${metaSnapshotAgg.avgCpl.toFixed(0)}` : "—" },
+                  { label: "Impressions", value: metaSnapshotAgg.totalImpressions.toLocaleString() },
+                  { label: "Clicks", value: metaSnapshotAgg.totalClicks.toLocaleString() },
+                ].map(({ label, value }) => (
+                  <div key={label} className="px-5 py-3 text-center">
+                    <div className="text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest mb-1">{label}</div>
+                    <div className="text-[15px] font-bold text-[#f8f8f7]">{value}</div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          )}
+              </div>
+            )}
+
+            {/* Campaign rows */}
+            {metaSnapshotsLoading ? (
+              <div className="p-10 text-center flex items-center justify-center gap-2 text-[#6b7a99]">
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-[12px]">Loading synced campaigns…</span>
+              </div>
+            ) : metaSnapshots.length > 0 ? (
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-[rgba(0,129,242,0.15)]">
+                    {["Campaign", "Status", "Spend", "Impressions", "Clicks", "CTR", "CPM", "Leads", "CPL"].map((h) => (
+                      <th key={h} className={`px-4 py-3 text-[9px] font-bold text-[#3d4f6e] uppercase tracking-widest ${h === "Campaign" ? "text-left" : "text-right"}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {metaSnapshots.map((sn, i) => (
+                    <tr key={sn.id} className={`border-b border-[rgba(0,129,242,0.15)]/60 hover:bg-[#0f1a28]/60 transition-colors ${i === metaSnapshots.length - 1 ? "border-b-0" : ""}`}>
+                      <td className="px-4 py-3 text-[#f8f8f7] font-medium max-w-[200px] truncate">{sn.campaign_name ?? sn.campaign_id}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${sn.status === "ACTIVE" ? "bg-[#22c55e]/15 text-[#22c55e]" : "bg-[#6b7a99]/15 text-[#6b7a99]"}`}>
+                          {sn.status ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-[#f8f8f7]">{sn.spend != null ? `$${Number(sn.spend).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#6b7a99]">{sn.impressions != null ? Number(sn.impressions).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#6b7a99]">{sn.clicks != null ? Number(sn.clicks).toLocaleString() : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#6b7a99]">{sn.ctr != null ? `${Number(sn.ctr).toFixed(2)}%` : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#6b7a99]">{sn.cpm != null ? `$${Number(sn.cpm).toFixed(2)}` : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#0081f2] font-semibold">{sn.leads != null && Number(sn.leads) > 0 ? Number(sn.leads) : "—"}</td>
+                      <td className="px-4 py-3 text-right text-[#f8f8f7]">{sn.cpl != null ? `$${Number(sn.cpl).toFixed(0)}` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-10 text-center space-y-2">
+                <p className="text-[12px] text-[#6b7a99]">No synced campaigns yet.</p>
+                <p className="text-[11px] text-[#3d4f6e]">
+                  Save Meta credentials in the{" "}
+                  <button onClick={() => setActiveTab("integrations")} className="text-[#0081f2] hover:underline">
+                    Integrations tab
+                  </button>
+                  , then click Sync to pull live campaign data.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

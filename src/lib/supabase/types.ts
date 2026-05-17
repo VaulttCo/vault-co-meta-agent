@@ -172,6 +172,29 @@ export interface IntegrationConnectionRow {
   updated_at: string;
 }
 
+export interface MetaCampaignSnapshotRow {
+  id: string;
+  client_id: string;
+  meta_account_id: string | null;
+  campaign_id: string;
+  campaign_name: string | null;
+  status: string | null;
+  objective: string | null;
+  spend: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cpc: number | null;
+  cpm: number | null;
+  leads: number | null;
+  cpl: number | null;
+  date_start: string;
+  date_end: string;
+  raw_payload: Json | null;
+  synced_at: string;
+  created_at: string;
+}
+
 // ── Database type (used by createClient<Database>) ────────────
 
 export interface Database {
@@ -211,6 +234,11 @@ export interface Database {
         Row: IntegrationConnectionRow;
         Insert: Omit<IntegrationConnectionRow, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<IntegrationConnectionRow, "id" | "created_at" | "updated_at">>;
+      };
+      meta_campaign_snapshots: {
+        Row: MetaCampaignSnapshotRow;
+        Insert: Omit<MetaCampaignSnapshotRow, "id" | "created_at">;
+        Update: Partial<Omit<MetaCampaignSnapshotRow, "id" | "created_at">>;
       };
     };
   };

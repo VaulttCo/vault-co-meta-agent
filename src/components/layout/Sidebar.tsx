@@ -18,6 +18,8 @@ import {
   ClipboardList,
   ListChecks,
   X,
+  Mic2,
+  TrendingUp,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -32,15 +34,16 @@ interface NavItem {
 }
 
 const allNavItems: NavItem[] = [
-  { label: "Dashboard",        href: "/",          icon: LayoutDashboard, permission: "canViewDashboard" },
-  { label: "Clients",          href: "/clients",   icon: Users,           permission: "canViewClients" },
-  { label: "Campaigns",        href: "/campaigns", icon: Megaphone,       permission: "canViewCampaigns" },
-  { label: "Veronica Console", href: "/ai-agent",  icon: Bot,             permission: "canViewAiBuilder" },
-  { label: "Creatives",        href: "/creatives", icon: ImageIcon,       permission: "canViewCreatives" },
-  { label: "Analytics",        href: "/analytics", icon: BarChart3,       permission: "canViewAnalytics" },
-  { label: "Reports",          href: "/reports",   icon: FileText,        permission: "canViewReports" },
-  { label: "Approvals",        href: "/approvals",      icon: CheckSquare, permission: "canViewApprovals" },
-  { label: "Operator Queue",   href: "/operator-queue", icon: ListChecks,  permission: "canViewAiBuilder" },
+  { label: "Command Hub",       href: "/",                   icon: LayoutDashboard, permission: "canViewDashboard" },
+  { label: "Veronica AI",       href: "/ai-agent",           icon: Bot,             permission: "canViewAiBuilder" },
+  { label: "Revenue Dashboard", href: "/revenue-dashboard",  icon: TrendingUp,      permission: "canViewAnalytics" },
+  { label: "Clients",           href: "/clients",            icon: Users,           permission: "canViewClients" },
+  { label: "Operator Queue",    href: "/operator-queue",     icon: ListChecks,      permission: "canViewAiBuilder" },
+  { label: "Approvals",         href: "/approvals",          icon: CheckSquare,     permission: "canViewApprovals" },
+  { label: "Reports",           href: "/reports",            icon: FileText,        permission: "canViewReports" },
+  { label: "Campaigns",         href: "/campaigns",          icon: Megaphone,       permission: "canViewCampaigns" },
+  { label: "Creatives",         href: "/creatives",          icon: ImageIcon,       permission: "canViewCreatives" },
+  { label: "Analytics",         href: "/analytics",          icon: BarChart3,       permission: "canViewAnalytics" },
 ];
 
 const settingsItem: NavItem = {
@@ -115,7 +118,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse flex-shrink-0" />
           <span className="text-[9px] font-bold uppercase tracking-widest text-[#0081f2]">
-            Internal Growth Portal
+            Vault Co Command Hub
           </span>
         </div>
       </div>
@@ -163,7 +166,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                 style={{ color: active ? "#0081f2" : undefined }}
               />
               <span className="truncate">{label}</span>
-              {label === "Veronica Console" && (
+              {label === "Veronica AI" && (
                 <span
                   className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
                   style={{
@@ -192,13 +195,37 @@ export function Sidebar({ onClose }: SidebarProps) {
           );
         })}
 
-        {/* Client Onboarding — coming soon */}
+        {/* Coming soon section */}
         <div
           className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
           style={{ color: "rgba(107, 122, 153, 0.6)" }}
         >
-          Onboarding
+          Coming Soon
         </div>
+
+        {/* Victoria AI */}
+        <Link
+          href="/victoria"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+          style={{ color: "rgba(107, 122, 153, 0.55)", border: "1px solid transparent" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(167,139,250,0.8)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(107, 122, 153, 0.55)"; }}
+        >
+          <Mic2 size={15} className="flex-shrink-0" />
+          <span className="truncate">Victoria AI</span>
+          <span
+            className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+            style={{
+              color: "rgba(107, 122, 153, 0.6)",
+              backgroundColor: "rgba(61,79,110,0.12)",
+              border: "1px solid rgba(61,79,110,0.20)",
+            }}
+          >
+            Soon
+          </span>
+        </Link>
+
+        {/* Client Onboarding */}
         <div
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
           style={{ color: "rgba(107, 122, 153, 0.4)" }}

@@ -296,7 +296,7 @@ export default function RevenueDashboardPage() {
       {/* Priority tasks + recent approved drafts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-        {/* Top priority tasks */}
+        {/* Fulfillment priorities */}
         <div
           className="rounded-xl overflow-hidden"
           style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
@@ -304,7 +304,7 @@ export default function RevenueDashboardPage() {
           <div className="flex items-center gap-2 px-5 py-3.5 border-b" style={{ borderColor: "var(--t-border-nav)" }}>
             <Zap size={13} style={{ color: "#a78bfa" }} />
             <span className="text-[13px] font-bold tracking-wide" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}>
-              Top Priority Tasks
+              Fulfillment Priorities
             </span>
             {urgentTasks.length > 0 && (
               <span
@@ -354,12 +354,12 @@ export default function RevenueDashboardPage() {
           </div>
           <div className="px-5 py-3 border-t" style={{ borderColor: "var(--t-border-nav)" }}>
             <Link href="/operator-queue" className="text-[11px] font-semibold flex items-center gap-1" style={{ color: "#a78bfa" }}>
-              Open Operator Queue <ChevronRight size={10} />
+              View Full Fulfillment Queue <ChevronRight size={10} />
             </Link>
           </div>
         </div>
 
-        {/* Recent approved Veronica drafts */}
+        {/* Recent approved AI drafts */}
         <div
           className="rounded-xl overflow-hidden"
           style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
@@ -367,7 +367,7 @@ export default function RevenueDashboardPage() {
           <div className="flex items-center gap-2 px-5 py-3.5 border-b" style={{ borderColor: "var(--t-border-nav)" }}>
             <FileText size={13} style={{ color: "#22c55e" }} />
             <span className="text-[13px] font-bold tracking-wide" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}>
-              Approved Veronica Drafts
+              Approved AI Drafts
             </span>
             {approvedDrafts.length > 0 && (
               <span
@@ -416,7 +416,7 @@ export default function RevenueDashboardPage() {
           </div>
           <div className="px-5 py-3 border-t" style={{ borderColor: "var(--t-border-nav)" }}>
             <Link href="/approvals" className="text-[11px] font-semibold flex items-center gap-1" style={{ color: "#22c55e" }}>
-              View Approvals Queue <ChevronRight size={10} />
+              Review Pending Approvals <ChevronRight size={10} />
             </Link>
           </div>
         </div>

@@ -218,6 +218,30 @@ export interface IntegrationConnectionRow {
   updated_at: string;
 }
 
+export interface GHLOpportunitySnapshotRow {
+  id: string;
+  client_id: string;
+  ghl_location_id: string | null;
+  opportunity_id: string;
+  contact_id: string | null;
+  pipeline_id: string | null;
+  pipeline_stage_id: string | null;
+  pipeline_stage_name: string | null;
+  opportunity_name: string | null;
+  contact_name: string | null;
+  status: string | null;
+  monetary_value: number | null;
+  source: string | null;
+  assigned_user: string | null;
+  created_at_ghl: string | null;
+  updated_at_ghl: string | null;
+  last_activity_at: string | null;
+  appointment_status: string | null;
+  raw_payload: Json | null;
+  synced_at: string;
+  created_at: string;
+}
+
 export interface MetaCampaignSnapshotRow {
   id: string;
   client_id: string;
@@ -295,6 +319,11 @@ export interface Database {
         Row: MetaCampaignSnapshotRow;
         Insert: Omit<MetaCampaignSnapshotRow, "id" | "created_at">;
         Update: Partial<Omit<MetaCampaignSnapshotRow, "id" | "created_at">>;
+      };
+      ghl_opportunity_snapshots: {
+        Row: GHLOpportunitySnapshotRow;
+        Insert: Omit<GHLOpportunitySnapshotRow, "id" | "created_at">;
+        Update: Partial<Omit<GHLOpportunitySnapshotRow, "id" | "created_at">>;
       };
     };
   };

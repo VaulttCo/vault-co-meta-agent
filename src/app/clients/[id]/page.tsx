@@ -44,6 +44,7 @@ import {
   KeyRound,
   Save,
   Lock,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -73,7 +74,7 @@ const tabs = [
   { id: "creative", label: "Creative Direction", icon: ImageIcon },
   { id: "lead-forms", label: "Lead Forms", icon: CheckSquare },
   { id: "integrations", label: "Integrations", icon: Link2 },
-  { id: "ghl", label: "GHL Workflow", icon: Settings },
+  { id: "ghl", label: "GHL Pipeline", icon: Settings },
   { id: "optimization", label: "Optimization", icon: Zap },
   { id: "reports", label: "Reports", icon: BarChart3 },
   { id: "approvals", label: "Approvals", icon: CheckSquare },
@@ -1809,6 +1810,9 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       {/* Integrations tab */}
       {activeTab === "integrations" && <IntegrationsTab clientId={client.id} clientName={client.name} />}
 
+      {/* GHL Pipeline tab */}
+      {activeTab === "ghl" && <GhlPipelineTab clientId={client.id} clientName={client.name} />}
+
       {/* Tabs that redirect to global pages */}
       {(activeTab === "ai-builder" || activeTab === "reports" || activeTab === "approvals") && (() => {
         const map: Record<string, { label: string; detail: string; href: string; cta: string }> = {
@@ -1847,7 +1851,7 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
       })()}
 
       {/* Tabs still being built */}
-      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && activeTab !== "integrations" && activeTab !== "ai-builder" && activeTab !== "reports" && activeTab !== "approvals" && (
+      {activeTab !== "overview" && activeTab !== "campaigns" && activeTab !== "intelligence" && activeTab !== "files" && activeTab !== "integrations" && activeTab !== "ghl" && activeTab !== "ai-builder" && activeTab !== "reports" && activeTab !== "approvals" && (
         <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-10 text-center">
           <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0, 129, 242, 0.15)] flex items-center justify-center mx-auto mb-3">
             <Zap size={20} className="text-[#0081f2]" />
@@ -2683,6 +2687,294 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
           <p><span className="text-[#f8f8f7] font-semibold">Security:</span> Raw credential values are never returned to the browser, never logged, and never included in API responses. Only non-sensitive metadata (account ID, label, save date) is displayed.</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── GHL Pipeline Tab ────────────────────────────────────────────
+
+interface GHLOpportunitySnapshot {
+  id: string;
+  opportunity_id: string;
+  opportunity_name: string | null;
+  contact_name: string | null;
+  pipeline_stage_name: string | null;
+  status: string | null;
+  monetary_value: number | null;
+  assigned_user: string | null;
+  last_activity_at: string | null;
+  updated_at_ghl: string | null;
+  appointment_status: string | null;
+  synced_at: string;
+  created_at_ghl: string | null;
+  source: string | null;
+}
+
+function GhlPipelineTab({ clientId, clientName }: { clientId: string; clientName: string }) {
+  const [snapshots, setSnapshots] = useState<GHLOpportunitySnapshot[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSnapshots();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  async function loadSnapshots() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/integrations/ghl/opportunities?clientId=${clientId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSnapshots(data.snapshots ?? []);
+        setLastSyncedAt(data.lastSyncedAt ?? null);
+      }
+    } catch {
+      // silently skip
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function syncOpportunities() {
+    setSyncing(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/integrations/ghl/sync-opportunities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMsg(`✓ Synced ${data.upserted} opportunities from GHL.`);
+        await loadSnapshots();
+      } else {
+        setMsg(`✗ Sync failed: ${data.error ?? "Unknown error"}`);
+      }
+    } catch {
+      setMsg("✗ Network error during sync.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  const STALE_DAYS = 7;
+  const now = Date.now();
+  function isStale(opp: GHLOpportunitySnapshot): boolean {
+    const ref = opp.last_activity_at ?? opp.updated_at_ghl;
+    if (!ref) return true;
+    return (now - new Date(ref).getTime()) / 86400000 > STALE_DAYS;
+  }
+
+  const staleCount = snapshots.filter((o) => o.status !== "won" && o.status !== "lost" && isStale(o)).length;
+  const totalValue = snapshots.reduce((sum, o) => sum + Number(o.monetary_value ?? 0), 0);
+  const byStatus: Record<string, number> = {};
+  for (const o of snapshots) {
+    const s = o.status ?? "unknown";
+    byStatus[s] = (byStatus[s] ?? 0) + 1;
+  }
+
+  const statusColor: Record<string, string> = {
+    open: "#0081f2",
+    won: "#22c55e",
+    lost: "#ef4444",
+    abandoned: "#6b7a99",
+    unknown: "#6b7a99",
+  };
+
+  const btnCls = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-4">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[13px] font-semibold text-[#f8f8f7]">GHL Pipeline — {clientName}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={syncOpportunities}
+              disabled={syncing}
+              className={`${btnCls} bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {syncing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+              Sync Opportunities
+            </button>
+            <button
+              onClick={loadSnapshots}
+              disabled={loading}
+              className={`${btnCls} bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] text-[#3d4f6e] hover:text-[#6b7a99] disabled:opacity-40`}
+            >
+              <RefreshCw size={10} />
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div className="text-[11px] text-[#3d4f6e]">
+          Read-only · Opportunity-level pipeline snapshots from GHL. Never writes to GHL.
+        </div>
+        {lastSyncedAt && (
+          <div className="text-[10px] text-[#3d4f6e] mt-1">
+            Last synced: {new Date(lastSyncedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
+        {msg && (
+          <div className={`mt-2 text-[11px] px-3 py-2 rounded-lg ${msg.startsWith("✓") ? "bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/30" : "bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/30"}`}>
+            {msg}
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-8 text-center">
+          <Loader2 size={20} className="animate-spin text-[#0081f2] mx-auto mb-2" />
+          <div className="text-[12px] text-[#6b7a99]">Loading pipeline data…</div>
+        </div>
+      ) : snapshots.length === 0 ? (
+        <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-10 text-center">
+          <div className="w-12 h-12 rounded-xl bg-[#0f1a28] border border-[rgba(0,129,242,0.15)] flex items-center justify-center mx-auto mb-3">
+            <Settings size={20} className="text-[#3d4f6e]" />
+          </div>
+          <div className="text-[13px] font-semibold text-[#f8f8f7] mb-1">No pipeline data synced yet</div>
+          <p className="text-[12px] text-[#6b7a99] mb-4 max-w-sm mx-auto">
+            GHL is connected, but opportunity-level pipeline data has not been synced yet. Click &ldquo;Sync Opportunities&rdquo; to pull the latest pipeline data from GHL.
+          </p>
+          <button
+            onClick={syncOpportunities}
+            disabled={syncing}
+            className={`${btnCls} mx-auto bg-[#22c55e]/10 border border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/20 disabled:opacity-40`}
+          >
+            {syncing ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            Sync Opportunities Now
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-3 text-center">
+              <div className="text-[10px] text-[#3d4f6e] mb-0.5">Total Opportunities</div>
+              <div className="text-[16px] font-bold text-[#0081f2]">{snapshots.length}</div>
+            </div>
+            <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-3 text-center">
+              <div className="text-[10px] text-[#3d4f6e] mb-0.5">Pipeline Value</div>
+              <div className="text-[16px] font-bold text-[#ff8400]">${totalValue.toLocaleString()}</div>
+            </div>
+            <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-3 text-center">
+              <div className="text-[10px] text-[#3d4f6e] mb-0.5">Stale Leads</div>
+              <div className={`text-[16px] font-bold ${staleCount > 0 ? "text-[#ef4444]" : "text-[#22c55e]"}`}>{staleCount}</div>
+              <div className="text-[9px] text-[#3d4f6e]">No activity 7+ days</div>
+            </div>
+            <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-3 text-center">
+              <div className="text-[10px] text-[#3d4f6e] mb-0.5">Won</div>
+              <div className="text-[16px] font-bold text-[#22c55e]">{byStatus["won"] ?? 0}</div>
+            </div>
+          </div>
+
+          {/* Status breakdown */}
+          {Object.keys(byStatus).length > 0 && (
+            <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl p-4">
+              <div className="text-[11px] font-semibold text-[#6b7a99] uppercase tracking-wider mb-3">Status Breakdown</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(byStatus).map(([status, count]) => (
+                  <div key={status} className="flex items-center gap-1.5 bg-[#0f1a28] rounded-lg px-3 py-1.5">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor[status] ?? "#6b7a99" }} />
+                    <span className="text-[11px] font-semibold capitalize" style={{ color: statusColor[status] ?? "#6b7a99" }}>{status}</span>
+                    <span className="text-[11px] text-[#6b7a99]">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Opportunity table */}
+          <div className="bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-[rgba(0,129,242,0.08)]">
+              <span className="text-[11px] font-semibold text-[#6b7a99] uppercase tracking-wider">Opportunities</span>
+            </div>
+            <div className="divide-y divide-[rgba(0,129,242,0.06)]">
+              {snapshots.map((opp) => {
+                const stale = opp.status !== "won" && opp.status !== "lost" && isStale(opp);
+                const lastActivity = opp.last_activity_at ?? opp.updated_at_ghl;
+                const daysSince = lastActivity
+                  ? Math.round((now - new Date(lastActivity).getTime()) / 86400000)
+                  : null;
+                return (
+                  <div key={opp.id} className={`px-4 py-3 ${stale ? "bg-[#ef4444]/3" : ""}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[12px] font-semibold text-[#f8f8f7] truncate">
+                            {opp.opportunity_name ?? opp.contact_name ?? "Unnamed Lead"}
+                          </span>
+                          {stale && (
+                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/25">
+                              STALE
+                            </span>
+                          )}
+                        </div>
+                        {opp.contact_name && opp.opportunity_name && opp.contact_name !== opp.opportunity_name && (
+                          <div className="text-[11px] text-[#6b7a99] mb-1">{opp.contact_name}</div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-[#3d4f6e]">
+                          {opp.pipeline_stage_name && (
+                            <span className="text-[#a78bfa]">{opp.pipeline_stage_name}</span>
+                          )}
+                          {opp.assigned_user && (
+                            <span>Assigned: {opp.assigned_user.length > 20 ? opp.assigned_user.slice(0, 16) + "…" : opp.assigned_user}</span>
+                          )}
+                          {daysSince !== null && (
+                            <span className={daysSince > STALE_DAYS ? "text-[#ef4444]" : "text-[#3d4f6e]"}>
+                              {daysSince === 0 ? "Active today" : `${daysSince}d ago`}
+                            </span>
+                          )}
+                          {opp.appointment_status && (
+                            <span className="text-[#22c55e]">Appt: {opp.appointment_status}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        <div className="text-[12px] font-semibold" style={{ color: statusColor[opp.status ?? "unknown"] ?? "#6b7a99" }}>
+                          {opp.monetary_value != null ? `$${Number(opp.monetary_value).toLocaleString()}` : "—"}
+                        </div>
+                        <div className="mt-0.5">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded capitalize"
+                            style={{
+                              backgroundColor: `${statusColor[opp.status ?? "unknown"] ?? "#6b7a99"}18`,
+                              color: statusColor[opp.status ?? "unknown"] ?? "#6b7a99",
+                            }}
+                          >
+                            {opp.status ?? "unknown"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Stale lead warning */}
+          {staleCount > 0 && (
+            <div className="bg-[#ef4444]/08 border border-[#ef4444]/25 rounded-xl p-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={14} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-[12px] font-semibold text-[#ef4444] mb-1">
+                    {staleCount} Stale Lead{staleCount !== 1 ? "s" : ""} — Follow-Up Required
+                  </div>
+                  <p className="text-[11px] text-[#6b7a99]">
+                    These opportunities have had no activity in 7+ days. In home services, delay reduces close probability significantly. Review and re-engage or mark lost.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

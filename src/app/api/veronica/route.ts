@@ -24,7 +24,7 @@ import {
 import { AGENT_DISPLAY_NAMES } from "@/lib/ai/veronica-agents";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { Client } from "@/lib/data";
-import type { MetaCampaignSnapshotRow } from "@/lib/supabase/types";
+import type { MetaCampaignSnapshotRow, GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 
 // Read clients using the service role key so RLS is not a barrier and real UUIDs are returned.
 // SupabaseDataProvider.getClients() uses the browser client which has no server session,
@@ -211,21 +211,32 @@ export async function POST(req: NextRequest) {
 
     // Fetch Meta campaign snapshots for the target client (read-only)
     let metaSnapshots: MetaCampaignSnapshotRow[] = [];
+    // Fetch GHL opportunity snapshots for the target client (read-only)
+    let ghlOpportunitySnapshots: GHLOpportunitySnapshotRow[] = [];
     if (effectiveClientId) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const supabase = getSupabaseServerClient() as any;
         if (supabase) {
-          const { data: snapshotData } = await supabase
-            .from("meta_campaign_snapshots")
-            .select("id,client_id,meta_account_id,campaign_id,campaign_name,status,objective,spend,impressions,clicks,ctr,cpc,cpm,leads,cpl,date_start,date_end,synced_at,created_at")
-            .eq("client_id", effectiveClientId)
-            .order("synced_at", { ascending: false })
-            .limit(100);
-          if (snapshotData) metaSnapshots = snapshotData as MetaCampaignSnapshotRow[];
+          const [snapshotResult, ghlOppResult] = await Promise.all([
+            supabase
+              .from("meta_campaign_snapshots")
+              .select("id,client_id,meta_account_id,campaign_id,campaign_name,status,objective,spend,impressions,clicks,ctr,cpc,cpm,leads,cpl,date_start,date_end,synced_at,created_at")
+              .eq("client_id", effectiveClientId)
+              .order("synced_at", { ascending: false })
+              .limit(100),
+            supabase
+              .from("ghl_opportunity_snapshots")
+              .select("id,client_id,ghl_location_id,opportunity_id,contact_id,pipeline_id,pipeline_stage_id,pipeline_stage_name,opportunity_name,contact_name,status,monetary_value,source,assigned_user,created_at_ghl,updated_at_ghl,last_activity_at,appointment_status,synced_at,created_at")
+              .eq("client_id", effectiveClientId)
+              .order("synced_at", { ascending: false })
+              .limit(200),
+          ]);
+          if (snapshotResult.data) metaSnapshots = snapshotResult.data as MetaCampaignSnapshotRow[];
+          if (ghlOppResult.data) ghlOpportunitySnapshots = ghlOppResult.data as GHLOpportunitySnapshotRow[];
         }
       } catch {
-        // meta_campaign_snapshots table may not be accessible — silently skip
+        // tables may not be accessible — silently skip
       }
     }
 
@@ -244,6 +255,7 @@ export async function POST(req: NextRequest) {
       integrationConnections:
         integrationConnections.length > 0 ? integrationConnections : undefined,
       metaSnapshots: metaSnapshots.length > 0 ? metaSnapshots : undefined,
+      ghlOpportunitySnapshots: ghlOpportunitySnapshots.length > 0 ? ghlOpportunitySnapshots : undefined,
     };
 
     // ── Agent routing phase (always runs, both live and mock) ────────────────

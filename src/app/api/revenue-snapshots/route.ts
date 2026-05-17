@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Validate ──────────────────────────────────────────────────────────────
-  const { clientId, billingMonth, closedWonRevenue, notes, source = "manual" } = body;
+  const { clientId, billingMonth, closedWonRevenue, notes, source = "manual", dealCount, sourcePayload } = body;
 
   if (!clientId?.trim()) {
     return NextResponse.json({ error: "clientId is required" }, { status: 400 });
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
   const nickRecurringEarnings  = vaultCoFee;
   const jaxonRecurringEarnings = 0;
 
-  const row = {
+  const row: Record<string, unknown> = {
     client_id:                clientId.trim(),
     billing_month:            billingMonth,
     closed_won_revenue:       closedWonRevenue,
@@ -125,6 +125,13 @@ export async function POST(req: NextRequest) {
     notes:                    typeof notes === "string" ? notes.trim() || null : null,
     created_by:               auth.userId ?? null,
   };
+
+  // Phase 2C: include GHL sync metadata when provided
+  if (source === "ghl") {
+    row.deal_count     = typeof dealCount === "number" ? dealCount : 0;
+    row.source_payload = sourcePayload ?? {};
+    row.synced_at      = new Date().toISOString();
+  }
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

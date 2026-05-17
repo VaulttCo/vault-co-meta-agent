@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Bot,
@@ -49,6 +49,9 @@ import {
   type AssetType,
 } from "@/lib/creativeAssets";
 import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
+import { getDataProvider } from "@/lib/data/data-provider";
+import { getStorageProvider } from "@/lib/storage/storage-provider";
+import { mimeToFileType } from "@/lib/storage/types";
 import {
   draftStatusLabel,
   draftStatusVariant,
@@ -1207,6 +1210,9 @@ function AICampaignBuilderContent() {
   const [activeTab, setActiveTab] = useState<"builder" | "plans" | "console" | "automation">("builder");
   const [activeSection, setActiveSection] = useState<SectionId>("overview");
 
+  // Builder clients — loaded from data provider so IDs match creative_assets.client_id
+  const [builderClients, setBuilderClients] = useState<typeof clients>([]);
+
   // Form state — plain defaults (no getPlan in initializers — plans is [] at mount)
   const [selectedClientId, setSelectedClientId] = useState("");
   const [goal, setGoal] = useState("Lead Generation");
@@ -1215,6 +1221,12 @@ function AICampaignBuilderContent() {
   const [creativeNotes, setCreativeNotes] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<CreativeAsset | null>(null);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+
+  // Asset drop zone state
+  const assetFileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [assetUploading, setAssetUploading] = useState(false);
+  const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
   const [market, setMarket] = useState("");
   const [budget, setBudget] = useState("");
 
@@ -1258,14 +1270,27 @@ function AICampaignBuilderContent() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, isConsoleLoading]);
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
+  // Load real clients from data provider so selectedClientId matches creative_assets.client_id
+  useEffect(() => {
+    getDataProvider().getClients().then((fetched) => {
+      if (fetched.length > 0) setBuilderClients(fetched);
+    }).catch(() => {});
+  }, []);
+
+  // Use data-provider clients when available; fall back to static list until loaded
+  const effectiveClients = useMemo(
+    () => (builderClients.length > 0 ? builderClients : clients),
+    [builderClients]
+  );
+
+  const selectedClient = effectiveClients.find((c) => c.id === selectedClientId) ?? null;
   const clientIntelligence = selectedClientId ? (getIntelligence(selectedClientId) ?? null) : null;
-  const { allAssets: allPersistedAssets } = usePersistedCreativeAssets();
+  const { allAssets: allPersistedAssets, prependAsset } = usePersistedCreativeAssets();
   const clientAssets = selectedClientId ? getAssetsForClient(selectedClientId, allPersistedAssets) : [];
 
   function handleClientChange(id: string) {
     setSelectedClientId(id);
-    const c = clients.find((cl) => cl.id === id);
+    const c = effectiveClients.find((cl) => cl.id === id);
     if (c) {
       setMarket(c.market);
       setBudget(c.monthlyBudget.replace("/mo", "").trim());
@@ -1278,6 +1303,60 @@ function AICampaignBuilderContent() {
     setCreativeNotes("");
     setShowAssetPicker(false);
     setCurrentPlan(null);
+  }
+
+  async function handleBuilderAssetUpload(file: File) {
+    if (!selectedClientId) return;
+    setAssetUploading(true);
+    setAssetUploadError(null);
+    try {
+      const resolvedMime = file.type || (file.name.endsWith(".jpg") || file.name.endsWith(".jpeg") ? "image/jpeg" : file.name.endsWith(".png") ? "image/png" : "video/mp4");
+      const assetId = `ca-builder-${Date.now()}`;
+      const fileRecord = {
+        id: assetId,
+        clientId: selectedClientId,
+        fileName: file.name,
+        fileType: mimeToFileType(resolvedMime),
+        fileSize: file.size,
+        mimeType: resolvedMime,
+        category: "creative_asset" as const,
+        storageUrl: "",
+        thumbnailUrl: null as string | null,
+        uploadedBy: "Operator",
+        uploadedAt: new Date().toISOString(),
+        notes: "",
+        status: "pending" as const,
+        _blob: file,
+      };
+      const storageProvider = getStorageProvider();
+      const saved = await storageProvider.saveFile(fileRecord);
+      const newAsset: CreativeAsset = {
+        id: assetId,
+        clientId: selectedClientId,
+        clientName: selectedClient?.name ?? selectedClientId,
+        fileName: file.name,
+        fileType: resolvedMime.startsWith("video/") ? "video" : "image",
+        assetType: "Project Reveal",
+        category: "Creative Asset",
+        thumbnailUrl: saved.thumbnailUrl ?? null,
+        storageUrl: saved.storageUrl ?? null,
+        uploadDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        service: "",
+        market: "",
+        campaignUseCase: "",
+        notes: "",
+        status: "Uploaded",
+        tags: [],
+        approvedForAds: false,
+      };
+      prependAsset(newAsset);
+      setSelectedAsset(newAsset);
+      setCreative(newAsset.assetType);
+    } catch (err) {
+      setAssetUploadError(err instanceof Error ? err.message : "Upload failed — check storage configuration.");
+    } finally {
+      setAssetUploading(false);
+    }
   }
 
   async function handleGenerate() {
@@ -1599,7 +1678,7 @@ function AICampaignBuilderContent() {
                     className="w-full appearance-none bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg px-3 py-2.5 text-[13px] text-[var(--t-text)] focus:outline-none focus:border-[#0081f2]/50 transition-colors pr-8"
                   >
                     <option value="">— Select a client —</option>
-                    {clients.map((c) => (
+                    {effectiveClients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name} ({c.status})
                       </option>
@@ -1683,8 +1762,17 @@ function AICampaignBuilderContent() {
                     {showAssetPicker && (
                       <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-[var(--t-surface)] border border-[var(--t-border)] rounded-lg shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
                         {clientAssets.length === 0 ? (
-                          <div className="px-3 py-3 text-[11px] text-[var(--t-muted)] text-center">
-                            No assets in library for this client
+                          <div className="px-3 py-4 text-center space-y-1.5">
+                            <div className="text-[11px] text-[var(--t-muted)]">
+                              No assets in library for {selectedClient?.name ?? "this client"}
+                            </div>
+                            <a
+                              href="/creatives"
+                              className="text-[11px] text-[#0081f2] hover:underline block"
+                              onClick={() => setShowAssetPicker(false)}
+                            >
+                              Upload in Creative Library →
+                            </a>
                           </div>
                         ) : (
                           clientAssets.map((asset) => {
@@ -1704,12 +1792,17 @@ function AICampaignBuilderContent() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-[11px] text-[var(--t-text)] font-medium truncate">{asset.fileName}</div>
-                                  <div className="text-[10px] text-[var(--t-muted)]">{asset.assetType}</div>
+                                  <div className="text-[10px] text-[var(--t-muted)]">{asset.assetType} · {asset.status}</div>
                                 </div>
-                                {asset.approvedForAds
-                                  ? <CheckCircle2 size={11} className="text-[#22c55e] flex-shrink-0" />
-                                  : <AlertCircle size={11} className="text-[#f59e0b] flex-shrink-0" />
-                                }
+                                {asset.approvedForAds ? (
+                                  <span className="text-[9px] text-[#22c55e] flex items-center gap-0.5 flex-shrink-0">
+                                    <CheckCircle2 size={9} />Approved
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-[#f59e0b] flex items-center gap-0.5 flex-shrink-0">
+                                    <AlertCircle size={9} />Needs Review
+                                  </span>
+                                )}
                               </button>
                             );
                           })
@@ -1755,15 +1848,54 @@ function AICampaignBuilderContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="border-2 border-dashed border-[var(--t-border)] rounded-lg p-4 text-center hover:border-[var(--t-border)] transition-colors cursor-pointer">
-                      <div className="w-8 h-8 rounded-lg bg-[var(--t-surface-2)] border border-[var(--t-border)] flex items-center justify-center mx-auto mb-2">
-                        <ImageIcon size={13} className="text-[var(--t-dim)]" />
-                      </div>
-                      <div className="text-[11px] text-[var(--t-muted)]">
-                        Drop image/video or <span className="text-[#0081f2]">browse</span>
-                      </div>
-                      <div className="text-[10px] text-[var(--t-dim)] mt-0.5">JPG, PNG, MP4 · Max 50MB</div>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
+                        isDragging
+                          ? "border-[#0081f2]/60 bg-[#0081f2]/5"
+                          : "border-[var(--t-border)] hover:border-[#0081f2]/30"
+                      } ${assetUploading ? "pointer-events-none opacity-60" : ""}`}
+                      onClick={() => !assetUploading && assetFileInputRef.current?.click()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        const file = e.dataTransfer.files[0];
+                        if (file) handleBuilderAssetUpload(file);
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragLeave={() => setIsDragging(false)}
+                    >
+                      <input
+                        ref={assetFileInputRef}
+                        type="file"
+                        accept="image/*,video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleBuilderAssetUpload(file);
+                          e.target.value = "";
+                        }}
+                      />
+                      {assetUploading ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 size={13} className="text-[#0081f2] animate-spin" />
+                          <span className="text-[11px] text-[var(--t-muted)]">Uploading to Creative Library…</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="w-8 h-8 rounded-lg bg-[var(--t-surface-2)] border border-[var(--t-border)] flex items-center justify-center mx-auto mb-2">
+                            <ImageIcon size={13} className="text-[var(--t-dim)]" />
+                          </div>
+                          <div className="text-[11px] text-[var(--t-muted)]">
+                            Drop image/video or <span className="text-[#0081f2]">browse</span>
+                          </div>
+                          <div className="text-[10px] text-[var(--t-dim)] mt-0.5">JPG, PNG, MP4 · Max 50MB</div>
+                        </>
+                      )}
                     </div>
+                    {assetUploadError && (
+                      <p className="text-[10px] text-[#ef4444]">{assetUploadError}</p>
+                    )}
                     <div className="text-[10px] text-[var(--t-dim)] text-center">or select creative type</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {["Before/After", "Testimonial", "Inspection Day", "Storm Damage", "Project Reveal", "Team Photo", "Owner On Camera", "Drone Footage", "UGC Style Video"].map((lbl) => (

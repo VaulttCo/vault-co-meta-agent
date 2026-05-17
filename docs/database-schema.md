@@ -840,3 +840,81 @@ create policy "Authenticated update revenue settings"
 - `stripe_invoice_auto_create` and `stripe_invoice_auto_send` default `false` and are not writable via any Phase 2A API endpoint.
 - `ghl_pipeline_id`, `ghl_location_id`, `stripe_customer_id` are stored as reference data only — no external API is called in Phase 2A.
 - This table has no effect on any existing page. Only `/revenue-dashboard` reads from it.
+
+---
+
+### Phase 2B — Revenue Dashboard: Monthly Revenue Snapshots
+
+Creates the `client_monthly_revenue_snapshots` table. Run this in the Supabase SQL editor **after** the `clients` table and `client_revenue_settings` table exist.
+
+```sql
+create table if not exists public.client_monthly_revenue_snapshots (
+  id                       text primary key default gen_random_uuid()::text,
+  client_id                text not null references public.clients(id) on delete cascade,
+
+  -- Billing period (first day of the month, e.g. 2026-05-01)
+  billing_month            date not null,
+
+  -- Revenue figures — manual entry or future GHL sync
+  -- closed_won_revenue is the client's own revenue, NOT Vault Co's collected revenue
+  closed_won_revenue       numeric(12,2) not null default 0,
+
+  -- Vault Co fee (computed server-side: closed_won_revenue * recurring_fee_percentage)
+  vault_co_fee             numeric(12,2) not null default 0,
+  recurring_fee_percentage numeric(6,4)  not null default 0.0500,
+
+  -- Partner earnings (computed server-side)
+  -- nick_recurring_earnings = vault_co_fee (100% of recurring to Nick)
+  -- jaxon_recurring_earnings = 0 (Jaxon earns $0 on recurring)
+  nick_recurring_earnings  numeric(12,2) not null default 0,
+  jaxon_recurring_earnings numeric(12,2) not null default 0,
+
+  -- Source of data: manual entry (Phase 2B) or future GHL sync (Phase 2C)
+  source                   text not null default 'manual'
+                             check (source in ('manual', 'ghl')),
+
+  -- Review workflow gate for future Stripe draft invoice creation (Phase 2C)
+  review_status            text not null default 'draft'
+                             check (review_status in ('draft', 'reviewed', 'locked')),
+
+  notes                    text,
+  created_by               text,
+  created_at               timestamptz not null default now(),
+  updated_at               timestamptz not null default now(),
+
+  -- One manual row + one GHL row allowed per client per month
+  constraint client_monthly_revenue_snapshots_unique
+    unique (client_id, billing_month, source)
+);
+
+create index client_monthly_revenue_snapshots_client_id_idx
+  on public.client_monthly_revenue_snapshots(client_id);
+create index client_monthly_revenue_snapshots_billing_month_idx
+  on public.client_monthly_revenue_snapshots(billing_month desc);
+
+create trigger client_monthly_revenue_snapshots_updated_at
+  before update on public.client_monthly_revenue_snapshots
+  for each row execute procedure update_updated_at();
+
+alter table public.client_monthly_revenue_snapshots enable row level security;
+
+create policy "Authenticated read revenue snapshots"
+  on public.client_monthly_revenue_snapshots for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert revenue snapshots"
+  on public.client_monthly_revenue_snapshots for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update revenue snapshots"
+  on public.client_monthly_revenue_snapshots for update
+  using (auth.role() = 'authenticated');
+```
+
+**Safety notes:**
+- `closed_won_revenue` is the client's own Closed Won revenue. It is not Vault Co's collected revenue, not a confirmed payment, and not an invoice amount.
+- `vault_co_fee` is computed server-side as `closed_won_revenue * recurring_fee_percentage`. It is Vault Co's estimated fee — not a collected or invoiced amount.
+- All rows default to `review_status: 'draft'`. Only `review_status: 'locked'` will be used as a gate for Stripe draft invoice creation in Phase 2C.
+- `source: 'ghl'` rows are reserved for Phase 2C GHL sync. Phase 2B only writes `source: 'manual'` rows.
+- No Stripe API is called in Phase 2B. No invoice is created or sent. No GHL write is performed.
+- `jaxon_recurring_earnings` is always `0` — Jaxon earns $0 on recurring revenue per the Vault Co business model.

@@ -23,8 +23,18 @@ export default function ScenariosPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDataProvider().getClients()
-      .then(setClients).catch(() => {}).finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getDataProvider().getClients();
+        if (!cancelled) setClients(data);
+      } catch {
+        // silent — scenarios render with base=0 on failure
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const activeClients = useMemo(() => clients.filter((c) => c.status === "active"), [clients]);

@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getGHLClosedWonForMonth } from "@/lib/integrations/ghl/client";
+import { resolveGHLCredentials } from "@/lib/integrations/credential-resolver";
 import type { GHLPreviewResult } from "@/lib/revenue/types";
 
 export const dynamic = "force-dynamic";
@@ -83,9 +84,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Fallback: use resolveGHLCredentials to get locationId from encrypted
+  // per-client credentials or global env vars when tables don't have it.
+  // This covers Kaczmar-style setup where credentials are stored encrypted
+  // in client_integration_credentials but not copied to the location columns.
+  if (!ghlLocationId) {
+    const resolved = await resolveGHLCredentials(clientId.trim());
+    if (resolved?.locationId) {
+      ghlLocationId = resolved.locationId;
+    }
+  }
+
   if (!ghlLocationId) {
     return NextResponse.json(
-      { error: "No GHL Location ID configured for this client. Add it in Revenue Settings or Client Settings." },
+      { error: "No GHL Location ID found for this client. Set it in Revenue Settings, Client Settings, or save GHL credentials in the Integrations tab." },
       { status: 422 }
     );
   }

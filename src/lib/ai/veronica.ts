@@ -6,6 +6,7 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
 import type { CampaignDraft } from "@/lib/planStore";
 import type { PersistedReport } from "@/lib/data/data-provider";
+import type { MetaCampaignSnapshotRow } from "@/lib/supabase/types";
 import {
   type AgentId,
   type AgentOutputBundle,
@@ -97,6 +98,7 @@ export interface VeronicaPortalContext {
   clientIntelligence?: ClientIntelligence | null;
   creativeAssets?: CreativeAsset[];
   integrationConnections?: IntegrationConnection[];
+  metaSnapshots?: MetaCampaignSnapshotRow[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -177,6 +179,7 @@ export interface ClientBrain {
   };
   integrations: {
     metaConnected: boolean;
+    metaLastSynced: string | null;
     pixelInstalled: boolean;
     fbPageConnected: boolean;
     ghlConnected: boolean;
@@ -1044,8 +1047,23 @@ export function buildClientBrain(
   const s = client.stats;
   const isRoofing = client.services.some((sv) => sv.toLowerCase().includes("roof"));
   const cplBenchmark = isRoofing ? 75 : 150;
-  const cplNum = parseFloat(s.cpl.replace(/[^0-9.]/g, "")) || 0;
-  const bookingRate = s.leads > 0 ? Math.round((s.booked / s.leads) * 100) : 0;
+
+  // Override stats with live Meta snapshot data when available.
+  // client.stats holds zeros for server-fetched clients; real numbers come from meta_campaign_snapshots.
+  const clientSnapshots = (ctx.metaSnapshots ?? []).filter((sn) => sn.client_id === client.id);
+  let liveLeads = s.leads;
+  let liveSpend = s.spend;
+  let liveCpl = s.cpl;
+  if (clientSnapshots.length > 0) {
+    const snapSpend = clientSnapshots.reduce((sum, sn) => sum + Number(sn.spend ?? 0), 0);
+    const snapLeads = clientSnapshots.reduce((sum, sn) => sum + Number(sn.leads ?? 0), 0);
+    liveLeads = snapLeads;
+    liveSpend = `$${snapSpend.toFixed(0)}`;
+    if (snapLeads > 0) liveCpl = `$${(snapSpend / snapLeads).toFixed(0)}`;
+  }
+
+  const cplNum = parseFloat(liveCpl.replace(/[^0-9.]/g, "")) || 0;
+  const bookingRate = liveLeads > 0 ? Math.round((s.booked / liveLeads) * 100) : 0;
   const showRateNum = parseFloat(s.showRate.replace(/[^0-9.]/g, "")) || 0;
 
   const cplStatus =
@@ -1056,7 +1074,7 @@ export function buildClientBrain(
       : ("above_target" as const);
 
   const bookingStatus =
-    s.leads === 0 && bookingRate === 0
+    liveLeads === 0 && bookingRate === 0
       ? ("unknown" as const)
       : bookingRate >= 30
       ? ("ok" as const)
@@ -1070,13 +1088,13 @@ export function buildClientBrain(
       : ("below_target" as const);
 
   const performance = {
-    leads: s.leads,
+    leads: liveLeads,
     booked: s.booked,
     bookingRate,
-    cpl: s.cpl,
+    cpl: liveCpl,
     cpba: s.cpba,
     showRate: s.showRate,
-    spend: s.spend,
+    spend: liveSpend,
     pipeline: s.pipeline,
     revenue: s.revenue,
     cplBenchmark,
@@ -1094,9 +1112,11 @@ export function buildClientBrain(
   const ghlConnFromDb = clientConnsLive.some((ic) => ic.provider === "ghl" && ic.status === "connected");
   const ghlLastSynced = clientConnsLive.find((ic) => ic.provider === "ghl")?.lastSyncedAt ?? null;
   const metaConnFromDb = clientConnsLive.some((ic) => ic.provider === "meta" && ic.status === "connected");
+  const metaLastSynced = clientConnsLive.find((ic) => ic.provider === "meta")?.lastSyncedAt ?? null;
 
   const integrations = {
     metaConnected: (!!client.metaAccountId && !isValuePending(client.metaAccountId)) || metaConnFromDb,
+    metaLastSynced,
     pixelInstalled: !!client.pixelId && !isValuePending(client.pixelId),
     fbPageConnected: !!client.fbPageId && !isValuePending(client.fbPageId),
     ghlConnected: (!!client.ghlLocationId && !isValuePending(client.ghlLocationId)) || ghlConnFromDb,

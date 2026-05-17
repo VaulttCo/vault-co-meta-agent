@@ -18,6 +18,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveGHLCredentials } from "@/lib/integrations/credential-resolver";
+import type { GHLDealPreview } from "@/lib/revenue/types";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 
@@ -47,6 +48,19 @@ export interface GHLOpportunity {
   pipelineStageId: string;
   assignedTo: string;
   contactId: string;
+  // Phase 2C: date fields for billing-month filtering
+  closedDate?: string | null;
+  lastStageChangeAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface GHLClosedWonResult {
+  deals: GHLDealPreview[];
+  totalRevenue: number;
+  dealCount: number;
+  locationId: string;
+  credentialSource: string;
+  error?: string;
 }
 
 export interface GHLAppointment {
@@ -144,6 +158,86 @@ async function ghlGet(
 }
 
 // ─── Public functions ─────────────────────────────────────────
+
+/**
+ * Fetch Closed Won opportunities for a client within a billing month.
+ * Filters by status === "won" and the billing month date range.
+ * READ-ONLY: never writes to GHL.
+ */
+export async function getGHLClosedWonForMonth(
+  clientId: string,
+  billingMonth: string, // YYYY-MM-DD (first of month)
+  pipelineId?: string | null
+): Promise<GHLClosedWonResult> {
+  const resolved = await resolveGHLCredentials(clientId);
+  if (!resolved) {
+    return { deals: [], totalRevenue: 0, dealCount: 0, locationId: "", credentialSource: "none", error: "GHL credentials not configured." };
+  }
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
+
+  // Billing month date range
+  const monthStart = new Date(billingMonth);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+  monthEnd.setUTCMilliseconds(-1);
+
+  try {
+    const params: Record<string, string> = {
+      location_id: creds.locationId,
+      status: "won",
+      startDate: monthStart.toISOString(),
+      endDate: monthEnd.toISOString(),
+      limit: "100",
+    };
+    if (pipelineId) params.pipeline_id = pipelineId;
+
+    const resp = await ghlGet("/opportunities/search", params, creds);
+    if (!resp.ok) {
+      const errData = await resp.json().catch(() => ({})) as Record<string, unknown>;
+      const msg = typeof errData.message === "string" ? errData.message : resp.statusText;
+      return { deals: [], totalRevenue: 0, dealCount: 0, locationId: creds.locationId, credentialSource: resolved.source, error: `GHL API error: ${msg}` };
+    }
+
+    const data = await resp.json() as { opportunities?: GHLOpportunity[] };
+    const raw: GHLOpportunity[] = data.opportunities ?? [];
+
+    // Filter won deals whose close/stage-change/update date falls in the billing month
+    const wonInMonth = raw.filter((o) => {
+      if (o.status !== "won") return false;
+      const dateStr = o.closedDate ?? o.lastStageChangeAt ?? o.updatedAt;
+      if (!dateStr) return true; // include if no date — can't exclude
+      const d = new Date(dateStr);
+      return d >= monthStart && d <= monthEnd;
+    });
+
+    const deals: GHLDealPreview[] = wonInMonth.map((o) => ({
+      name: o.name,
+      amount: o.monetaryValue ?? 0,
+      status: o.status,
+      closedDate: o.closedDate ?? o.lastStageChangeAt ?? null,
+    }));
+
+    const totalRevenue = deals.reduce((sum, d) => sum + d.amount, 0);
+
+    return {
+      deals,
+      totalRevenue,
+      dealCount: deals.length,
+      locationId: creds.locationId,
+      credentialSource: resolved.source,
+    };
+  } catch (err) {
+    return {
+      deals: [],
+      totalRevenue: 0,
+      dealCount: 0,
+      locationId: creds.locationId,
+      credentialSource: resolved.source,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
 
 /**
  * Test whether GHL credentials are valid and the location is accessible.

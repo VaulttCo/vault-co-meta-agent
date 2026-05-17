@@ -1713,12 +1713,20 @@ export function buildOperatorTaskSuggestions(
     }
 
     if (agentId === "ghl_followup") {
-      const ghl = output as { ghlStaleDays?: number | null; pipelineIssue?: string | null };
+      const ghl = output as { ghlStaleDays?: number | null; pipelineIssue?: string | null; emptyPipelineConfirmed?: boolean };
       if (typeof ghl.ghlStaleDays === "number" && ghl.ghlStaleDays > 3) {
         add(
           `Trigger fresh GHL sync${sfx}`,
           "data_cleanup", "medium",
           `Data cleanup: GHL sync is stale and should be refreshed from the client profile Integrations tab.${tail}`,
+          agentId
+        );
+      }
+      if (ghl.emptyPipelineConfirmed) {
+        add(
+          `Confirm lead forms create GHL opportunities${sfx}`,
+          "integration", "high",
+          `GHL is connected and synced but the pipeline is empty. Submit a test lead via the live lead form to verify a contact and opportunity are created in GHL. No GHL write is performed by this task — it is a verification step only.${tail}`,
           agentId
         );
       }

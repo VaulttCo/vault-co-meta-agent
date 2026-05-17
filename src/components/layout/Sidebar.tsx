@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Users,
   Megaphone,
   Bot,
@@ -20,6 +19,12 @@ import {
   X,
   Mic2,
   TrendingUp,
+  ArrowLeft,
+  DollarSign,
+  PhoneCall,
+  MessageSquare,
+  BookOpen,
+  Repeat2,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -33,17 +38,16 @@ interface NavItem {
   permission: keyof Permissions;
 }
 
-const allNavItems: NavItem[] = [
-  { label: "Command Hub",       href: "/",                   icon: LayoutDashboard, permission: "canViewDashboard" },
-  { label: "Veronica AI",       href: "/ai-agent",           icon: Bot,             permission: "canViewAiBuilder" },
-  { label: "Revenue Dashboard", href: "/revenue-dashboard",  icon: TrendingUp,      permission: "canViewAnalytics" },
-  { label: "Clients",           href: "/clients",            icon: Users,           permission: "canViewClients" },
-  { label: "Operator Queue",    href: "/operator-queue",     icon: ListChecks,      permission: "canViewAiBuilder" },
-  { label: "Approvals",         href: "/approvals",          icon: CheckSquare,     permission: "canViewApprovals" },
-  { label: "Reports",           href: "/reports",            icon: FileText,        permission: "canViewReports" },
-  { label: "Campaigns",         href: "/campaigns",          icon: Megaphone,       permission: "canViewCampaigns" },
-  { label: "Creatives",         href: "/creatives",          icon: ImageIcon,       permission: "canViewCreatives" },
-  { label: "Analytics",         href: "/analytics",          icon: BarChart3,       permission: "canViewAnalytics" },
+// ── Veronica portal nav ───────────────────────────────────────────────────────
+const veronicaNavItems: NavItem[] = [
+  { label: "Veronica AI",    href: "/ai-agent",      icon: Bot,         permission: "canViewAiBuilder" },
+  { label: "Clients",        href: "/clients",        icon: Users,       permission: "canViewClients"   },
+  { label: "Operator Queue", href: "/operator-queue", icon: ListChecks,  permission: "canViewAiBuilder" },
+  { label: "Approvals",      href: "/approvals",      icon: CheckSquare, permission: "canViewApprovals" },
+  { label: "Reports",        href: "/reports",        icon: FileText,    permission: "canViewReports"   },
+  { label: "Campaigns",      href: "/campaigns",      icon: Megaphone,   permission: "canViewCampaigns" },
+  { label: "Creatives",      href: "/creatives",      icon: ImageIcon,   permission: "canViewCreatives" },
+  { label: "Analytics",      href: "/analytics",      icon: BarChart3,   permission: "canViewAnalytics" },
 ];
 
 const settingsItem: NavItem = {
@@ -66,43 +70,122 @@ export function Sidebar({ onClose }: SidebarProps) {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
 
-  const visibleNavItems = allNavItems.filter(
-    (item) => permissions?.[item.permission] ?? false
-  );
-  const showSettings = permissions?.canViewSettings ?? false;
-
   const roleColor = user ? ROLE_COLORS[user.role] : "#6b7a99";
   const roleLabel = user ? ROLE_LABELS[user.role] : "";
+
+  // ── Determine portal context ─────────────────────────────────────────────
+  const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
+  const isVictoria = pathname.startsWith("/victoria");
+
+  const portalLabel = isRevenueDashboard
+    ? "Revenue Dashboard"
+    : isVictoria
+    ? "Victoria AI"
+    : "Vault Co Veronica";
+
+  const showSettings = permissions?.canViewSettings ?? false;
+
+  // ── Shared: Back to Command Hub link ─────────────────────────────────────
+  const backToHub = (
+    <Link
+      href="/"
+      className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all mb-1"
+      style={{ color: "rgba(201,168,76,0.65)", border: "1px solid transparent" }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.color = "rgba(201,168,76,0.90)";
+        (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(201,168,76,0.06)";
+        (e.currentTarget as HTMLElement).style.borderColor = "rgba(201,168,76,0.16)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.color = "rgba(201,168,76,0.65)";
+        (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+        (e.currentTarget as HTMLElement).style.borderColor = "transparent";
+      }}
+    >
+      <ArrowLeft size={13} className="flex-shrink-0" />
+      <span>Command Hub</span>
+    </Link>
+  );
+
+  // ── Shared: nav item renderer ─────────────────────────────────────────────
+  function NavLink({ label, href, icon: Icon }: { label: string; href: string; icon: React.ElementType }) {
+    const active = isActive(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${active ? "text-[#f8f8f7]" : ""}`}
+        style={
+          active
+            ? { backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.20)", color: "#f8f8f7" }
+            : { color: "rgba(107,122,153,0.85)", border: "1px solid transparent" }
+        }
+        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "#f8f8f7"; }}
+        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(107,122,153,0.85)"; }}
+      >
+        <Icon size={15} className="flex-shrink-0" style={{ color: active ? "#0081f2" : undefined }} />
+        <span className="truncate">{label}</span>
+        {label === "Veronica AI" && (
+          <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+            style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
+            <Sparkles size={7} />AI
+          </span>
+        )}
+        {label === "Approvals" && pendingDrafts > 0 && (
+          <span className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+            style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
+            {pendingDrafts}
+          </span>
+        )}
+      </Link>
+    );
+  }
+
+  // ── Shared: decorative coming-soon item ───────────────────────────────────
+  function ComingSoonItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+    return (
+      <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
+        style={{ color: "rgba(107,122,153,0.40)" }}>
+        <Icon size={15} className="flex-shrink-0" />
+        <span className="truncate">{label}</span>
+        <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+          style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.12)", border: "1px solid rgba(61,79,110,0.18)" }}>
+          Soon
+        </span>
+      </div>
+    );
+  }
+
+  // ── Shared: section header ────────────────────────────────────────────────
+  function SectionLabel({ label }: { label: string }) {
+    return (
+      <div className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-4"
+        style={{ color: "rgba(107,122,153,0.55)" }}>
+        {label}
+      </div>
+    );
+  }
 
   return (
     <aside
       className="w-[228px] flex-shrink-0 flex flex-col border-r h-full"
-      style={{
-        backgroundColor: "var(--t-sidebar-bg)",
-        borderColor: "rgba(0, 129, 242, 0.12)",
-      }}
+      style={{ backgroundColor: "var(--t-sidebar-bg)", borderColor: "rgba(0,129,242,0.12)" }}
     >
-      {/* Logo area */}
+      {/* ── Logo area ─────────────────────────────────────────────────── */}
       <div
         className="h-[68px] flex items-center justify-between px-5 border-b flex-shrink-0"
-        style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+        style={{ borderColor: "rgba(0,129,242,0.12)" }}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-[88px] h-[24px] relative flex-shrink-0">
-            <Image
-              src="/vaultco-logo.png"
-              alt="Vault Co"
-              fill
-              className="object-contain object-left"
-              priority
-            />
+            <Image src="/vaultco-logo.png" alt="Vault Co" fill className="object-contain object-left" priority />
           </div>
         </div>
         {onClose && (
           <button
             onClick={onClose}
             className="lg:hidden w-7 h-7 flex items-center justify-center rounded-md flex-shrink-0"
-            style={{ color: "rgba(107, 122, 153, 0.8)" }}
+            style={{ color: "rgba(107,122,153,0.8)" }}
             aria-label="Close menu"
           >
             <X size={16} />
@@ -110,146 +193,108 @@ export function Sidebar({ onClose }: SidebarProps) {
         )}
       </div>
 
-      {/* Internal portal label */}
+      {/* ── Portal label ──────────────────────────────────────────────── */}
       <div
         className="px-5 py-2.5 border-b flex-shrink-0"
-        style={{ borderColor: "rgba(0, 129, 242, 0.08)", backgroundColor: "rgba(0, 129, 242, 0.04)" }}
+        style={{ borderColor: "rgba(0,129,242,0.08)", backgroundColor: "rgba(0,129,242,0.04)" }}
       >
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse flex-shrink-0" />
           <span className="text-[9px] font-bold uppercase tracking-widest text-[#0081f2]">
-            Vault Co Command Hub
+            {portalLabel}
           </span>
         </div>
       </div>
 
-      {/* Main nav */}
+      {/* ── Nav ───────────────────────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
-        <div
-          className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-1"
-          style={{ color: "rgba(107, 122, 153, 0.6)" }}
-        >
-          Command Center
-        </div>
 
-        {visibleNavItems.map(({ label, href, icon: Icon }) => {
-          const active = isActive(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 group relative ${
-                active ? "text-[#f8f8f7]" : ""
-              }`}
-              style={
-                active
-                  ? {
-                      backgroundColor: "rgba(0, 129, 242, 0.12)",
-                      border: "1px solid rgba(0, 129, 242, 0.20)",
-                      color: "#f8f8f7",
-                    }
-                  : {
-                      color: "rgba(107, 122, 153, 0.85)",
-                      border: "1px solid transparent",
-                    }
-              }
-              onMouseEnter={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.color = "#f8f8f7";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(107, 122, 153, 0.85)";
-              }}
-            >
-              <Icon
-                size={15}
-                className="flex-shrink-0"
-                style={{ color: active ? "#0081f2" : undefined }}
-              />
-              <span className="truncate">{label}</span>
-              {label === "Veronica AI" && (
-                <span
-                  className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
-                  style={{
-                    color: "#ff8400",
-                    backgroundColor: "rgba(255, 132, 0, 0.10)",
-                    border: "1px solid rgba(255, 132, 0, 0.20)",
-                  }}
-                >
-                  <Sparkles size={7} />
-                  AI
-                </span>
-              )}
-              {label === "Approvals" && pendingDrafts > 0 && (
-                <span
-                  className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
-                  style={{
-                    color: "#ff8400",
-                    backgroundColor: "rgba(255, 132, 0, 0.10)",
-                    border: "1px solid rgba(255, 132, 0, 0.20)",
-                  }}
-                >
-                  {pendingDrafts}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        {/* Back to Command Hub — all portals */}
+        {backToHub}
 
-        {/* Coming soon section */}
-        <div
-          className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-5"
-          style={{ color: "rgba(107, 122, 153, 0.6)" }}
-        >
-          Coming Soon
-        </div>
+        <div className="border-t my-2" style={{ borderColor: "rgba(0,129,242,0.08)" }} />
 
-        {/* Victoria AI */}
-        <Link
-          href="/victoria"
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
-          style={{ color: "rgba(107, 122, 153, 0.55)", border: "1px solid transparent" }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(167,139,250,0.8)"; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "rgba(107, 122, 153, 0.55)"; }}
-        >
-          <Mic2 size={15} className="flex-shrink-0" />
-          <span className="truncate">Victoria AI</span>
-          <span
-            className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
-            style={{
-              color: "rgba(107, 122, 153, 0.6)",
-              backgroundColor: "rgba(61,79,110,0.12)",
-              border: "1px solid rgba(61,79,110,0.20)",
-            }}
-          >
-            Soon
-          </span>
-        </Link>
+        {/* ── Revenue Dashboard portal ───────────────────────────────── */}
+        {isRevenueDashboard && (
+          <>
+            <SectionLabel label="Leadership View" />
+            <NavLink label="Revenue Dashboard" href="/revenue-dashboard" icon={TrendingUp} />
 
-        {/* Client Onboarding */}
-        <div
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
-          style={{ color: "rgba(107, 122, 153, 0.4)" }}
-          title="Client Onboarding Portal — coming soon"
-        >
-          <ClipboardList size={15} className="flex-shrink-0" />
-          <span className="truncate">Client Onboarding</span>
-          <span
-            className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
-            style={{
-              color: "rgba(107, 122, 153, 0.6)",
-              backgroundColor: "rgba(61,79,110,0.12)",
-              border: "1px solid rgba(61,79,110,0.20)",
-            }}
-          >
-            Soon
-          </span>
-        </div>
+            <SectionLabel label="Dashboard Sections" />
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
+              style={{ color: "rgba(107,122,153,0.45)" }}>
+              <Users size={15} className="flex-shrink-0" />
+              <span className="truncate">Client Status</span>
+              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
+                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
+                on page
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
+              style={{ color: "rgba(107,122,153,0.45)" }}>
+              <BarChart3 size={15} className="flex-shrink-0" />
+              <span className="truncate">Fulfillment Health</span>
+              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
+                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
+                on page
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
+              style={{ color: "rgba(107,122,153,0.45)" }}>
+              <CheckSquare size={15} className="flex-shrink-0" />
+              <span className="truncate">Approvals Summary</span>
+              <span className="ml-auto text-[8px] font-medium px-1.5 py-0.5 rounded"
+                style={{ color: "rgba(107,122,153,0.45)", backgroundColor: "rgba(61,79,110,0.08)" }}>
+                on page
+              </span>
+            </div>
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] cursor-default select-none"
+              style={{ color: "rgba(107,122,153,0.35)" }}>
+              <DollarSign size={15} className="flex-shrink-0" />
+              <span className="truncate">Revenue Tracking</span>
+              <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.10)", border: "1px solid rgba(61,79,110,0.18)" }}>
+                Phase 2
+              </span>
+            </div>
+          </>
+        )}
+
+        {/* ── Victoria portal ────────────────────────────────────────── */}
+        {isVictoria && (
+          <>
+            <SectionLabel label="Victoria AI" />
+            <NavLink label="Victoria AI Sales Coach" href="/victoria" icon={Mic2} />
+
+            <SectionLabel label="Coming Soon" />
+            <ComingSoonItem icon={BookOpen}     label="Sales Frameworks"       />
+            <ComingSoonItem icon={MessageSquare} label="Objection Library"      />
+            <ComingSoonItem icon={PhoneCall}     label="Call Coaching"          />
+            <ComingSoonItem icon={Repeat2}       label="Follow-Up Templates"    />
+          </>
+        )}
+
+        {/* ── Veronica portal (default) ──────────────────────────────── */}
+        {!isRevenueDashboard && !isVictoria && (
+          <>
+            <SectionLabel label="Veronica AI" />
+            {veronicaNavItems
+              .filter((item) => permissions?.[item.permission] ?? false)
+              .map(({ label, href, icon }) => (
+                <NavLink key={href} label={label} href={href} icon={icon} />
+              ))}
+
+            <SectionLabel label="Coming Soon" />
+            <ComingSoonItem icon={ClipboardList} label="Client Onboarding" />
+          </>
+        )}
+
       </nav>
 
-      {/* Bottom */}
+      {/* ── Bottom ────────────────────────────────────────────────────── */}
       <div
         className="border-t py-2.5 px-3 space-y-0.5 flex-shrink-0"
-        style={{ borderColor: "rgba(0, 129, 242, 0.12)" }}
+        style={{ borderColor: "rgba(0,129,242,0.12)" }}
       >
         {showSettings && (
           <Link
@@ -257,20 +302,12 @@ export function Sidebar({ onClose }: SidebarProps) {
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
             style={
               isActive("/settings")
-                ? {
-                    backgroundColor: "rgba(0, 129, 242, 0.12)",
-                    border: "1px solid rgba(0, 129, 242, 0.20)",
-                    color: "#f8f8f7",
-                  }
-                : { color: "rgba(107, 122, 153, 0.85)", border: "1px solid transparent" }
+                ? { backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.20)", color: "#f8f8f7" }
+                : { color: "rgba(107,122,153,0.85)", border: "1px solid transparent" }
             }
           >
-            <Settings
-              size={15}
-              className="flex-shrink-0"
-              style={{ color: isActive("/settings") ? "#0081f2" : undefined }}
-            />
-            {settingsItem.label}
+            <Settings size={15} className="flex-shrink-0" style={{ color: isActive("/settings") ? "#0081f2" : undefined }} />
+            Settings
           </Link>
         )}
 
@@ -278,10 +315,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         {user && (
           <div
             className="mt-1.5 px-3 py-2.5 rounded-lg space-y-2"
-            style={{
-              backgroundColor: "rgba(0, 129, 242, 0.06)",
-              border: "1px solid rgba(0, 129, 242, 0.12)",
-            }}
+            style={{ backgroundColor: "rgba(0,129,242,0.06)", border: "1px solid rgba(0,129,242,0.12)" }}
           >
             <div className="flex items-center gap-2.5">
               <div
@@ -297,11 +331,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                 <div className="flex items-center gap-1 mt-0.5">
                   <span
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border leading-tight"
-                    style={{
-                      color: roleColor,
-                      backgroundColor: `${roleColor}18`,
-                      borderColor: `${roleColor}30`,
-                    }}
+                    style={{ color: roleColor, backgroundColor: `${roleColor}18`, borderColor: `${roleColor}30` }}
                   >
                     {roleLabel}
                   </span>
@@ -311,13 +341,13 @@ export function Sidebar({ onClose }: SidebarProps) {
                 onClick={() => void signOut()}
                 title="Sign out"
                 className="w-6 h-6 flex items-center justify-center rounded-md transition-colors flex-shrink-0"
-                style={{ color: "rgba(61, 79, 110, 0.8)" }}
+                style={{ color: "rgba(61,79,110,0.8)" }}
                 onMouseEnter={(e) => {
                   (e.currentTarget as HTMLElement).style.color = "#ef4444";
-                  (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239, 68, 68, 0.08)";
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(239,68,68,0.08)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.color = "rgba(61, 79, 110, 0.8)";
+                  (e.currentTarget as HTMLElement).style.color = "rgba(61,79,110,0.8)";
                   (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
                 }}
               >

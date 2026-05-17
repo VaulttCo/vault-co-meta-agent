@@ -939,3 +939,66 @@ alter table public.client_monthly_revenue_snapshots
 - `synced_at` — timestamp of the GHL read-only pull that produced this snapshot. `null` for manual entries.
 - `reviewed_at` — reserved for a future review-lock workflow. Not written by Phase 2C.
 - No invoice columns are added. No Stripe columns are added. No GHL write is performed by Phase 2C.
+
+---
+
+### GHL Sync Phase 2 — Per-Opportunity Pipeline Snapshots
+
+Creates the `ghl_opportunity_snapshots` table. Run in the Supabase SQL editor **after** the `clients` table exists.
+Each row is one GHL opportunity at a point in time, upserted on `(client_id, opportunity_id)`.
+This table is **read-only from GHL** — the sync route only writes to this Supabase table; it never modifies GHL.
+
+```sql
+create table if not exists public.ghl_opportunity_snapshots (
+  id                  text primary key default gen_random_uuid()::text,
+  client_id           text not null references public.clients(id) on delete cascade,
+  ghl_location_id     text,
+  opportunity_id      text not null,
+  contact_id          text,
+  pipeline_id         text,
+  pipeline_stage_id   text,
+  pipeline_stage_name text,
+  opportunity_name    text,
+  contact_name        text,
+  status              text,
+  monetary_value      numeric(12,2),
+  source              text,
+  assigned_user       text,
+  created_at_ghl      timestamptz,
+  updated_at_ghl      timestamptz,
+  last_activity_at    timestamptz,
+  appointment_status  text,
+  raw_payload         jsonb,
+  synced_at           timestamptz not null default now(),
+  created_at          timestamptz not null default now(),
+  constraint ghl_opportunity_snapshots_unique unique (client_id, opportunity_id)
+);
+
+create index ghl_opportunity_snapshots_client_id_idx
+  on public.ghl_opportunity_snapshots(client_id);
+create index ghl_opportunity_snapshots_synced_at_idx
+  on public.ghl_opportunity_snapshots(synced_at desc);
+create index ghl_opportunity_snapshots_status_idx
+  on public.ghl_opportunity_snapshots(status);
+
+alter table public.ghl_opportunity_snapshots enable row level security;
+
+create policy "Authenticated read ghl opportunity snapshots"
+  on public.ghl_opportunity_snapshots for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert ghl opportunity snapshots"
+  on public.ghl_opportunity_snapshots for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update ghl opportunity snapshots"
+  on public.ghl_opportunity_snapshots for update
+  using (auth.role() = 'authenticated');
+```
+
+**Safety notes:**
+- The sync route (`POST /api/integrations/ghl/sync-opportunities`) only reads from GHL and writes to this Supabase table.
+- No GHL contacts are created or modified. No GHL opportunities are moved or updated.
+- `contact_name` is stored as a display label only — no phone or email is stored.
+- `raw_payload` stores the full GHL API response for this opportunity (server-side only — never returned to the frontend directly).
+- `assigned_user` stores the GHL user ID assigned to the opportunity. No user management is performed.

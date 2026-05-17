@@ -10,6 +10,7 @@ import {
   type MonthlyRevenueSnapshot,
   type GHLPreviewResult,
 } from "@/lib/revenue/types";
+import type { GHLConnectionStatus } from "@/app/api/revenue-settings/ghl-status/route";
 import {
   GOLD, GOLD_BG, GOLD_BORDER, fmtCurrency,
 } from "@/lib/revenue/calculations";
@@ -50,6 +51,47 @@ function ReviewStatusBadge({ status }: { status: "draft" | "reviewed" | "locked"
   );
 }
 
+function GHLStatusChip({ status }: { status?: GHLConnectionStatus }) {
+  if (!status) {
+    return <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>Checking…</span>;
+  }
+  if (status.isGhlConnected && status.ghlPipelineIdPresent) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#22c55e" }} />
+        <span className="text-[11px]" style={{ color: "#22c55e" }}>
+          {status.connectionSource === "global_env" ? "Connected via Global Config" : "Connected"}
+        </span>
+      </div>
+    );
+  }
+  if (status.isGhlConnected && !status.ghlPipelineIdPresent) {
+    const label = status.connectionSource === "encrypted_credentials"
+      ? "Credentials Found · Pipeline Needed"
+      : "Location Connected · Pipeline Needed";
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#f59e0b" }} />
+        <span className="text-[11px]" style={{ color: "#f59e0b" }}>{label}</span>
+      </div>
+    );
+  }
+  if (!status.isGhlConnected && status.ghlPipelineIdPresent) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "#f59e0b" }} />
+        <span className="text-[11px]" style={{ color: "#f59e0b" }}>Pipeline Set · Location Needed</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: "rgba(107,122,153,0.5)" }} />
+      <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.5)" }}>Not Connected</span>
+    </div>
+  );
+}
+
 type GHLPreviewEntry =
   | { status: "idle" }
   | { status: "loading" }
@@ -78,6 +120,9 @@ export default function GhlTrackerPage() {
   const [notesInputs, setNotesInputs]           = useState<Record<string, string>>({});
   const [savingSnapshot, setSavingSnapshot]     = useState<Record<string, boolean>>({});
 
+  // ── Phase 2C: GHL connection status (safe metadata, no secrets) ──────────
+  const [ghlStatusMap, setGhlStatusMap] = useState<Record<string, GHLConnectionStatus>>({});
+
   // ── Phase 2C: GHL preview state ───────────────────────────────────────────
   const [ghlPreviews, setGhlPreviews]   = useState<Record<string, GHLPreviewEntry>>({});
   const [savingGhl, setSavingGhl]       = useState<Record<string, boolean>>({});
@@ -101,6 +146,27 @@ export default function GhlTrackerPage() {
   }
 
   useEffect(() => loadClients(), []);
+
+  // ── Load GHL connection status once clients are known (safe metadata only) ─
+  useEffect(() => {
+    if (loading || clients.length === 0) return;
+    const ids = clients.filter((c) => c.status !== "archived").map((c) => c.id);
+    if (ids.length === 0) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 10_000);
+
+    fetch(`/api/revenue-settings/ghl-status?clientIds=${ids.join(",")}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : { ghlStatus: {} }))
+      .then(({ ghlStatus }: { ghlStatus: Record<string, GHLConnectionStatus> }) => {
+        if (!cancelled) setGhlStatusMap(ghlStatus ?? {});
+      })
+      .catch(() => { /* silent — UI degrades to "Unknown" status */ })
+      .finally(() => { clearTimeout(tid); });
+
+    return () => { cancelled = true; controller.abort(); clearTimeout(tid); };
+  }, [loading, clients]);
 
   // ── Load revenue settings (10s timeout) ──────────────────────────────────
   useEffect(() => {
@@ -565,12 +631,15 @@ export default function GhlTrackerPage() {
                   const isSaving         = savingToggle[client.id] ?? false;
                   const isSnapshotSaving = savingSnapshot[client.id] ?? false;
                   const isGhlSaving      = savingGhl[client.id] ?? false;
-                  const hasGHL           = Boolean(clientSettings?.ghlLocationId ?? client.ghlLocationId);
                   const isSettingsLoaded = !settingsLoading;
 
                   const manualSnapshot   = manualSnapshotsMap[client.id];
                   const ghlSnapshot      = ghlSnapshotsMap[client.id];
                   const ghlPreviewEntry  = ghlPreviews[client.id] ?? { status: "idle" };
+                  const ghlStatus        = ghlStatusMap[client.id];
+
+                  // GHL can be previewed only when connected + pipeline present
+                  const canPreviewGHL = Boolean(ghlStatus?.isGhlConnected && ghlStatus?.ghlPipelineIdPresent);
 
                   // Manual revenue display values
                   const rawInput       = parseFloat(revenueInputs[client.id] ?? "") || 0;
@@ -580,8 +649,6 @@ export default function GhlTrackerPage() {
                   const displayManualNick = rawInput > 0 ? liveNick       : (manualSnapshot?.nickRecurringEarnings ?? 0);
 
                   // GHL revenue display values — prefer saved snapshot, then preview
-                  const ghlRevenue  = ghlSnapshot?.closedWonRevenue
-                    ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.closedWonRevenue : null);
                   const ghlFee      = ghlSnapshot?.vaultCoFee
                     ?? (ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.result.vaultCoFee : null);
                   const ghlNick     = ghlSnapshot?.nickRecurringEarnings
@@ -620,18 +687,17 @@ export default function GhlTrackerPage() {
 
                       {/* GHL Connected */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: hasGHL ? "#22c55e" : "rgba(107,122,153,0.5)" }} />
-                          <span className="text-[11px]"
-                            style={{ color: hasGHL ? "#22c55e" : "rgba(107,122,153,0.5)" }}>
-                            {hasGHL ? "Connected" : "Not Connected"}
-                          </span>
-                        </div>
-                        {clientSettings?.ghlLocationId && (
-                          <div className="text-[9px] mt-0.5 font-mono truncate max-w-[120px]"
-                            style={{ color: "rgba(107,122,153,0.45)" }}>
-                            {clientSettings.ghlLocationId}
+                        <GHLStatusChip status={ghlStatus} />
+                        {ghlStatus?.missingReason && !ghlStatus.isGhlConnected && (
+                          <div className="text-[9px] mt-1 leading-snug max-w-[180px]"
+                            style={{ color: "rgba(107,122,153,0.5)" }}>
+                            {ghlStatus.missingReason}
+                          </div>
+                        )}
+                        {ghlStatus?.isGhlConnected && !ghlStatus.ghlPipelineIdPresent && ghlStatus.missingReason && (
+                          <div className="text-[9px] mt-1 leading-snug max-w-[180px]"
+                            style={{ color: "rgba(245,158,11,0.7)" }}>
+                            {ghlStatus.missingReason}
                           </div>
                         )}
                       </td>
@@ -687,8 +753,14 @@ export default function GhlTrackerPage() {
                       <td className="px-4 py-3.5">
                         {!isOn ? (
                           <span className="text-[11px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
-                        ) : !hasGHL ? (
-                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>No GHL configured</span>
+                        ) : !canPreviewGHL ? (
+                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>
+                            {!ghlStatus || ghlStatus.connectionSource === "missing"
+                              ? "No GHL configured"
+                              : ghlStatus.isGhlConnected
+                              ? "Pipeline ID needed"
+                              : "Location ID needed"}
+                          </span>
                         ) : ghlSnapshot ? (
                           <div className="space-y-0.5">
                             <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
@@ -800,7 +872,7 @@ export default function GhlTrackerPage() {
                             </button>
                           )}
                           {/* Save GHL */}
-                          {isOn && hasGHL && ghlPreviewEntry.status === "loaded" && !ghlSnapshot && (
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && !ghlSnapshot && (
                             <button
                               onClick={() => void handleSaveGHLSnapshot(client.id)}
                               disabled={isGhlSaving}
@@ -811,7 +883,7 @@ export default function GhlTrackerPage() {
                             </button>
                           )}
                           {/* Re-preview GHL button (after snapshot saved) */}
-                          {isOn && hasGHL && ghlPreviewEntry.status === "idle" && !ghlSnapshot && (
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "idle" && !ghlSnapshot && (
                             <button
                               onClick={() => void handlePreviewGHL(client.id)}
                               className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 whitespace-nowrap"

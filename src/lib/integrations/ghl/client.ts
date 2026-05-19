@@ -62,6 +62,7 @@ export interface GHLClosedWonResult {
   locationId: string;
   credentialSource: string;
   error?: string;
+  ghlStatusCode?: number;
 }
 
 export interface GHLAppointment {
@@ -188,15 +189,21 @@ async function ghlGet(
 export async function getGHLClosedWonForMonth(
   clientId: string,
   billingMonth: string, // YYYY-MM-DD (first of month)
-  pipelineId?: string | null
+  pipelineId?: string | null,
+  locationIdOverride?: string | null
 ): Promise<GHLClosedWonResult> {
   const resolved = await resolveGHLCredentials(clientId);
   if (!resolved) {
     return { deals: [], totalRevenue: 0, dealCount: 0, locationId: "", credentialSource: "none", error: "GHL credentials not configured." };
   }
-  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: resolved.locationId };
+  // Use the location ID resolved by the caller (from revenue settings / DB tables) if provided.
+  // This ensures the admin's Location ID override in Revenue Settings is actually used.
+  const effectiveLocationId = locationIdOverride?.trim() || resolved.locationId;
+  const creds: GHLCredentials = { apiKey: resolved.apiKey, locationId: effectiveLocationId };
 
-  // Billing month date range
+  // Billing month date range — used for client-side filtering only.
+  // GHL /opportunities/search does not accept ISO-format startDate/endDate params;
+  // sending them causes a 422 Unprocessable Entity. Filter server-side after fetch.
   const monthStart = new Date(billingMonth);
   monthStart.setUTCHours(0, 0, 0, 0);
   const monthEnd = new Date(monthStart);
@@ -204,22 +211,28 @@ export async function getGHLClosedWonForMonth(
   monthEnd.setUTCMilliseconds(-1);
 
   try {
+    // Match the param set used by the working syncGHLOpportunitiesForClient function.
+    // Do NOT add startDate/endDate — GHL rejects those with 422.
     const params: Record<string, string> = {
       location_id: creds.locationId,
       status: "won",
-      startDate: monthStart.toISOString(),
-      endDate: monthEnd.toISOString(),
       limit: "100",
     };
     if (pipelineId) params.pipeline_id = pipelineId;
 
     const resp = await ghlGet("/opportunities/search", params, creds);
     if (!resp.ok) {
-      // 422 with a pipeline_id in params means GHL rejected that pipeline filter
+      let ghlErrorMsg = "";
+      try {
+        const errData = await resp.json() as Record<string, unknown>;
+        ghlErrorMsg = typeof errData.message === "string" ? errData.message : resp.statusText;
+      } catch { ghlErrorMsg = resp.statusText; }
+
       if (resp.status === 422 && pipelineId) {
         return {
           deals: [], totalRevenue: 0, dealCount: 0,
           locationId: creds.locationId, credentialSource: resolved.source,
+          ghlStatusCode: 422,
           error: "The Pipeline ID was rejected by GHL. Leave the Pipeline ID field blank to sync all Closed Won opportunities for the connected location.",
         };
       }
@@ -227,6 +240,7 @@ export async function getGHLClosedWonForMonth(
         return {
           deals: [], totalRevenue: 0, dealCount: 0,
           locationId: creds.locationId, credentialSource: resolved.source,
+          ghlStatusCode: resp.status,
           error: "GHL credentials were rejected. Check that the API key is valid in the Integrations tab.",
         };
       }
@@ -234,12 +248,16 @@ export async function getGHLClosedWonForMonth(
         return {
           deals: [], totalRevenue: 0, dealCount: 0,
           locationId: creds.locationId, credentialSource: resolved.source,
-          error: "The GHL Location ID could not be validated. Check that it is correct in Revenue Settings.",
+          ghlStatusCode: 422,
+          error: `GHL rejected the request (422): ${ghlErrorMsg || "The Location ID may be incorrect. Use the Location ID Override field in Revenue Settings to correct it."}`,
         };
       }
-      const errData = await resp.json().catch(() => ({})) as Record<string, unknown>;
-      const msg = typeof errData.message === "string" ? errData.message : resp.statusText;
-      return { deals: [], totalRevenue: 0, dealCount: 0, locationId: creds.locationId, credentialSource: resolved.source, error: `GHL API error: ${msg}` };
+      return {
+        deals: [], totalRevenue: 0, dealCount: 0,
+        locationId: creds.locationId, credentialSource: resolved.source,
+        ghlStatusCode: resp.status,
+        error: `GHL API error (${resp.status}): ${ghlErrorMsg || resp.statusText}`,
+      };
     }
 
     const data = await resp.json() as { opportunities?: GHLOpportunity[] };

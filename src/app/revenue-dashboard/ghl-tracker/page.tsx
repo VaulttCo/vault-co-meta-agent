@@ -84,11 +84,19 @@ function GHLStatusChip({ status }: { status?: GHLConnectionStatus }) {
   );
 }
 
+type GHLDebugMeta = {
+  locationSource?: string;
+  locationIdPresent?: boolean;
+  locationIdMasked?: string;
+  credentialSource?: string;
+  ghlStatusCode?: number;
+};
+
 type GHLPreviewEntry =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "loaded"; result: GHLPreviewResult }
-  | { status: "error"; error: string };
+  | { status: "loaded"; result: GHLPreviewResult; debug?: GHLDebugMeta }
+  | { status: "error"; error: string; debug?: GHLDebugMeta };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -336,24 +344,42 @@ export default function GhlTrackerPage() {
         body: JSON.stringify({ clientId, billingMonth: toBillingMonthDate(billingMonth) }),
       });
 
-      const data = await res.json() as { preview?: GHLPreviewResult; error?: string };
+      const data = await res.json() as {
+        preview?: GHLPreviewResult;
+        error?: string;
+        locationSource?: string;
+        locationIdPresent?: boolean;
+        locationIdMasked?: string;
+        credentialSource?: string;
+        ghlStatusCode?: number;
+      };
+
+      const debug: GHLDebugMeta = {
+        locationSource:   data.locationSource   ?? data.preview?.locationSource,
+        locationIdPresent: data.locationIdPresent ?? data.preview?.locationIdPresent,
+        locationIdMasked: data.locationIdMasked  ?? data.preview?.locationIdMasked,
+        credentialSource: data.credentialSource  ?? data.preview?.credentialSource,
+        ghlStatusCode:    data.ghlStatusCode,
+      };
 
       if (res.ok && data.preview) {
-        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview! } }));
+        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview!, debug } }));
       } else {
         const raw = data.error ?? "";
         const userMessage = raw.includes("Pipeline ID was rejected")
           ? "The Pipeline ID appears invalid. Leave it blank to sync all Closed Won opportunities for the connected location."
-          : raw.includes("Location ID could not be validated")
-          ? "The GHL Location ID could not be validated. Check it in GHL Settings."
-          : raw.includes("credentials were rejected")
+          : raw.includes("credentials were rejected") || data.ghlStatusCode === 401 || data.ghlStatusCode === 403
           ? "GHL credentials rejected. Check that the API key is valid in the Integrations tab."
           : raw.includes("Recurring billing")
           ? raw
+          : raw.includes("No GHL Location ID")
+          ? "GHL credentials found, but no Location ID is saved. Add the correct Location ID in the GHL Settings panel below."
+          : data.ghlStatusCode === 422
+          ? "GHL credentials found, but the Location ID was rejected. Add the correct Location ID override in the GHL Settings panel below, or update the client's GHL integration."
           : raw || "GHL credentials connected, but the request failed. Manual entry is still available.";
         setGhlPreviews((prev) => ({
           ...prev,
-          [clientId]: { status: "error", error: userMessage },
+          [clientId]: { status: "error", error: userMessage, debug },
         }));
       }
     } catch (err) {
@@ -758,6 +784,12 @@ export default function GhlTrackerPage() {
                   const panelErr     = panelError[client.id] ?? null;
                   const panelOk      = panelSuccess[client.id] ?? false;
                   const isPanelOpen  = openPanel === client.id;
+
+                  // Safe debug metadata from most recent preview attempt
+                  const previewDebug: GHLDebugMeta | undefined =
+                    ghlPreviewEntry.status === "loaded" ? ghlPreviewEntry.debug
+                    : ghlPreviewEntry.status === "error" ? ghlPreviewEntry.debug
+                    : undefined;
 
                   return (
                     <>
@@ -1191,12 +1223,12 @@ export default function GhlTrackerPage() {
                                         : "Set it here or in Integrations",
                                     },
                                     {
-                                      label: "Pipeline ID",
-                                      value: ghlStatus?.ghlPipelineIdPresent ? "Set" : "Not Set",
-                                      color: ghlStatus?.ghlPipelineIdPresent ? "#22c55e" : "#f59e0b",
+                                      label: "Pipeline Filter",
+                                      value: ghlStatus?.ghlPipelineIdPresent ? "Active" : "All Pipelines",
+                                      color: ghlStatus?.ghlPipelineIdPresent ? "#22c55e" : "rgba(107,122,153,0.6)",
                                       note: ghlStatus?.ghlPipelineIdPresent
-                                        ? "GHL preview is available"
-                                        : "Required to enable GHL preview",
+                                        ? "Closed Won filtered to one pipeline"
+                                        : "Optional — leave blank to pull all Closed Won",
                                     },
                                     {
                                       label: "Preview GHL",
@@ -1206,6 +1238,22 @@ export default function GhlTrackerPage() {
                                         ? "Click Preview GHL to fetch Closed Won revenue"
                                         : (ghlStatus?.missingReason ?? "Connect GHL credentials first"),
                                     },
+                                    ...(previewDebug?.locationIdMasked ? [{
+                                      label: "Location (masked)",
+                                      value: previewDebug.locationIdMasked,
+                                      color: "rgba(201,168,76,0.85)",
+                                      note: `Source: ${(previewDebug.locationSource ?? "unknown").replace(/_/g, " ")}`,
+                                    }] : []),
+                                    ...(previewDebug?.ghlStatusCode && previewDebug.ghlStatusCode !== 200 ? [{
+                                      label: "Last GHL Status",
+                                      value: String(previewDebug.ghlStatusCode),
+                                      color: previewDebug.ghlStatusCode === 422 ? "#f59e0b" : "#ef4444",
+                                      note: previewDebug.ghlStatusCode === 422
+                                        ? "422 — check location ID or pipeline ID"
+                                        : previewDebug.ghlStatusCode === 401 || previewDebug.ghlStatusCode === 403
+                                        ? "Credentials rejected by GHL"
+                                        : "GHL returned an error",
+                                    }] : []),
                                   ].map((item) => (
                                     <div key={item.label} className="flex items-start justify-between gap-4 py-2 border-b"
                                       style={{ borderColor: "rgba(61,79,110,0.10)" }}>

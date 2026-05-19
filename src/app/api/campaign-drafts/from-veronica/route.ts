@@ -362,7 +362,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Parse body ─────────────────────────────────────────────────────────
-  let body: { clientId: string; sourcePrompt?: string; agentsUsed?: string[] };
+  let body: { clientId: string; sourcePrompt?: string; agentsUsed?: string[]; creativeAssetId?: string | null };
   try {
     body = await req.json();
   } catch {
@@ -375,6 +375,10 @@ export async function POST(req: NextRequest) {
   }
   const safeSourcePrompt =
     typeof body.sourcePrompt === "string" ? body.sourcePrompt.slice(0, 500) : null;
+  const rawCreativeAssetId =
+    typeof body.creativeAssetId === "string" && body.creativeAssetId.trim()
+      ? body.creativeAssetId.trim()
+      : null;
 
   // ── 4. Load client + intelligence from Supabase (service role) ────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -406,6 +410,28 @@ export async function POST(req: NextRequest) {
       intelResult.data && !intelResult.error
         ? mapIntelligenceRow(safeClientId, intelResult.data)
         : null;
+
+    // ── 4b. Validate creative_asset_id belongs to this client ────────────
+    // Only query when an ID was provided. If validation fails, null it out
+    // rather than blocking draft creation — the draft is still useful without it.
+    let safeCreativeAssetId: string | null = null;
+    if (rawCreativeAssetId) {
+      const { data: assetRow, error: assetError } = await supabase
+        .from("creative_assets")
+        .select("id")
+        .eq("id", rawCreativeAssetId)
+        .eq("client_id", safeClientId)
+        .maybeSingle();
+      if (!assetError && assetRow?.id) {
+        safeCreativeAssetId = assetRow.id;
+      } else {
+        console.warn(
+          "[POST /api/campaign-drafts/from-veronica] creative_asset_id not found or wrong client — nulled out:",
+          rawCreativeAssetId,
+          assetError?.message ?? "no row"
+        );
+      }
+    }
 
     // ── 5. Build ClientBrain + run agents ─────────────────────────────────
     const ctx: VeronicaPortalContext = {
@@ -440,7 +466,7 @@ export async function POST(req: NextRequest) {
       goal: "Lead Generation",
       budget: client.monthlyBudget || "$2,000/mo",
       creative_type: null as string | null,
-      creative_asset_id: null as string | null,
+      creative_asset_id: safeCreativeAssetId,
       status: "needs_review" as const,
       approval_status: "needs_review" as const,
       meta_campaign_structure: buildMetaCampaignStructure(client, intelligence),

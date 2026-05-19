@@ -17,6 +17,12 @@ export const dynamic = "force-dynamic";
 
 const RECURRING_FEE_PCT = 0.05;
 
+// Mask a location ID for safe display: "abc...xyz" or "not set"
+function maskId(id: string | null | undefined): string {
+  if (!id || id.length < 6) return id ? `${id.slice(0, 2)}...` : "not set";
+  return `${id.slice(0, 3)}...${id.slice(-3)}`;
+}
+
 export async function POST(req: NextRequest) {
   const auth = await resolveServerRole();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -44,11 +50,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "billingMonth must be YYYY-MM-DD" }, { status: 400 });
   }
 
-  // Load client revenue settings to get pipelineId and verify recurring billing is active
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = getSupabaseServerClient() as any;
   let ghlPipelineId: string | null = null;
   let ghlLocationId: string | null = null;
+  let locationSource: string = "none";
 
   if (supabase) {
     const { data: settingsRaw } = await supabase
@@ -59,11 +65,14 @@ export async function POST(req: NextRequest) {
 
     if (settingsRaw) {
       ghlPipelineId = settingsRaw.ghl_pipeline_id ?? null;
-      ghlLocationId = settingsRaw.ghl_location_id ?? null;
+
+      if (settingsRaw.ghl_location_id) {
+        ghlLocationId = settingsRaw.ghl_location_id;
+        locationSource = "revenue_settings";
+      }
 
       // Only block if an explicit row exists and has recurring_billing_active = false.
-      // No row means the client hasn't been configured yet — allow preview so the admin
-      // can verify GHL is working before enabling billing.
+      // No row means the client hasn't been configured yet — allow preview.
       if (settingsRaw.recurring_billing_active === false) {
         return NextResponse.json(
           { error: "Recurring billing is not active for this client. Enable it in Revenue Settings before syncing GHL revenue." },
@@ -80,43 +89,68 @@ export async function POST(req: NextRequest) {
         .eq("id", clientId.trim())
         .maybeSingle();
 
-      if (clientRaw) {
-        ghlLocationId = clientRaw.ghl_location_id ?? null;
-        if (!ghlPipelineId) ghlPipelineId = clientRaw.ghl_pipeline_id ?? null;
+      if (clientRaw?.ghl_location_id) {
+        ghlLocationId = clientRaw.ghl_location_id;
+        locationSource = "client_profile";
+      }
+      if (clientRaw && !ghlPipelineId) {
+        ghlPipelineId = clientRaw.ghl_pipeline_id ?? null;
       }
     }
   }
 
-  // Fallback: use resolveGHLCredentials to get locationId from encrypted
-  // per-client credentials or global env vars when tables don't have it.
-  // This covers Kaczmar-style setup where credentials are stored encrypted
-  // in client_integration_credentials but not copied to the location columns.
+  // Fallback: resolveGHLCredentials covers encrypted per-client creds and global env.
+  // This is the path Kaczmar takes — credentials stored encrypted in
+  // client_integration_credentials, location ID inside the decrypted blob.
+  let resolvedCredentialSource: string | undefined;
   if (!ghlLocationId) {
     const resolved = await resolveGHLCredentials(clientId.trim());
     if (resolved?.locationId) {
       ghlLocationId = resolved.locationId;
+      locationSource = resolved.source === "per-client" ? "encrypted_credentials" : "global_env";
+      resolvedCredentialSource = resolved.source;
     }
   }
 
   if (!ghlLocationId) {
     return NextResponse.json(
-      { error: "No GHL Location ID found for this client. Set it in Revenue Settings, Client Settings, or save GHL credentials in the Integrations tab." },
+      {
+        error: "No GHL Location ID found for this client. Set it in Revenue Settings, Client Settings, or save GHL credentials in the Integrations tab.",
+        locationSource: "none",
+        locationIdPresent: false,
+        locationIdMasked: "not set",
+      },
       { status: 422 }
     );
   }
 
-  // Fetch Closed Won deals from GHL (read-only)
-  const result = await getGHLClosedWonForMonth(clientId.trim(), billingMonth, ghlPipelineId);
+  // Fetch Closed Won deals from GHL (read-only).
+  // Pass ghlLocationId explicitly so the function uses the same source as the status check
+  // rather than re-resolving credentials and potentially picking a different location.
+  const result = await getGHLClosedWonForMonth(
+    clientId.trim(),
+    billingMonth,
+    ghlPipelineId ?? undefined,
+    ghlLocationId
+  );
+
+  const debugMeta = {
+    locationSource,
+    locationIdPresent: true,
+    locationIdMasked: maskId(ghlLocationId),
+    credentialSource: resolvedCredentialSource ?? locationSource,
+    ...(result.ghlStatusCode !== undefined ? { ghlStatusCode: result.ghlStatusCode } : {}),
+  };
 
   if (result.error) {
     return NextResponse.json(
-      { error: result.error },
+      { error: result.error, ...debugMeta },
       { status: 502 }
     );
   }
 
-  const vaultCoFee            = Math.round(result.totalRevenue * RECURRING_FEE_PCT * 100) / 100;
-  const nickRecurringEarnings  = vaultCoFee;
+  const vaultCoFee           = Math.round(result.totalRevenue * RECURRING_FEE_PCT * 100) / 100;
+  const nickRecurringEarnings = vaultCoFee;
 
   const preview: GHLPreviewResult = {
     clientId:              clientId.trim(),
@@ -130,6 +164,11 @@ export async function POST(req: NextRequest) {
     jaxonRecurringEarnings: 0,
     source:                "ghl",
     dealPreview:           result.deals,
+    // Safe debug metadata
+    locationSource,
+    locationIdPresent: true,
+    locationIdMasked:  maskId(ghlLocationId),
+    credentialSource:  resolvedCredentialSource ?? locationSource,
   };
 
   return NextResponse.json({ preview });

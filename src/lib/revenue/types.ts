@@ -141,6 +141,11 @@ export interface GHLPreviewResult {
   jaxonRecurringEarnings: 0;
   source: 'ghl';
   dealPreview: GHLDealPreview[];
+  // Safe debug metadata — never contains raw API key or full location ID
+  locationSource?: string;
+  locationIdPresent?: boolean;
+  locationIdMasked?: string;
+  credentialSource?: string;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

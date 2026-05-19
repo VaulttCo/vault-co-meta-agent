@@ -778,7 +778,15 @@ function SaveDraftMenu({ msg, clientName }: { msg: ConsoleMsg; clientName?: stri
 // Create Campaign Draft — structured draft into campaign_drafts table
 // ─────────────────────────────────────────────────────────────
 
-function CreateCampaignDraftButton({ msg, clientName }: { msg: ConsoleMsg; clientName?: string }) {
+function CreateCampaignDraftButton({
+  msg,
+  clientName,
+  creativeAssetId,
+}: {
+  msg: ConsoleMsg;
+  clientName?: string;
+  creativeAssetId?: string | null;
+}) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draftId, setDraftId] = useState<string | null>(null);
 
@@ -795,6 +803,7 @@ function CreateCampaignDraftButton({ msg, clientName }: { msg: ConsoleMsg; clien
           clientId: msg.detectedClientId,
           sourcePrompt: msg.text?.slice(0, 500),
           agentsUsed: msg.agentsUsed ?? [],
+          creativeAssetId: creativeAssetId ?? null,
         }),
       });
       const data = await res.json() as { success?: boolean; id?: string; campaignName?: string; error?: string; mockMode?: boolean };
@@ -2795,6 +2804,7 @@ function AICampaignBuilderContent() {
                               ? clients.find((c) => c.id === msg.detectedClientId)?.name
                               : undefined)
                           }
+                          creativeAssetId={selectedAsset?.id ?? null}
                         />
                         <SaveDraftMenu
                           msg={msg}

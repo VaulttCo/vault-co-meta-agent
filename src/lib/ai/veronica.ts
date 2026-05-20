@@ -251,18 +251,24 @@ function checkLaunchReadiness(
   const ghlConnectedLive = clientConns.some((ic) => ic.provider === "ghl" && ic.status === "connected");
   const ghlSynced = clientConns.some((ic) => ic.provider === "ghl" && !!ic.lastSyncedAt);
   const ghlConnectedFinal = ghlConnectedLive || (!!client.ghlLocationId && !isValuePending(client.ghlLocationId));
+  const metaConnectedLive = clientConns.some((ic) => ic.provider === "meta" && ic.status === "connected");
+  const metaConnectedFinal = metaConnectedLive || (!!client.metaAccountId && !isValuePending(client.metaAccountId));
+
+  // Draft status helpers — used to distinguish missing vs. needs-approval
+  const hasDraftApproved = drafts.some((d) => d.status === "ready_for_meta" || d.status === "approved");
+  const hasDraftNeedsReview = !hasDraftApproved && drafts.some((d) => d.status === "needs_review");
 
   // Blocking checks — must all pass to launch
   const blocking: Array<{ label: string; pass: boolean }> = [
-    { label: "Meta Ad Account connected", pass: !!client.metaAccountId && !isValuePending(client.metaAccountId) },
+    { label: "Meta Ad Account connected", pass: metaConnectedFinal },
     { label: "Meta Pixel installed", pass: !!client.pixelId && !isValuePending(client.pixelId) },
     { label: "Facebook Page connected", pass: !!client.fbPageId && !isValuePending(client.fbPageId) },
     { label: "GHL Location connected", pass: ghlConnectedFinal },
     { label: "GHL sync confirmed", pass: ghlSynced },
     { label: "Approved creative asset", pass: approvedAssets.length > 0 },
     {
-      label: "Campaign draft approved or ready",
-      pass: drafts.some((d) => d.status === "ready_for_meta" || d.status === "approved"),
+      label: hasDraftNeedsReview ? "Campaign draft needs approval" : "Campaign draft approved or ready",
+      pass: hasDraftApproved,
     },
   ];
 
@@ -304,6 +310,7 @@ function checkLaunchReadiness(
     "GHL sync confirmed",
     "Approved creative asset",
     "Campaign draft approved or ready",
+    "Campaign draft needs approval",
   ];
   const nonBlockingOrder = [
     "Client intelligence extracted",

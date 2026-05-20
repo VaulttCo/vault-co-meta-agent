@@ -49,10 +49,21 @@ export interface GHLOpportunity {
   pipelineStageId: string;
   assignedTo: string;
   contactId: string;
-  // Phase 2C: date fields for billing-month filtering
+  // Date fields for billing-month filtering — GHL may populate any of these
   closedDate?: string | null;
   lastStageChangeAt?: string | null;
   updatedAt?: string | null;
+  dateUpdated?: string | null;
+  dateAdded?: string | null;
+  statusUpdatedAt?: string | null;
+}
+
+export interface GHLExcludedDeal {
+  name: string;
+  amount: number;
+  status: string;
+  dateFields: Record<string, string | null>;
+  reason: string;
 }
 
 export interface GHLClosedWonResult {
@@ -63,6 +74,7 @@ export interface GHLClosedWonResult {
   credentialSource: string;
   error?: string;
   ghlStatusCode?: number;
+  excludedDeals?: GHLExcludedDeal[];
 }
 
 export interface GHLAppointment {
@@ -263,20 +275,81 @@ export async function getGHLClosedWonForMonth(
     const data = await resp.json() as { opportunities?: GHLOpportunity[] };
     const raw: GHLOpportunity[] = data.opportunities ?? [];
 
-    // Filter won deals whose close/stage-change/update date falls in the billing month
-    const wonInMonth = raw.filter((o) => {
-      if (o.status !== "won") return false;
-      const dateStr = o.closedDate ?? o.lastStageChangeAt ?? o.updatedAt;
-      if (!dateStr) return true; // include if no date — can't exclude
-      const d = new Date(dateStr);
-      return d >= monthStart && d <= monthEnd;
-    });
+    // GHL status values observed in the wild: "won", "Won", "closed_won", "closed won"
+    const isWonStatus = (s: string | undefined | null) => {
+      if (!s) return false;
+      const lower = s.toLowerCase().replace(/[-_\s]/g, "");
+      return lower === "won" || lower === "closedwon";
+    };
+
+    // Safely parse a date that may be an ISO string or an epoch-ms numeric string.
+    // new Date("1747612800000") → Invalid Date in Node.js; must cast to number first.
+    const parseDate = (raw: string | null | undefined): Date | null => {
+      if (!raw) return null;
+      const asNum = Number(raw);
+      if (!isNaN(asNum) && String(asNum) === raw) return new Date(asNum);
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const excludedDeals: GHLExcludedDeal[] = [];
+    const wonInMonth: GHLOpportunity[] = [];
+
+    for (const o of raw) {
+      // Status filter — case-insensitive, supports all known GHL variants
+      if (!isWonStatus(o.status)) {
+        // Non-won status — skip silently (not logged; expected for open/lost deals)
+        continue;
+      }
+
+      const dateFieldMap: Record<string, string | null> = {
+        closedDate:         o.closedDate         ?? null,
+        lastStageChangeAt:  o.lastStageChangeAt  ?? null,
+        updatedAt:          o.updatedAt          ?? null,
+        dateUpdated:        o.dateUpdated        ?? null,
+        statusUpdatedAt:    o.statusUpdatedAt    ?? null,
+        dateAdded:          o.dateAdded          ?? null,
+      };
+
+      // Try each date field in priority order
+      const orderedKeys: (keyof typeof dateFieldMap)[] = [
+        "closedDate", "lastStageChangeAt", "statusUpdatedAt", "dateUpdated", "updatedAt", "dateAdded",
+      ];
+      let matched = false;
+      let firstValidDate: Date | null = null;
+
+      for (const key of orderedKeys) {
+        const parsed = parseDate(dateFieldMap[key]);
+        if (!parsed) continue;
+        if (firstValidDate === null) firstValidDate = parsed;
+        if (parsed >= monthStart && parsed <= monthEnd) {
+          matched = true;
+          break;
+        }
+      }
+
+      if (firstValidDate === null) {
+        // No date fields populated — include the deal (can't determine month, so be permissive)
+        wonInMonth.push(o);
+      } else if (matched) {
+        wonInMonth.push(o);
+      } else {
+        // Won but date falls outside the billing month — record for debug
+        excludedDeals.push({
+          name:       o.name ?? "(unnamed)",
+          amount:     o.monetaryValue ?? 0,
+          status:     o.status,
+          dateFields: dateFieldMap,
+          reason:     `All date fields fall outside ${billingMonth} (earliest: ${firstValidDate.toISOString()})`,
+        });
+      }
+    }
 
     const deals: GHLDealPreview[] = wonInMonth.map((o) => ({
-      name: o.name,
-      amount: o.monetaryValue ?? 0,
-      status: o.status,
-      closedDate: o.closedDate ?? o.lastStageChangeAt ?? null,
+      name:       o.name,
+      amount:     o.monetaryValue ?? 0,
+      status:     o.status,
+      closedDate: o.closedDate ?? o.lastStageChangeAt ?? o.statusUpdatedAt ?? o.dateUpdated ?? null,
     }));
 
     const totalRevenue = deals.reduce((sum, d) => sum + d.amount, 0);
@@ -287,6 +360,7 @@ export async function getGHLClosedWonForMonth(
       dealCount: deals.length,
       locationId: creds.locationId,
       credentialSource: resolved.source,
+      excludedDeals,
     };
   } catch (err) {
     return {

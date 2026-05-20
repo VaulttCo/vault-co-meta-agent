@@ -35,6 +35,7 @@ import {
   XCircle,
   Archive,
   ListChecks,
+  Layers,
 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
@@ -64,6 +65,7 @@ import {
   type CreativeDirection,
   type ComplianceCheck,
   type OptimizationRules,
+  type AssetAdVariation,
 } from "@/lib/planStore";
 
 // ─────────────────────────────────────────────────────────────
@@ -412,7 +414,8 @@ type SectionId =
   | "buyer"
   | "market"
   | "rationale"
-  | "creative-intel";
+  | "creative-intel"
+  | "asset-matrix";
 
 const sectionTabs: {
   id: SectionId;
@@ -432,6 +435,7 @@ const sectionTabs: {
   { id: "market", label: "Market Research", icon: MapPin, color: "#22c55e" },
   { id: "rationale", label: "Strategy", icon: Lightbulb, color: "#ff8400" },
   { id: "creative-intel", label: "Creative Intel", icon: Film, color: "#ff8400" },
+  { id: "asset-matrix", label: "Asset Matrix", icon: Layers, color: "#0081f2" },
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -781,11 +785,11 @@ function SaveDraftMenu({ msg, clientName }: { msg: ConsoleMsg; clientName?: stri
 function CreateCampaignDraftButton({
   msg,
   clientName,
-  creativeAssetId,
+  creativeAssetIds,
 }: {
   msg: ConsoleMsg;
   clientName?: string;
-  creativeAssetId?: string | null;
+  creativeAssetIds?: string[];
 }) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -803,7 +807,7 @@ function CreateCampaignDraftButton({
           clientId: msg.detectedClientId,
           sourcePrompt: msg.text?.slice(0, 500),
           agentsUsed: msg.agentsUsed ?? [],
-          creativeAssetId: creativeAssetId ?? null,
+          creativeAssetIds: creativeAssetIds ?? [],
         }),
       });
       const data = await res.json() as { success?: boolean; id?: string; campaignName?: string; error?: string; mockMode?: boolean };
@@ -1228,7 +1232,7 @@ function AICampaignBuilderContent() {
   const [service, setService] = useState("");
   const [creative, setCreative] = useState("");
   const [creativeNotes, setCreativeNotes] = useState("");
-  const [selectedAsset, setSelectedAsset] = useState<CreativeAsset | null>(null);
+  const [selectedAssets, setSelectedAssets] = useState<CreativeAsset[]>([]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
 
   // Asset drop zone state
@@ -1308,7 +1312,7 @@ function AICampaignBuilderContent() {
     } else {
       setMarket(""); setBudget(""); setService(""); setCreative("");
     }
-    setSelectedAsset(null);
+    setSelectedAssets([]);
     setCreativeNotes("");
     setShowAssetPicker(false);
     setCurrentPlan(null);
@@ -1359,8 +1363,8 @@ function AICampaignBuilderContent() {
         approvedForAds: false,
       };
       prependAsset(newAsset);
-      setSelectedAsset(newAsset);
-      setCreative(newAsset.assetType);
+      setSelectedAssets((prev) => [...prev, newAsset]);
+      if (!creative) setCreative(newAsset.assetType);
     } catch (err) {
       setAssetUploadError(err instanceof Error ? err.message : "Upload failed — check storage configuration.");
     } finally {
@@ -1389,7 +1393,8 @@ function AICampaignBuilderContent() {
           creativeType: creative,
           creativeNotes,
           clientIntelligence,
-          selectedAsset,
+          selectedAsset: selectedAssets[0] ?? null,
+          selectedAssets,
         }),
       });
 
@@ -1398,7 +1403,7 @@ function AICampaignBuilderContent() {
       const { draft, mockMode, provider, notice } = await res.json();
       setCurrentPlan({
         ...draft,
-        selectedCreativeAssetId: selectedAsset?.id ?? null,
+        selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
       setMockModeActive(mockMode ?? true);
       setMockModeNotice(notice ?? null);
@@ -1409,7 +1414,7 @@ function AICampaignBuilderContent() {
       const plan = generateMockPlan(selectedClient, goal, service, market, budget, creative);
       setCurrentPlan({
         ...plan,
-        selectedCreativeAssetId: selectedAsset?.id ?? null,
+        selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
       setMockModeActive(true);
       setGenerateError("Could not reach the generation API — showing mock draft.");
@@ -1495,6 +1500,7 @@ function AICampaignBuilderContent() {
     if (s.id === "market") return !!displayPlan?.marketResearchUsed;
     if (s.id === "rationale") return !!displayPlan?.strategicRationale;
     if (s.id === "creative-intel") return !!displayPlan?.creativeIntelligenceUsed;
+    if (s.id === "asset-matrix") return !!displayPlan?.adVariations?.length;
     return true;
   });
 
@@ -1632,13 +1638,13 @@ function AICampaignBuilderContent() {
         </div>
       )}
 
-      {/* Creative approval warning — via direct selectedAsset */}
-      {selectedAsset && !selectedAsset.approvedForAds && !displayPlan?.creativeIntelligenceUsed && (
+      {/* Creative approval warning — via direct selectedAssets */}
+      {selectedAssets.some(a => !a.approvedForAds) && !displayPlan?.creativeIntelligenceUsed && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#f59e0b]/5 border border-[#f59e0b]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-[var(--t-muted)] leading-snug">
             <span className="text-[#f59e0b] font-semibold">Unapproved creative selected: </span>
-            <span className="text-[var(--t-text)]">{selectedAsset.fileName}</span> has not been approved for Meta ads.
+            <span className="text-[var(--t-text)]">{selectedAssets.filter(a => !a.approvedForAds).map(a => a.fileName).join(", ")}</span> {selectedAssets.filter(a => !a.approvedForAds).length === 1 ? "has" : "have"} not been approved for Meta ads.
             This campaign cannot be submitted for final approval until the creative is reviewed.
             Go to the{" "}
             <a href="/creatives" className="text-[#f59e0b] hover:underline">Creative Library</a>
@@ -1752,11 +1758,11 @@ function AICampaignBuilderContent() {
               {/* 4. Creative */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-semibold text-[var(--t-dim)] uppercase tracking-wider">
-                  4. Creative Asset
+                  4. Creative Assets (Optional)
                 </label>
 
-                {/* Browse library — only when client is selected and no asset chosen */}
-                {selectedClientId && !selectedAsset && (
+                {/* Browse library — multi-select toggle */}
+                {selectedClientId && (
                   <div className="relative">
                     <button
                       onClick={() => setShowAssetPicker(!showAssetPicker)}
@@ -1765,6 +1771,11 @@ function AICampaignBuilderContent() {
                       <span className="flex items-center gap-2">
                         <Film size={11} />
                         Browse {selectedClient?.name.split(" ")[0]}&apos;s Library ({clientAssets.length})
+                        {selectedAssets.length > 0 && (
+                          <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[#0081f2]/15 text-[#0081f2] border border-[#0081f2]/25">
+                            {selectedAssets.length} selected
+                          </span>
+                        )}
                       </span>
                       <ChevronDown size={11} className={`transition-transform ${showAssetPicker ? "rotate-180" : ""}`} />
                     </button>
@@ -1787,17 +1798,28 @@ function AICampaignBuilderContent() {
                           clientAssets.map((asset) => {
                             const color = assetTypeColors[asset.assetType as AssetType] ?? "#6b7a99";
                             const AIcon = asset.fileType === "video" ? Video : ImageIcon;
+                            const isSelected = selectedAssets.some((a) => a.id === asset.id);
                             return (
                               <button
                                 key={asset.id}
-                                onClick={() => { setSelectedAsset(asset); setCreative(asset.assetType); setShowAssetPicker(false); }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-[var(--t-surface-2)] transition-colors text-left border-b border-[var(--t-border)]/40 last:border-0"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedAssets((prev) => prev.filter((a) => a.id !== asset.id));
+                                  } else {
+                                    setSelectedAssets((prev) => [...prev, asset]);
+                                    setCreative(asset.assetType);
+                                  }
+                                }}
+                                className={`w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-[var(--t-border)]/40 last:border-0 ${isSelected ? "bg-[#0081f2]/6" : "hover:bg-[var(--t-surface-2)]"}`}
                               >
                                 <div
-                                  className="w-6 h-6 rounded flex-shrink-0 flex items-center justify-center"
-                                  style={{ backgroundColor: `${color}18`, border: `1px solid ${color}28` }}
+                                  className="w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border"
+                                  style={isSelected ? { backgroundColor: "#0081f215", borderColor: "#0081f250" } : { backgroundColor: `${color}12`, borderColor: `${color}28` }}
                                 >
-                                  <AIcon size={10} style={{ color }} />
+                                  {isSelected
+                                    ? <CheckCircle2 size={11} style={{ color: "#0081f2" }} />
+                                    : <AIcon size={9} style={{ color }} />
+                                  }
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-[11px] text-[var(--t-text)] font-medium truncate">{asset.fileName}</div>
@@ -1821,114 +1843,126 @@ function AICampaignBuilderContent() {
                   </div>
                 )}
 
-                {/* Selected asset card */}
-                {selectedAsset ? (
-                  <div className="bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg p-3">
-                    <div className="flex items-start gap-2.5">
-                      <div
-                        className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center"
-                        style={{
-                          backgroundColor: `${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99"}15`,
-                          border: `1px solid ${assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99"}28`,
-                        }}
-                      >
-                        {selectedAsset.fileType === "video"
-                          ? <Video size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99" }} />
-                          : <ImageIcon size={14} style={{ color: assetTypeColors[selectedAsset.assetType as AssetType] ?? "#6b7a99" }} />
-                        }
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-semibold text-[var(--t-text)] truncate">{selectedAsset.fileName}</div>
-                        <div className="text-[11px] text-[var(--t-muted)]">{selectedAsset.assetType}</div>
-                        <div className="mt-1">
-                          {selectedAsset.approvedForAds
-                            ? <span className="text-[10px] text-[#22c55e] flex items-center gap-1"><CheckCircle2 size={9} />Approved for Ads</span>
-                            : <span className="text-[10px] text-[#f59e0b] flex items-center gap-1"><AlertCircle size={9} />Needs Approval — draft will be flagged</span>
-                          }
+                {/* Selected assets list */}
+                {selectedAssets.length > 0 && (
+                  <div className="space-y-1">
+                    {selectedAssets.map((asset, i) => {
+                      const color = assetTypeColors[asset.assetType as AssetType] ?? "#6b7a99";
+                      return (
+                        <div key={asset.id} className="flex items-center gap-2 px-2.5 py-2 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                          <div
+                            className="w-7 h-7 rounded flex-shrink-0 flex items-center justify-center"
+                            style={{ backgroundColor: `${color}15`, border: `1px solid ${color}28` }}
+                          >
+                            {asset.fileType === "video"
+                              ? <Video size={11} style={{ color }} />
+                              : <ImageIcon size={11} style={{ color }} />
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-medium text-[var(--t-text)] truncate">{asset.fileName}</span>
+                              {i === 0 && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0081f2]/12 text-[#0081f2] border border-[#0081f2]/20 flex-shrink-0">Primary</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-[var(--t-muted)]">
+                              {asset.assetType}
+                              {asset.approvedForAds
+                                ? <span className="ml-1.5 text-[#22c55e]">· Approved</span>
+                                : <span className="ml-1.5 text-[#f59e0b]">· Needs Approval</span>
+                              }
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedAssets((prev) => prev.filter((a) => a.id !== asset.id));
+                              if (selectedAssets.length === 1) setCreative("");
+                            }}
+                            className="text-[var(--t-dim)] hover:text-[#ef4444] flex-shrink-0 transition-colors"
+                          >
+                            <XCircle size={12} />
+                          </button>
                         </div>
-                      </div>
-                      <button
-                        onClick={() => { setSelectedAsset(null); setCreative(""); }}
-                        className="text-[var(--t-muted)] hover:text-[#ef4444] flex-shrink-0 mt-0.5 transition-colors"
-                      >
-                        <XCircle size={13} />
-                      </button>
-                    </div>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <>
-                    <div
-                      className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
-                        isDragging
-                          ? "border-[#0081f2]/60 bg-[#0081f2]/5"
-                          : "border-[var(--t-border)] hover:border-[#0081f2]/30"
-                      } ${assetUploading ? "pointer-events-none opacity-60" : ""}`}
-                      onClick={() => !assetUploading && assetFileInputRef.current?.click()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setIsDragging(false);
-                        const file = e.dataTransfer.files[0];
-                        if (file) handleBuilderAssetUpload(file);
-                      }}
-                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                      onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
-                      onDragLeave={() => setIsDragging(false)}
-                    >
-                      <input
-                        ref={assetFileInputRef}
-                        type="file"
-                        accept="image/*,video/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleBuilderAssetUpload(file);
-                          e.target.value = "";
-                        }}
-                      />
-                      {assetUploading ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 size={13} className="text-[#0081f2] animate-spin" />
-                          <span className="text-[11px] text-[var(--t-muted)]">Uploading to Creative Library…</span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="w-8 h-8 rounded-lg bg-[var(--t-surface-2)] border border-[var(--t-border)] flex items-center justify-center mx-auto mb-2">
-                            <ImageIcon size={13} className="text-[var(--t-dim)]" />
-                          </div>
-                          <div className="text-[11px] text-[var(--t-muted)]">
-                            Drop image/video or <span className="text-[#0081f2]">browse</span>
-                          </div>
-                          <div className="text-[10px] text-[var(--t-dim)] mt-0.5">JPG, PNG, MP4 · Max 50MB</div>
-                        </>
-                      )}
-                    </div>
-                    {assetUploadError && (
-                      <p className="text-[10px] text-[#ef4444]">{assetUploadError}</p>
-                    )}
-                    <div className="text-[10px] text-[var(--t-dim)] text-center">or select creative type</div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {["Before/After", "Testimonial", "Inspection Day", "Storm Damage", "Project Reveal", "Team Photo", "Owner On Camera", "Drone Footage", "UGC Style Video"].map((lbl) => (
-                        <button
-                          key={lbl}
-                          onClick={() => setCreative(lbl)}
-                          className={`px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors border text-center ${
-                            creative === lbl
-                              ? "bg-[#0081f2]/10 border-[#0081f2]/40 text-[#0081f2]"
-                              : "bg-[var(--t-surface-2)] border-[var(--t-border)] text-[var(--t-muted)] hover:text-[var(--t-text)] hover:border-[var(--t-border)]"
-                          }`}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                    {creative && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0081f2]/8 border border-[#0081f2]/20 rounded-lg">
-                        <CheckCircle2 size={11} className="text-[#0081f2] flex-shrink-0" />
-                        <span className="text-[11px] text-[#0081f2]">{creative} selected</span>
-                      </div>
-                    )}
-                  </>
                 )}
+
+                {/* Upload drop zone */}
+                <>
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
+                      isDragging
+                        ? "border-[#0081f2]/60 bg-[#0081f2]/5"
+                        : "border-[var(--t-border)] hover:border-[#0081f2]/30"
+                    } ${assetUploading ? "pointer-events-none opacity-60" : ""}`}
+                    onClick={() => !assetUploading && assetFileInputRef.current?.click()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const files = Array.from(e.dataTransfer.files);
+                      files.forEach((file) => handleBuilderAssetUpload(file));
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                    onDragLeave={() => setIsDragging(false)}
+                  >
+                    <input
+                      ref={assetFileInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        files.forEach((file) => handleBuilderAssetUpload(file));
+                        e.target.value = "";
+                      }}
+                    />
+                    {assetUploading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 size={13} className="text-[#0081f2] animate-spin" />
+                        <span className="text-[11px] text-[var(--t-muted)]">Uploading to Creative Library…</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-8 h-8 rounded-lg bg-[var(--t-surface-2)] border border-[var(--t-border)] flex items-center justify-center mx-auto mb-2">
+                          <Layers size={13} className="text-[var(--t-dim)]" />
+                        </div>
+                        <div className="text-[11px] text-[var(--t-muted)]">
+                          Drop images/videos or <span className="text-[#0081f2]">browse</span>
+                        </div>
+                        <div className="text-[10px] text-[var(--t-dim)] mt-0.5">JPG, PNG, MP4 · Multiple files · Max 50MB each</div>
+                      </>
+                    )}
+                  </div>
+                  {assetUploadError && (
+                    <p className="text-[10px] text-[#ef4444]">{assetUploadError}</p>
+                  )}
+                  <div className="text-[10px] text-[var(--t-dim)] text-center">or select creative type</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {["Before/After", "Testimonial", "Inspection Day", "Storm Damage", "Project Reveal", "Team Photo", "Owner On Camera", "Drone Footage", "UGC Style Video"].map((lbl) => (
+                      <button
+                        key={lbl}
+                        onClick={() => setCreative(lbl)}
+                        className={`px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors border text-center ${
+                          creative === lbl
+                            ? "bg-[#0081f2]/10 border-[#0081f2]/40 text-[#0081f2]"
+                            : "bg-[var(--t-surface-2)] border-[var(--t-border)] text-[var(--t-muted)] hover:text-[var(--t-text)] hover:border-[var(--t-border)]"
+                        }`}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                  {creative && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0081f2]/8 border border-[#0081f2]/20 rounded-lg">
+                      <CheckCircle2 size={11} className="text-[#0081f2] flex-shrink-0" />
+                      <span className="text-[11px] text-[#0081f2]">{creative} selected</span>
+                    </div>
+                  )}
+                </>
 
                 {/* Creative notes */}
                 <textarea
@@ -2050,7 +2084,7 @@ function AICampaignBuilderContent() {
                         plan={displayPlan}
                         onSave={handleSaveDraft}
                         onUpdate={handleUpdateStatus}
-                        hasUnapprovedCreative={!!selectedAsset && !selectedAsset.approvedForAds}
+                        hasUnapprovedCreative={selectedAssets.some(a => !a.approvedForAds)}
                         size="sm"
                       />
                     </div>
@@ -2126,7 +2160,7 @@ function AICampaignBuilderContent() {
                         </div>
                         <div className="pt-2 border-t border-[var(--t-border)]">
                           <div className="text-[11px] font-semibold text-[var(--t-dim)] uppercase tracking-wider mb-3">Approval Actions</div>
-                          <ApprovalBar plan={displayPlan} onSave={handleSaveDraft} onUpdate={handleUpdateStatus} hasUnapprovedCreative={!!selectedAsset && !selectedAsset.approvedForAds} size="md" />
+                          <ApprovalBar plan={displayPlan} onSave={handleSaveDraft} onUpdate={handleUpdateStatus} hasUnapprovedCreative={selectedAssets.some(a => !a.approvedForAds)} size="md" />
                           <p className="text-[11px] text-[var(--t-dim)] mt-3 leading-snug">
                             {displayPlan.status === "draft" && "Draft not yet submitted. Save or submit for human approval."}
                             {displayPlan.status === "needs_review" && "Submitted — visible on the Approvals page."}
@@ -2519,6 +2553,117 @@ function AICampaignBuilderContent() {
                     )}
 
                     {/* 12 — Creative Intelligence */}
+                    {/* Asset Matrix — per-asset copy variations */}
+                    {activeSection === "asset-matrix" && displayPlan?.adVariations && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Layers size={14} className="text-[#0081f2]" />
+                          <div className="text-[13px] font-bold text-[var(--t-text)]">Asset Copy Matrix</div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0081f2]/10 text-[#0081f2] border border-[#0081f2]/20">{displayPlan.adVariations.length} asset{displayPlan.adVariations.length !== 1 ? "s" : ""}</span>
+                        </div>
+                        <p className="text-[11px] text-[var(--t-muted)]">Veronica generated asset-specific ad copy for each selected creative. The first asset is primary.</p>
+                        {(displayPlan.adVariations as AssetAdVariation[]).map((v, i) => {
+                          const isVideo = v.fileType === "video";
+                          const accentColor = v.approvedForAds ? "#22c55e" : "#f59e0b";
+                          return (
+                            <div key={v.assetId} className="border border-[var(--t-border)] rounded-xl overflow-hidden">
+                              {/* Asset header */}
+                              <div className="flex items-center gap-3 px-4 py-3 bg-[var(--t-surface-2)] border-b border-[var(--t-border)]">
+                                <div className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: "#0081f215", border: "1px solid #0081f228" }}>
+                                  {isVideo ? <Video size={12} className="text-[#0081f2]" /> : <ImageIcon size={12} className="text-[#0081f2]" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[12px] font-semibold text-[var(--t-text)] truncate">{v.fileName}</span>
+                                    {v.isPrimary && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0081f2]/12 text-[#0081f2] border border-[#0081f2]/20 flex-shrink-0">Primary</span>}
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ color: accentColor, backgroundColor: `${accentColor}12`, border: `1px solid ${accentColor}25` }}>
+                                      {v.approvedForAds ? "✓ Approved" : "⚠ Needs Approval"}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-[var(--t-muted)]">{v.assetType} · {isVideo ? "Video" : "Image"} · Asset {i + 1}</div>
+                                </div>
+                              </div>
+                              {/* Copy fields */}
+                              <div className="p-4 space-y-3">
+                                {/* Creative angle */}
+                                <div className="p-3 bg-[#0081f2]/5 border border-[#0081f2]/15 rounded-lg">
+                                  <div className="text-[10px] font-semibold text-[#0081f2] uppercase tracking-wider mb-1">Creative Angle</div>
+                                  <p className="text-[12px] text-[var(--t-muted)] leading-snug">{v.creativeAngle}</p>
+                                </div>
+                                {/* Primary texts */}
+                                <div className="grid grid-cols-1 gap-2">
+                                  {[
+                                    { label: "Primary Text 1", value: v.primaryText1, color: "#ff8400" },
+                                    { label: "Primary Text 2", value: v.primaryText2, color: "#a78bfa" },
+                                  ].map(({ label, value, color }) => (
+                                    <div key={label} className="p-3 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                      <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color }}>{label}</div>
+                                      <p className="text-[12px] text-[var(--t-muted)] leading-snug">{value}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* Headlines + hook */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { label: "Headline 1", value: v.headline1 },
+                                    { label: "Headline 2", value: v.headline2 },
+                                    { label: "Description", value: v.description },
+                                    { label: "CTA", value: v.cta },
+                                  ].map(({ label, value }) => (
+                                    <div key={label} className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                      <div className="text-[10px] font-semibold text-[var(--t-dim)] uppercase tracking-wider mb-0.5">{label}</div>
+                                      <p className="text-[11px] text-[var(--t-text)] leading-snug">{value}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="p-3 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                  <div className="text-[10px] font-semibold text-[#ff8400] uppercase tracking-wider mb-1">Hook</div>
+                                  <p className="text-[12px] text-[var(--t-muted)] leading-snug">{v.hook}</p>
+                                </div>
+                                {/* Video-specific fields */}
+                                {isVideo && (
+                                  <div className="space-y-2 pt-2 border-t border-[var(--t-border)]">
+                                    <div className="text-[10px] font-semibold text-[#a78bfa] uppercase tracking-wider">Video-Specific</div>
+                                    {[
+                                      { label: "First 3-Second Hook", value: v.firstThreeSecondHook },
+                                      { label: "Opening Frame", value: v.suggestedOpeningFrame },
+                                      { label: "Caption Primary Text", value: v.captionPrimaryText },
+                                      { label: "Retargeting Use", value: v.retargetingUse },
+                                    ].filter(f => !!f.value).map(({ label, value }) => (
+                                      <div key={label} className="p-2.5 bg-[#a78bfa]/5 border border-[#a78bfa]/15 rounded-lg">
+                                        <div className="text-[10px] font-semibold text-[#a78bfa] uppercase tracking-wider mb-0.5">{label}</div>
+                                        <p className="text-[11px] text-[var(--t-muted)] leading-snug">{value}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Placement + compliance */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                    <div className="text-[10px] font-semibold text-[#22c55e] uppercase tracking-wider mb-1.5">Placements</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {v.recommendedPlacement.map((p) => (
+                                        <span key={p} className="text-[9px] px-1.5 py-0.5 bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/15 rounded-full">{p}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <div className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                    <div className="text-[10px] font-semibold text-[#f59e0b] uppercase tracking-wider mb-1">Compliance</div>
+                                    <p className="text-[10px] text-[var(--t-muted)] leading-snug">{v.complianceNotes}</p>
+                                  </div>
+                                </div>
+                                {/* Visual assumption */}
+                                <div className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
+                                  <div className="text-[10px] font-semibold text-[var(--t-dim)] uppercase tracking-wider mb-0.5">Visual Assumption</div>
+                                  <p className="text-[10px] text-[var(--t-dim)] leading-snug italic">{v.visualAssumption}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {activeSection === "creative-intel" && displayPlan?.creativeIntelligenceUsed && (
                       <div className="space-y-4">
                         {/* Header card */}
@@ -2804,7 +2949,7 @@ function AICampaignBuilderContent() {
                               ? clients.find((c) => c.id === msg.detectedClientId)?.name
                               : undefined)
                           }
-                          creativeAssetId={selectedAsset?.id ?? null}
+                          creativeAssetIds={selectedAssets.map(a => a.id)}
                         />
                         <SaveDraftMenu
                           msg={msg}

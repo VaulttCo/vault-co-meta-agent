@@ -445,7 +445,9 @@ export class SupabaseDataProvider implements DataProvider {
       status: draft.status,
       approval_status: draft.approvalStatus,
       meta_campaign_structure: draft.metaStructure,
-      ad_copy: draft.adCopy,
+      ad_copy: draft.adVariations?.length
+        ? { ...draft.adCopy, asset_variations: draft.adVariations }
+        : draft.adCopy,
       lead_form: draft.leadForm,
       ghl_workflow: draft.ghlWorkflow,
       creative_direction: draft.creativeDirection,

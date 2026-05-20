@@ -2,6 +2,8 @@
 // for campaign generation. In mock mode, returns realistic analysis per creative type.
 
 import type { AssetType } from "@/lib/creativeAssets";
+import type { AssetAdVariation } from "@/lib/planStore";
+import type { ClientIntelligence } from "@/lib/clientIntelligence";
 
 export interface CreativeAnalysis {
   creativeType: string;
@@ -397,4 +399,135 @@ export function runCreativeAnalysisAgent(
       };
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// buildAssetAdVariation — per-asset copy generator
+// Deterministic. No API calls. Uses creative analysis + client intelligence.
+// ─────────────────────────────────────────────────────────────
+
+function buildOpeningFrame(assetType: string, intel: ClientIntelligence | null): string {
+  const owner = (intel as { companyProfile?: { ownerName?: string } } | null)?.companyProfile?.ownerName ?? "the owner";
+  switch (assetType) {
+    case "Owner On Camera":
+      return `${owner} looking directly into camera, natural setting. Opens with movement or a direct statement — not a title card.`;
+    case "Storm Damage":
+      return `Tight shot of real storm damage — broken shingles, dented flashing, or compromised ridge. Inspector pointing at damage. Immediate visual proof.`;
+    case "Testimonial":
+      return `Homeowner mid-sentence, candid. Not stiff or rehearsed. Expression and body language drive credibility.`;
+    case "Inspection Day":
+      return `Inspector on roof in daylight. Camera follows the walkthrough. First frame establishes the on-roof setting immediately.`;
+    case "Before/After":
+      return `Start on the "before" — weathered, aged, or damaged surface. Hold 1–2 seconds before the transition cut.`;
+    case "Project Reveal":
+      return `Crew walking up to the home, camera facing the old roof. Build anticipation before the reveal turn.`;
+    case "Drone Footage":
+      return `Aerial establishing shot of the neighborhood. Open at altitude and slowly descend toward a completed project.`;
+    case "UGC Style Video":
+      return `Casual, handheld feel. Subject speaking directly to camera — no teleprompter. Authentic first impression.`;
+    default:
+      return `Open with the key visual element. Establish context within the first 2 seconds.`;
+  }
+}
+
+export function buildAssetAdVariation(
+  asset: {
+    id: string;
+    fileName: string;
+    assetType: string;
+    fileType: "image" | "video";
+    approvedForAds: boolean;
+    notes?: string;
+  },
+  service: string,
+  intel: ClientIntelligence | null,
+  isPrimary: boolean
+): AssetAdVariation {
+  const analysis = runCreativeAnalysisAgent(asset.assetType, service, asset.approvedForAds, asset.notes);
+  const isVideo = asset.fileType === "video";
+  const isRoofing = /roof|storm|inspect/i.test(service);
+
+  const mainOffer: string =
+    (intel as { offerIntelligence?: { mainOffer?: string } } | null)?.offerIntelligence?.mainOffer ??
+    (isRoofing ? "Free Roof Inspection" : "Free Consultation");
+  const uniqueMechanism: string | null =
+    (intel as { brandIntelligence?: { uniqueMechanism?: string } } | null)?.brandIntelligence?.uniqueMechanism ?? null;
+  const trustTrigger1: string =
+    ((intel as { buyerProfile?: { trustTriggers?: string[] } } | null)?.buyerProfile?.trustTriggers?.[0]) ??
+    analysis.trustSignals[0] ??
+    "Family-owned, locally trusted";
+  const objection: string =
+    ((intel as { buyerProfile?: { commonObjections?: string[] } } | null)?.buyerProfile?.commonObjections?.[0]) ??
+    analysis.objectionAddressed;
+  const bestSalesAngle: string =
+    ((intel as { salesIntelligence?: { bestSalesAngles?: string[] } } | null)?.salesIntelligence?.bestSalesAngles?.[0]) ??
+    analysis.bestCampaignAngle;
+  const offersToTest: string[] =
+    (intel as { campaignImplications?: { offersToTest?: string[] } } | null)?.campaignImplications?.offersToTest ?? [];
+  const warranty: string | null =
+    ((intel as { offerIntelligence?: { guarantees?: string[] } } | null)?.offerIntelligence?.guarantees?.[0]) ??
+    uniqueMechanism;
+
+  const visualAssumption = asset.notes?.trim()
+    ? asset.notes.trim()
+    : "Visual analysis not available yet — copy generated from asset metadata and client intelligence.";
+
+  // primary text 1
+  const primaryText1 = isVideo
+    ? [
+        analysis.recommendedCopyAngle,
+        uniqueMechanism ? `— ${uniqueMechanism}.` : "",
+        mainOffer + ".",
+      ].filter(Boolean).join(" ").trim()
+    : [
+        trustTrigger1,
+        `— this is what ${service} looks like when done right.`,
+        warranty ? `Backed by ${warranty}.` : "",
+        mainOffer + ".",
+      ].filter(Boolean).join(" ").trim();
+
+  // primary text 2 — objection-handling angle
+  const primaryText2 = objection
+    ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
+    : `${analysis.bestCampaignAngle}. ${mainOffer}.`;
+
+  const headline1 = offersToTest[0] ?? `${service} — ${analysis.recommendedCTA}`;
+  const headline2 = warranty
+    ? warranty.split("—")[0].trim().split("+")[0].trim()
+    : "Family-Owned. Locally Trusted.";
+  const description = analysis.bestCampaignAngle;
+  const hook = isVideo
+    ? `First 3 sec: ${analysis.recommendedCopyAngle.split(".")[0]}. Hook must land immediately.`
+    : `${analysis.trustSignals[0] ?? analysis.bestCampaignAngle} — ${asset.assetType} format.`;
+
+  const variation: AssetAdVariation = {
+    assetId: asset.id,
+    fileName: asset.fileName,
+    assetType: asset.assetType,
+    fileType: asset.fileType,
+    approvedForAds: asset.approvedForAds,
+    isPrimary,
+    analysisAvailable: true,
+    creativeAngle: analysis.bestCampaignAngle,
+    visualAssumption,
+    primaryText1,
+    primaryText2,
+    headline1,
+    headline2,
+    description,
+    cta: analysis.recommendedCTA,
+    hook,
+    complianceNotes: analysis.complianceRisks.slice(0, 3).join(" | ") || "No specific compliance risks identified.",
+    bestUseCase: analysis.whyThisCreative,
+    recommendedPlacement: analysis.bestPlacement,
+  };
+
+  if (isVideo) {
+    variation.firstThreeSecondHook = `Open with: ${analysis.recommendedCopyAngle.split(".")[0]}. Hook must land within 3 seconds.`;
+    variation.suggestedOpeningFrame = buildOpeningFrame(asset.assetType, intel);
+    variation.captionPrimaryText = primaryText1;
+    variation.retargetingUse = analysis.retargetingUse;
+  }
+
+  return variation;
 }

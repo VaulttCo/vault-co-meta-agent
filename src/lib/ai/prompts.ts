@@ -15,6 +15,7 @@ export interface CampaignGenerationInput {
   creativeNotes?: string;
   clientIntelligence?: ClientIntelligence | null;
   selectedAsset?: CreativeAsset | null;
+  selectedAssets?: CreativeAsset[];
 }
 
 // ─────────────────────────────────────────────────────────────

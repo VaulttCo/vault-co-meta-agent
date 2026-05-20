@@ -114,6 +114,33 @@ export interface StrategicRationale {
   followUpRationale: string;
 }
 
+export interface AssetAdVariation {
+  assetId: string;
+  fileName: string;
+  assetType: string;
+  fileType: "image" | "video";
+  approvedForAds: boolean;
+  isPrimary: boolean;
+  analysisAvailable: boolean;
+  creativeAngle: string;
+  visualAssumption: string;
+  primaryText1: string;
+  primaryText2: string;
+  headline1: string;
+  headline2: string;
+  description: string;
+  cta: string;
+  hook: string;
+  complianceNotes: string;
+  bestUseCase: string;
+  recommendedPlacement: string[];
+  // Video-only fields
+  firstThreeSecondHook?: string;
+  suggestedOpeningFrame?: string;
+  captionPrimaryText?: string;
+  retargetingUse?: string;
+}
+
 export interface CreativeIntelligenceUsed {
   assetId: string | null;
   assetType: string;
@@ -158,6 +185,8 @@ export interface CampaignDraft {
   clientIntelligenceUsed?: ClientIntelligenceUsed;
   strategicRationale?: StrategicRationale;
   creativeIntelligenceUsed?: CreativeIntelligenceUsed;
+  // Multi-asset creative matrix (optional — Phase 2)
+  adVariations?: AssetAdVariation[];
   // File storage references (optional)
   selectedCreativeAssetId?: string | null;
   selectedFileId?: string | null;

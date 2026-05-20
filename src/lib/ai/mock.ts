@@ -18,7 +18,7 @@ import { KACZMAR_INTELLIGENCE } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
 import { runMarketResearchAgent } from "@/lib/agents/marketResearch";
 import { runBuyerPsychologyAgent } from "@/lib/agents/buyerPsychology";
-import { runCreativeAnalysisAgent } from "@/lib/agents/creativeAnalysis";
+import { runCreativeAnalysisAgent, buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
 import type { CreativeAnalysisInput, CreativeAnalysisResult, WeeklyReportInput, WeeklyReportDraft } from "@/lib/ai/prompts";
 
 export function mockTimestamp(): string {
@@ -57,7 +57,8 @@ export function generateMockPlan(
   budget: string,
   creativeType: string,
   intelligence?: ClientIntelligence | null,
-  selectedAsset?: CreativeAsset | null
+  selectedAsset?: CreativeAsset | null,
+  selectedAssets?: CreativeAsset[]
 ): CampaignDraft {
   const budgetNum = parseInt(budget.replace(/[^0-9]/g, "")) || 1500;
   const adSpend = Math.round(budgetNum * 0.85);
@@ -502,6 +503,21 @@ export function generateMockPlan(
     };
   }
 
+  // Multi-asset variations — built when multiple assets are passed
+  const allAssets = selectedAssets && selectedAssets.length > 0
+    ? selectedAssets
+    : selectedAsset
+    ? [selectedAsset]
+    : [];
+  const adVariations = allAssets.length > 0
+    ? allAssets.map((a, i) => buildAssetAdVariation(
+        { id: a.id, fileName: a.fileName, assetType: a.assetType, fileType: a.fileType, approvedForAds: a.approvedForAds, notes: a.notes },
+        service,
+        intel,
+        i === 0
+      ))
+    : undefined;
+
   const createdAt = mockTimestamp();
   return {
     id: `plan-${Date.now()}`,
@@ -532,6 +548,7 @@ export function generateMockPlan(
     clientIntelligenceUsed,
     strategicRationale,
     creativeIntelligenceUsed,
+    adVariations,
   };
 }
 

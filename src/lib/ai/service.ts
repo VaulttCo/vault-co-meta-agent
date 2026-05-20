@@ -177,7 +177,8 @@ function mockFallback(input: CampaignGenerationInput, notice?: string): Generate
     input.budget,
     input.creativeType ?? "",
     input.clientIntelligence ?? null,
-    input.selectedAsset ?? null
+    input.selectedAsset ?? null,
+    input.selectedAssets
   );
   return { draft, mockMode: true, provider: "mock", notice };
 }

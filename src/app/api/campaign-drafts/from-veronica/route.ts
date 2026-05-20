@@ -21,6 +21,7 @@ import {
 } from "@/lib/ai/veronica-agents";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { Client } from "@/lib/data";
+import { buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
 
 export const runtime = "nodejs";
 
@@ -362,7 +363,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3. Parse body ─────────────────────────────────────────────────────────
-  let body: { clientId: string; sourcePrompt?: string; agentsUsed?: string[]; creativeAssetId?: string | null };
+  let body: { clientId: string; sourcePrompt?: string; agentsUsed?: string[]; creativeAssetId?: string | null; creativeAssetIds?: string[] };
   try {
     body = await req.json();
   } catch {
@@ -375,10 +376,20 @@ export async function POST(req: NextRequest) {
   }
   const safeSourcePrompt =
     typeof body.sourcePrompt === "string" ? body.sourcePrompt.slice(0, 500) : null;
-  const rawCreativeAssetId =
-    typeof body.creativeAssetId === "string" && body.creativeAssetId.trim()
-      ? body.creativeAssetId.trim()
-      : null;
+
+  // Support both creativeAssetId (single, legacy) and creativeAssetIds (multi, Phase 2)
+  const rawCreativeAssetIds: string[] = [];
+  if (Array.isArray(body.creativeAssetIds)) {
+    for (const id of body.creativeAssetIds) {
+      if (typeof id === "string" && id.trim()) rawCreativeAssetIds.push(id.trim());
+    }
+  } else if (typeof body.creativeAssetId === "string" && body.creativeAssetId.trim()) {
+    rawCreativeAssetIds.push(body.creativeAssetId.trim());
+  }
+  // Deduplicate and cap at 10 assets
+  const dedupedAssetIds = [...new Set(rawCreativeAssetIds)].slice(0, 10);
+  // Keep legacy single for backward compat
+  const rawCreativeAssetId = dedupedAssetIds[0] ?? null;
 
   // ── 4. Load client + intelligence from Supabase (service role) ────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -411,27 +422,26 @@ export async function POST(req: NextRequest) {
         ? mapIntelligenceRow(safeClientId, intelResult.data)
         : null;
 
-    // ── 4b. Validate creative_asset_id belongs to this client ────────────
-    // Only query when an ID was provided. If validation fails, null it out
-    // rather than blocking draft creation — the draft is still useful without it.
-    let safeCreativeAssetId: string | null = null;
-    if (rawCreativeAssetId) {
-      const { data: assetRow, error: assetError } = await supabase
+    // ── 4b. Validate all creative_asset_ids belong to this client ────────
+    // Fetch full rows so we can build per-asset copy. If validation fails for
+    // an asset, null it out — draft creation is not blocked by missing assets.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type AssetRow = { id: string; file_name: string; asset_type: string | null; file_type: string | null; approved_for_ads: boolean; notes: string | null };
+    let validatedAssetRows: AssetRow[] = [];
+    if (dedupedAssetIds.length > 0) {
+      const { data: assetRows, error: assetError } = await supabase
         .from("creative_assets")
-        .select("id")
-        .eq("id", rawCreativeAssetId)
-        .eq("client_id", safeClientId)
-        .maybeSingle();
-      if (!assetError && assetRow?.id) {
-        safeCreativeAssetId = assetRow.id;
+        .select("id, file_name, asset_type, file_type, approved_for_ads, notes")
+        .in("id", dedupedAssetIds)
+        .eq("client_id", safeClientId);
+      if (!assetError && assetRows) {
+        validatedAssetRows = assetRows as AssetRow[];
       } else {
-        console.warn(
-          "[POST /api/campaign-drafts/from-veronica] creative_asset_id not found or wrong client — nulled out:",
-          rawCreativeAssetId,
-          assetError?.message ?? "no row"
-        );
+        console.warn("[POST /api/campaign-drafts/from-veronica] asset validation error:", assetError?.message ?? "no rows");
       }
     }
+    // Primary asset ID — first validated (preserves submission order best-effort)
+    const safeCreativeAssetId = dedupedAssetIds.find((id) => validatedAssetRows.some((r) => r.id === id)) ?? null;
 
     // ── 5. Build ClientBrain + run agents ─────────────────────────────────
     const ctx: VeronicaPortalContext = {
@@ -458,6 +468,38 @@ export async function POST(req: NextRequest) {
     const market = client.market || intelligence?.serviceArea?.radius || "Service Area";
     const campaignName = `${client.name} — ${service} — ${market} — ${date}`;
 
+    // ── 6a. Build per-asset ad copy variations (Phase 2 — multi-asset matrix) ─
+    // Order preserved from submission; first validated asset is primary.
+    const adVariations =
+      validatedAssetRows.length > 0
+        ? validatedAssetRows.map((row, i) =>
+            buildAssetAdVariation(
+              {
+                id: row.id,
+                fileName: row.file_name,
+                assetType: row.asset_type ?? "Photo",
+                fileType: row.file_type === "video" ? "video" : "image",
+                approvedForAds: row.approved_for_ads,
+                notes: row.notes ?? undefined,
+              },
+              service,
+              intelligence,
+              i === 0
+            )
+          )
+        : undefined;
+
+    const selectedAssetsMeta =
+      validatedAssetRows.length > 0
+        ? validatedAssetRows.map((r) => ({
+            id: r.id,
+            file_name: r.file_name,
+            asset_type: r.asset_type ?? null,
+            file_type: r.file_type ?? null,
+            approved_for_ads: r.approved_for_ads,
+          }))
+        : undefined;
+
     const draftInsert = {
       client_id: safeClientId,
       campaign_name: campaignName,
@@ -470,10 +512,16 @@ export async function POST(req: NextRequest) {
       status: "needs_review" as const,
       approval_status: "needs_review" as const,
       meta_campaign_structure: buildMetaCampaignStructure(client, intelligence),
-      ad_copy: buildAdCopy(intelligence, offerOut, clientIntelOut),
+      ad_copy: {
+        ...buildAdCopy(intelligence, offerOut, clientIntelOut),
+        ...(adVariations ? { asset_variations: adVariations } : {}),
+      },
       lead_form: buildLeadForm(intelligence, client),
       ghl_workflow: buildGHLWorkflow(ghlOut),
-      creative_direction: buildCreativeDirection(intelligence),
+      creative_direction: {
+        ...buildCreativeDirection(intelligence),
+        ...(selectedAssetsMeta ? { selected_assets: selectedAssetsMeta } : {}),
+      },
       compliance_check: buildComplianceCheck(complianceOut, intelligence),
       optimization_rules: null,
       buyer_psychology_used: buildBuyerPsychologyUsed(intelligence),

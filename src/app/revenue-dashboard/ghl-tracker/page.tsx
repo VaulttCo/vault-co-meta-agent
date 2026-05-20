@@ -37,6 +37,15 @@ function formatBillingMonthLabel(ym: string): string {
   return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
+function fmtRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function ReviewStatusBadge({ status }: { status: "draft" | "reviewed" | "locked" }) {
   const cfg = {
     draft:    { label: "Draft",    color: "rgba(107,122,153,0.7)", bg: "rgba(61,79,110,0.08)",  border: "rgba(61,79,110,0.15)"  },
@@ -95,7 +104,7 @@ type GHLDebugMeta = {
 type GHLPreviewEntry =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "loaded"; result: GHLPreviewResult; debug?: GHLDebugMeta }
+  | { status: "loaded"; result: GHLPreviewResult; debug?: GHLDebugMeta; loadedAt: string }
   | { status: "error"; error: string; debug?: GHLDebugMeta };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -363,7 +372,7 @@ export default function GhlTrackerPage() {
       };
 
       if (res.ok && data.preview) {
-        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview!, debug } }));
+        setGhlPreviews((prev) => ({ ...prev, [clientId]: { status: "loaded", result: data.preview!, debug, loadedAt: new Date().toISOString() } }));
       } else {
         const raw = data.error ?? "";
         const userMessage = raw.includes("Pipeline ID was rejected")
@@ -890,54 +899,76 @@ export default function GhlTrackerPage() {
                               ? "No GHL configured"
                               : "Location ID needed"}
                           </span>
-                        ) : ghlSnapshot ? (
-                          <div className="space-y-0.5">
-                            <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
-                              {fmtCurrency(ghlSnapshot.closedWonRevenue)}
-                            </div>
-                            <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                              GHL Snapshot saved
-                            </div>
-                          </div>
-                        ) : ghlPreviewEntry.status === "idle" ? (
-                          <button
-                            onClick={() => void handlePreviewGHL(client.id)}
-                            className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-                            style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
-                            <Eye size={10} /> Preview GHL
-                          </button>
-                        ) : ghlPreviewEntry.status === "loading" ? (
-                          <div className="flex items-center gap-1.5" style={{ color: "var(--t-dim)" }}>
-                            <Loader2 size={12} className="animate-spin" />
-                            <span className="text-[10px]">Fetching…</span>
-                          </div>
-                        ) : ghlPreviewEntry.status === "error" ? (
+                        ) : (
                           <div className="space-y-1">
-                            <div className="text-[10px]" style={{ color: "#ef4444" }}>{ghlPreviewEntry.error}</div>
-                            <button
-                              onClick={() => void handlePreviewGHL(client.id)}
-                              className="text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-                              style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
-                              Retry
-                            </button>
-                          </div>
-                        ) : ghlPreviewEntry.status === "loaded" ? (
-                          <div className="space-y-0.5">
-                            {ghlPreviewEntry.result.closedWonDealsCount === 0 ? (
-                              <div className="text-[10px]" style={{ color: "rgba(107,122,153,0.5)" }}>
-                                No Closed Won deals found for this month
-                              </div>
-                            ) : (
-                              <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
-                                {fmtCurrency(ghlPreviewEntry.result.closedWonRevenue)}
+                            {/* Saved snapshot row — always shown when it exists */}
+                            {ghlSnapshot && (
+                              <div className="space-y-0.5">
+                                <div className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
+                                  {fmtCurrency(ghlSnapshot.closedWonRevenue)}
+                                </div>
+                                <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                                  Snapshot · {ghlSnapshot.dealCount ?? 0} deal{(ghlSnapshot.dealCount ?? 0) !== 1 ? "s" : ""}
+                                  {ghlSnapshot.syncedAt ? ` · saved ${fmtRelativeTime(ghlSnapshot.syncedAt)}` : ""}
+                                </div>
                               </div>
                             )}
-                            <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                              GHL Preview · {ghlPreviewEntry.result.closedWonDealsCount} deal{ghlPreviewEntry.result.closedWonDealsCount !== 1 ? "s" : ""} · not saved
-                              {!ghlStatus?.ghlPipelineIdPresent && " · all pipelines"}
-                            </div>
+
+                            {/* Preview state overlays — shown regardless of whether snapshot exists */}
+                            {ghlPreviewEntry.status === "idle" && (
+                              <button
+                                onClick={() => void handlePreviewGHL(client.id)}
+                                className="flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                                style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                                <Eye size={10} /> {ghlSnapshot ? "Refresh GHL Preview" : "Preview GHL"}
+                              </button>
+                            )}
+                            {ghlPreviewEntry.status === "loading" && (
+                              <div className="flex items-center gap-1.5" style={{ color: "var(--t-dim)" }}>
+                                <Loader2 size={12} className="animate-spin" />
+                                <span className="text-[10px]">Fetching…</span>
+                              </div>
+                            )}
+                            {ghlPreviewEntry.status === "error" && (
+                              <div className="space-y-1">
+                                <div className="text-[10px]" style={{ color: "#ef4444" }}>{ghlPreviewEntry.error}</div>
+                                <button
+                                  onClick={() => void handlePreviewGHL(client.id)}
+                                  className="text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                                  style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                                  Retry
+                                </button>
+                              </div>
+                            )}
+                            {ghlPreviewEntry.status === "loaded" && (
+                              <div className="space-y-0.5">
+                                {ghlPreviewEntry.result.closedWonDealsCount === 0 ? (
+                                  <div className="text-[10px] leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                    No Won deals found.{" "}
+                                    <span style={{ color: "rgba(107,122,153,0.7)" }}>
+                                      If you just moved a deal to Won, click Refresh or check the date falls within this month.
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="text-[12px] font-semibold" style={{ color: ghlSnapshot ? "#c9a84c" : "#22c55e" }}>
+                                      {fmtCurrency(ghlPreviewEntry.result.closedWonRevenue)}
+                                    </div>
+                                    {ghlSnapshot && (
+                                      <div className="text-[9px] font-semibold" style={{ color: "#c9a84c" }}>
+                                        New preview loaded — save to update snapshot
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                                  Preview · {ghlPreviewEntry.result.closedWonDealsCount} deal{ghlPreviewEntry.result.closedWonDealsCount !== 1 ? "s" : ""} · {fmtRelativeTime(ghlPreviewEntry.loadedAt)}
+                                  {!ghlStatus?.ghlPipelineIdPresent && " · all pipelines"}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ) : null}
+                        )}
                       </td>
 
                       {/* Deal Count */}
@@ -946,9 +977,13 @@ export default function GhlTrackerPage() {
                           style={{ color: ghlDeals != null && ghlDeals > 0 ? "#22c55e" : "rgba(107,122,153,0.4)" }}>
                           {ghlDeals != null ? ghlDeals : "—"}
                         </span>
-                        {ghlDeals != null && ghlDeals > 0 && (
+                        {ghlDeals != null && (
                           <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.4)" }}>
-                            {ghlSnapshot ? "saved" : "preview"}
+                            {ghlPreviewEntry.status === "loaded"
+                              ? `preview (${fmtRelativeTime(ghlPreviewEntry.loadedAt)})`
+                              : ghlSnapshot
+                              ? `saved${ghlSnapshot.syncedAt ? ` ${fmtRelativeTime(ghlSnapshot.syncedAt)}` : ""}`
+                              : "preview"}
                           </div>
                         )}
                       </td>
@@ -1007,30 +1042,34 @@ export default function GhlTrackerPage() {
                               {isSnapshotSaving ? "Saving…" : manualSnapshot ? "Update Manual" : "Save Manual"}
                             </button>
                           )}
-                          {/* Save GHL */}
-                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && !ghlSnapshot && (
+                          {/* Save / Update GHL Snapshot — visible whenever a preview is loaded */}
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && (
                             <button
                               onClick={() => void handleSaveGHLSnapshot(client.id)}
                               disabled={isGhlSaving}
                               className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                               style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
                               {isGhlSaving && <Loader2 size={10} className="animate-spin" />}
-                              {isGhlSaving ? "Saving…" : "Save GHL Snapshot"}
+                              {isGhlSaving ? "Saving…" : ghlSnapshot ? "Update GHL Snapshot" : "Save GHL Snapshot"}
                             </button>
                           )}
-                          {/* Re-preview GHL button (after snapshot saved) */}
-                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "idle" && !ghlSnapshot && (
+                          {/* Refresh GHL Preview — visible when GHL connected and not currently loading */}
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status !== "loading" && ghlPreviewEntry.status !== "loaded" && (
                             <button
                               onClick={() => void handlePreviewGHL(client.id)}
                               className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 whitespace-nowrap"
                               style={{ color: "rgba(107,122,153,0.7)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
-                              <Eye size={10} /> Preview GHL
+                              <RefreshCw size={10} /> {ghlSnapshot ? "Refresh GHL" : "Preview GHL"}
                             </button>
                           )}
-                          {ghlSnapshot && (
-                            <div className="text-[9px] px-0.5" style={{ color: "rgba(34,197,94,0.6)" }}>
-                              GHL snapshot saved
-                            </div>
+                          {/* Refresh again after a loaded preview */}
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && (
+                            <button
+                              onClick={() => void handlePreviewGHL(client.id)}
+                              className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-80 whitespace-nowrap"
+                              style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "transparent", border: "none" }}>
+                              <RefreshCw size={9} /> Refresh again
+                            </button>
                           )}
                           {/* Settings gear — always available for admin */}
                           <button

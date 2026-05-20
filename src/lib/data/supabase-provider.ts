@@ -441,6 +441,7 @@ export class SupabaseDataProvider implements DataProvider {
       goal: draft.goal,
       budget: draft.budget,
       creative_type: draft.creativeType || null,
+      creative_asset_id: draft.selectedCreativeAssetId ?? null,
       status: draft.status,
       approval_status: draft.approvalStatus,
       meta_campaign_structure: draft.metaStructure,

@@ -19,6 +19,7 @@ import {
   type WeeklyReportInput,
   type WeeklyReportDraft,
 } from "@/lib/ai/prompts";
+import { buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
 
 export type { CampaignGenerationInput, CreativeAnalysisInput, CreativeAnalysisResult, WeeklyReportInput, WeeklyReportDraft };
 
@@ -237,6 +238,33 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
     clientIntelligenceUsed: parsed.clientIntelligenceUsed,
     strategicRationale: parsed.strategicRationale,
     creativeIntelligenceUsed: parsed.creativeIntelligenceUsed,
+    // Build per-asset variations from the input assets — the AI response never
+    // includes these because they're generated deterministically server-side.
+    adVariations: (() => {
+      const assets =
+        input.selectedAssets && input.selectedAssets.length > 0
+          ? input.selectedAssets
+          : input.selectedAsset
+          ? [input.selectedAsset]
+          : [];
+      return assets.length > 0
+        ? assets.map((a, i) =>
+            buildAssetAdVariation(
+              {
+                id: a.id,
+                fileName: a.fileName,
+                assetType: a.assetType,
+                fileType: a.fileType as "image" | "video",
+                approvedForAds: a.approvedForAds,
+                notes: a.notes || undefined,
+              },
+              input.service,
+              input.clientIntelligence ?? null,
+              i === 0
+            )
+          )
+        : undefined;
+    })(),
   };
 }
 

@@ -4,6 +4,12 @@
 //         Re-computes vault_co_fee, nick_recurring_earnings, jaxon_recurring_earnings
 //         server-side whenever closedWonRevenue is provided.
 //         No Stripe calls. No GHL writes. No invoice creation.
+//
+// Lock protection (Phase 2D): if review_status = 'locked', closedWonRevenue edits
+// are rejected with 409. Status transitions (unlock, revert) are always allowed.
+//
+// reviewed_at is set to now() when transitioning to 'reviewed' or 'locked'.
+// It is NOT cleared when reverting to 'draft' — preserved as a historical record.
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
@@ -43,6 +49,26 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const supabase = getSupabaseServerClient() as any;
+
+  // ── Lock guard — reject revenue edits on locked snapshots ────────────────────
+  // Status-only transitions (unlock, revert to draft) are always permitted.
+  if (supabase && typeof body.closedWonRevenue === "number") {
+    const { data: current } = await supabase
+      .from("client_monthly_revenue_snapshots")
+      .select("review_status")
+      .eq("id", snapshotId.trim())
+      .maybeSingle();
+
+    if (current?.review_status === "locked") {
+      return NextResponse.json(
+        { error: "Snapshot is locked. Unlock it before editing revenue." },
+        { status: 409 }
+      );
+    }
+  }
+
   // ── Build safe update object ──────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: Record<string, any> = {};
@@ -63,6 +89,13 @@ export async function PATCH(
       return NextResponse.json({ error: "reviewStatus must be draft, reviewed, or locked" }, { status: 400 });
     }
     update.review_status = body.reviewStatus;
+
+    // Set reviewed_at when moving to reviewed or locked.
+    // Do not clear it when reverting to draft — it is a historical audit record.
+    // If re-reviewed after a revert, reviewed_at is overwritten with the new timestamp.
+    if (body.reviewStatus === "reviewed" || body.reviewStatus === "locked") {
+      update.reviewed_at = new Date().toISOString();
+    }
   }
 
   if (body.notes !== undefined) {
@@ -74,8 +107,6 @@ export async function PATCH(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = getSupabaseServerClient() as any;
     if (!supabase) {
       return NextResponse.json({ success: true, mockMode: true });
     }

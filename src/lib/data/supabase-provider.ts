@@ -450,7 +450,18 @@ export class SupabaseDataProvider implements DataProvider {
         : draft.adCopy,
       lead_form: draft.leadForm,
       ghl_workflow: draft.ghlWorkflow,
-      creative_direction: draft.creativeDirection,
+      creative_direction: draft.adVariations?.length
+        ? {
+            ...draft.creativeDirection,
+            selected_assets: draft.adVariations.map((v) => ({
+              id: v.assetId,
+              file_name: v.fileName,
+              asset_type: v.assetType,
+              file_type: v.fileType,
+              approved_for_ads: v.approvedForAds,
+            })),
+          }
+        : draft.creativeDirection,
       compliance_check: draft.compliance,
       optimization_rules: draft.optimization,
       buyer_psychology_used: draft.buyerPsychologyUsed ?? null,

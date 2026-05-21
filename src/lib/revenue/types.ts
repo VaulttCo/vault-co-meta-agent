@@ -91,6 +91,7 @@ export interface MonthlyRevenueSnapshot {
   jaxonRecurringEarnings: number;
   source: 'manual' | 'ghl';
   reviewStatus: 'draft' | 'reviewed' | 'locked';
+  reviewedAt: string | null;
   notes: string | null;
   createdBy: string | null;
   createdAt: string;
@@ -161,6 +162,7 @@ export function rowToMonthlyRevenueSnapshot(row: any): MonthlyRevenueSnapshot {
     jaxonRecurringEarnings: Number(row.jaxon_recurring_earnings ?? 0),
     source:                 (row.source       ?? 'manual') as 'manual' | 'ghl',
     reviewStatus:           (row.review_status ?? 'draft') as 'draft' | 'reviewed' | 'locked',
+    reviewedAt:             row.reviewed_at ?? null,
     notes:                  row.notes      ?? null,
     createdBy:              row.created_by ?? null,
     createdAt:              row.created_at ?? new Date().toISOString(),
@@ -183,6 +185,7 @@ export function makeDefaultSnapshot(clientId: string, billingMonth: string): Mon
     jaxonRecurringEarnings: 0,
     source:                 'manual',
     reviewStatus:           'draft',
+    reviewedAt:             null,
     notes:                  null,
     createdBy:              null,
     createdAt:              now,

@@ -22,6 +22,11 @@ import {
   Archive,
   ChevronDown,
   ChevronUp,
+  Layers,
+  CheckCircle,
+  AlertTriangle,
+  HelpCircle,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -39,6 +44,487 @@ import {
   approvalPriorityLabel,
   type ApprovalIconType,
 } from "@/lib/data";
+import type { MetaPreviewPayload, SafetyCheckItem } from "@/lib/metaPreview";
+
+// ── Meta Payload Preview Modal ────────────────────────────────
+
+function safetyIcon(status: SafetyCheckItem["status"]) {
+  if (status === "pass") return <CheckCircle size={11} className="text-[#22c55e] flex-shrink-0 mt-0.5" />;
+  if (status === "fail") return <XCircle size={11} className="text-[#ef4444] flex-shrink-0 mt-0.5" />;
+  if (status === "warn") return <AlertTriangle size={11} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />;
+  return <HelpCircle size={11} className="flex-shrink-0 mt-0.5" style={{ color: "var(--t-dim)" }} />;
+}
+
+function safetyColor(status: SafetyCheckItem["status"]) {
+  if (status === "pass") return "#22c55e";
+  if (status === "fail") return "#ef4444";
+  if (status === "warn") return "#f59e0b";
+  return "var(--t-dim)";
+}
+
+function MetaPayloadPreviewModal({
+  draftId,
+  onClose,
+}: {
+  draftId: string;
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [payload, setPayload] = useState<MetaPreviewPayload | null>(null);
+  const [activeTab, setActiveTab] = useState<"campaign" | "ads" | "lead_form" | "tracking" | "safety">("campaign");
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/campaign-drafts/${draftId}/meta-preview`)
+      .then((r) => r.ok ? r.json() : r.json().then((b) => Promise.reject(b.error ?? "Failed to load preview")))
+      .then((body) => { setPayload(body.preview); setLoading(false); })
+      .catch((e) => { setError(typeof e === "string" ? e : "Failed to load preview"); setLoading(false); });
+  }, [draftId]);
+
+  const tabs = [
+    { id: "campaign" as const, label: "Campaign" },
+    { id: "ads" as const, label: `Ads (${payload?.ads.length ?? 0})` },
+    { id: "lead_form" as const, label: "Lead Form" },
+    { id: "tracking" as const, label: "Tracking" },
+    { id: "safety" as const, label: "Safety" },
+  ];
+
+  const passCount = payload?.safetyChecklist.filter((c) => c.status === "pass").length ?? 0;
+  const failCount = payload?.safetyChecklist.filter((c) => c.status === "fail").length ?? 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          backgroundColor: "var(--t-surface)",
+          border: "1px solid var(--t-border)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center gap-3 px-5 py-4 border-b flex-shrink-0"
+          style={{ borderColor: "var(--t-border)" }}
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#c9a84c]/10 border border-[#c9a84c]/20">
+            <Layers size={14} className="text-[#c9a84c]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>
+              Meta Payload Preview
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--t-muted)" }}>
+              Preview only — no Meta action taken
+            </div>
+          </div>
+          {/* Preview-only badge */}
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 flex items-center gap-1">
+            <ShieldCheck size={9} />
+            PREVIEW ONLY
+          </span>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg border transition-colors hover:opacity-80"
+            style={{ borderColor: "var(--t-border)", color: "var(--t-dim)" }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {loading && (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <Loader2 size={20} className="animate-spin" style={{ color: "var(--t-muted)" }} />
+          </div>
+        )}
+
+        {error && (
+          <div className="flex-1 flex items-center justify-center p-12">
+            <div className="text-center">
+              <AlertCircle size={20} className="text-[#ef4444] mx-auto mb-2" />
+              <div className="text-[12px] text-[#ef4444]">{error}</div>
+            </div>
+          </div>
+        )}
+
+        {payload && !loading && (
+          <>
+            {/* Safety summary bar */}
+            <div
+              className="flex items-center gap-4 px-5 py-2 border-b flex-shrink-0"
+              style={{ backgroundColor: "var(--t-surface-2)", borderColor: "var(--t-border)" }}
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
+                {payload.campaign.name}
+              </span>
+              <span className="ml-auto flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1 text-[#22c55e]">
+                  <CheckCircle size={10} />
+                  {passCount} pass
+                </span>
+                {failCount > 0 && (
+                  <span className="flex items-center gap-1 text-[#ef4444]">
+                    <XCircle size={10} />
+                    {failCount} issue{failCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {payload.missingRequirements.length === 0 && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20">
+                    Launch ready
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Tabs */}
+            <div
+              className="flex gap-0 border-b flex-shrink-0 overflow-x-auto"
+              style={{ borderColor: "var(--t-border)" }}
+            >
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="px-4 py-2.5 text-[11px] font-semibold whitespace-nowrap transition-colors border-b-2"
+                  style={{
+                    color: activeTab === tab.id ? "#c9a84c" : "var(--t-muted)",
+                    borderBottomColor: activeTab === tab.id ? "#c9a84c" : "transparent",
+                    backgroundColor: "transparent",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+
+              {/* ── Campaign tab ── */}
+              {activeTab === "campaign" && (
+                <div className="space-y-3">
+                  <div
+                    className="rounded-xl p-4 space-y-2"
+                    style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <Megaphone size={12} className="text-[#0081f2]" />
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-[#0081f2]">Campaign Object</span>
+                    </div>
+                    {[
+                      ["Name", payload.campaign.name],
+                      ["Objective", payload.campaign.objective],
+                      ["Type", payload.campaign.campaignType],
+                      ["Daily Budget", payload.campaign.dailyBudget],
+                      ["Status", payload.campaign.status],
+                    ].map(([label, value]) => (
+                      <div key={label} className="flex items-start gap-3 text-[11px]">
+                        <span className="w-28 flex-shrink-0 font-medium" style={{ color: "var(--t-dim)" }}>{label}</span>
+                        <span
+                          style={{
+                            color: value === "PAUSED_PREVIEW_ONLY" ? "#f59e0b" : "var(--t-text)",
+                            fontFamily: value === "PAUSED_PREVIEW_ONLY" ? "monospace" : undefined,
+                          }}
+                        >
+                          {value}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex items-start gap-3 text-[11px] mt-1">
+                      <span className="w-28 flex-shrink-0 font-medium" style={{ color: "var(--t-dim)" }}>Notes</span>
+                      <span className="text-[#f59e0b] italic">{payload.campaign.notes}</span>
+                    </div>
+                  </div>
+
+                  {/* Ad Sets */}
+                  <div className="flex items-center gap-2 mt-4 mb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
+                      Ad Sets ({payload.adSets.length})
+                    </span>
+                  </div>
+                  {payload.adSets.map((adSet, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl p-4 space-y-1.5"
+                      style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                    >
+                      <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--t-text)" }}>{adSet.name}</div>
+                      {[
+                        ["Audience", adSet.audience],
+                        ["Location", adSet.locationTargeting],
+                        ["Optimization", adSet.optimizationEvent],
+                        ["Budget Split", adSet.budgetSplit],
+                        ["Status", adSet.status],
+                      ].map(([label, value]) => (
+                        <div key={label} className="flex items-start gap-3 text-[11px]">
+                          <span className="w-24 flex-shrink-0" style={{ color: "var(--t-dim)" }}>{label}</span>
+                          <span style={{ color: value === "PAUSED_PREVIEW_ONLY" ? "#f59e0b" : "var(--t-text)", fontFamily: value === "PAUSED_PREVIEW_ONLY" ? "monospace" : undefined }}>
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex items-start gap-3 text-[11px]">
+                        <span className="w-24 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Placements</span>
+                        <span style={{ color: "var(--t-text)" }}>{adSet.placements.join(", ") || "—"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Ads tab ── */}
+              {activeTab === "ads" && (
+                <div className="space-y-3">
+                  {payload.ads.map((ad, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl p-4"
+                      style={{
+                        backgroundColor: "var(--t-surface-2)",
+                        border: `1px solid ${ad.approvedForAds ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <Film size={12} className="text-[#a78bfa]" />
+                        <span className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>{ad.name}</span>
+                        <span
+                          className="ml-auto text-[10px] px-2 py-0.5 rounded-full border"
+                          style={{
+                            color: ad.approvedForAds ? "#22c55e" : "#f59e0b",
+                            backgroundColor: ad.approvedForAds ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                            borderColor: ad.approvedForAds ? "rgba(34,197,94,0.25)" : "rgba(245,158,11,0.25)",
+                          }}
+                        >
+                          {ad.approvedForAds ? "Creative approved" : "Creative not approved"}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 text-[11px]">
+                        {ad.assetId && (
+                          <div className="flex gap-3">
+                            <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Asset</span>
+                            <span style={{ color: "var(--t-text)" }}>{ad.fileName ?? ad.assetId}</span>
+                          </div>
+                        )}
+                        {ad.assetType && (
+                          <div className="flex gap-3">
+                            <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Type</span>
+                            <span style={{ color: "var(--t-text)" }}>{ad.assetType} {ad.fileType ? `(${ad.fileType})` : ""}</span>
+                          </div>
+                        )}
+                        {ad.primaryTexts.map((text, j) => (
+                          <div key={j} className="flex gap-3">
+                            <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Primary Text {j + 1}</span>
+                            <span style={{ color: "var(--t-text)" }}>{text}</span>
+                          </div>
+                        ))}
+                        <div className="flex gap-3">
+                          <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Headline</span>
+                          <span style={{ color: "var(--t-text)" }}>{ad.headline}</span>
+                        </div>
+                        {ad.description && (
+                          <div className="flex gap-3">
+                            <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Description</span>
+                            <span style={{ color: "var(--t-text)" }}>{ad.description}</span>
+                          </div>
+                        )}
+                        <div className="flex gap-3">
+                          <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>CTA</span>
+                          <span style={{ color: "var(--t-text)" }}>{ad.cta}</span>
+                        </div>
+                        {ad.placements.length > 0 && (
+                          <div className="flex gap-3">
+                            <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Placements</span>
+                            <span style={{ color: "var(--t-text)" }}>{ad.placements.join(", ")}</span>
+                          </div>
+                        )}
+                        <div className="flex gap-3">
+                          <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Status</span>
+                          <span className="font-mono text-[#f59e0b]">{ad.status}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Lead Form tab ── */}
+              {activeTab === "lead_form" && (
+                <div
+                  className="rounded-xl p-4 space-y-2"
+                  style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText size={12} className="text-[#ff8400]" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#ff8400]">Lead Form</span>
+                  </div>
+                  {[
+                    ["Form Name", payload.leadForm.formName],
+                    ["Intro Copy", payload.leadForm.introCopy],
+                    ["Consent Language", payload.leadForm.consentLanguage],
+                    ["Thank You Copy", payload.leadForm.thankYouCopy],
+                  ].map(([label, value]) => value ? (
+                    <div key={label} className="flex items-start gap-3 text-[11px]">
+                      <span className="w-32 flex-shrink-0" style={{ color: "var(--t-dim)" }}>{label}</span>
+                      <span style={{ color: "var(--t-text)" }}>{value}</span>
+                    </div>
+                  ) : null)}
+                  {payload.leadForm.qualificationQuestions.length > 0 && (
+                    <div className="flex items-start gap-3 text-[11px]">
+                      <span className="w-32 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Questions</span>
+                      <ul className="space-y-0.5" style={{ color: "var(--t-text)" }}>
+                        {payload.leadForm.qualificationQuestions.map((q, i) => (
+                          <li key={i}>• {q}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {payload.leadForm.contactFields.length > 0 && (
+                    <div className="flex items-start gap-3 text-[11px]">
+                      <span className="w-32 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Contact Fields</span>
+                      <span style={{ color: "var(--t-text)" }}>{payload.leadForm.contactFields.join(", ")}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Tracking tab ── */}
+              {activeTab === "tracking" && (
+                <div
+                  className="rounded-xl p-4 space-y-2"
+                  style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <RadioTower size={12} className="text-[#22c55e]" />
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#22c55e]">Tracking & Integrations</span>
+                  </div>
+                  {[
+                    {
+                      label: "Ad Account",
+                      connected: payload.tracking.adAccountConnected,
+                      id: payload.tracking.adAccountId,
+                    },
+                    {
+                      label: "Meta Pixel",
+                      connected: payload.tracking.pixelConnected,
+                      id: payload.tracking.pixelId,
+                    },
+                    {
+                      label: "Facebook Page",
+                      connected: payload.tracking.facebookPageConnected,
+                      id: payload.tracking.facebookPageId,
+                    },
+                  ].map(({ label, connected, id }) => (
+                    <div key={label} className="flex items-center gap-3 text-[11px]">
+                      <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>{label}</span>
+                      <span
+                        className="flex items-center gap-1.5"
+                        style={{ color: connected ? "#22c55e" : "#ef4444" }}
+                      >
+                        {connected ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                        {connected ? (id ?? "Connected") : "Not connected"}
+                      </span>
+                    </div>
+                  ))}
+                  {payload.tracking.lastSyncedAt && (
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Last Synced</span>
+                      <span style={{ color: "var(--t-muted)" }}>
+                        {new Date(payload.tracking.lastSyncedAt).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Safety tab ── */}
+              {activeTab === "safety" && (
+                <div className="space-y-2">
+                  {payload.safetyChecklist.map((item, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
+                      style={{
+                        backgroundColor: "var(--t-surface-2)",
+                        border: `1px solid ${safetyColor(item.status)}22`,
+                      }}
+                    >
+                      {safetyIcon(item.status)}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-semibold mb-0.5" style={{ color: safetyColor(item.status) }}>
+                          {item.label}
+                        </div>
+                        <div className="text-[10px]" style={{ color: "var(--t-muted)" }}>{item.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {payload.missingRequirements.length > 0 && (
+                    <div
+                      className="rounded-xl p-4 mt-2"
+                      style={{ backgroundColor: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle size={11} className="text-[#ef4444]" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#ef4444]">
+                          Required Before Launch
+                        </span>
+                      </div>
+                      <ul className="space-y-1">
+                        {payload.missingRequirements.map((req, i) => (
+                          <li key={i} className="text-[11px] text-[#ef4444] flex items-start gap-1.5">
+                            <span className="mt-0.5">•</span>
+                            <span>{req}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {payload.missingRequirements.length === 0 && (
+                    <div
+                      className="rounded-xl p-4 flex items-center gap-2"
+                      style={{ backgroundColor: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.15)" }}
+                    >
+                      <CheckCircle size={13} className="text-[#22c55e]" />
+                      <span className="text-[12px] text-[#22c55e] font-medium">
+                        All requirements met — ready for human approval to launch
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer */}
+            <div
+              className="px-5 py-3 border-t flex items-center gap-2 flex-shrink-0"
+              style={{ borderColor: "var(--t-border)", backgroundColor: "var(--t-surface-2)" }}
+            >
+              <ShieldCheck size={11} className="text-[#c9a84c]" />
+              <span className="text-[10px]" style={{ color: "var(--t-muted)" }}>
+                Preview generated {new Date(payload.generatedAt).toLocaleTimeString()} — No Meta API calls made. No data sent.
+              </span>
+              <button
+                onClick={onClose}
+                className="ml-auto text-[11px] px-3 py-1.5 rounded-lg border transition-colors hover:opacity-80"
+                style={{ color: "var(--t-muted)", borderColor: "var(--t-border)" }}
+              >
+                Close
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Veronica draft types ──────────────────────────────────────
 
@@ -413,6 +899,7 @@ function DraftCard({
   canApprove: boolean;
   canMarkReady: boolean;
 }) {
+  const [showPreview, setShowPreview] = useState(false);
   const risk = parseRisk(draft.compliance.metaRisk);
   const isActive = draft.status === "needs_review";
   const isApproved = draft.status === "approved";
@@ -421,6 +908,7 @@ function DraftCard({
   const isRejected = draft.status === "rejected";
 
   return (
+    <>
     <div
       className="rounded-xl p-5 transition-colors"
       style={{
@@ -482,6 +970,17 @@ function DraftCard({
             <Eye size={12} />
             View Draft
           </Link>
+
+          {(isActive || isApproved) && (
+            <button
+              onClick={() => setShowPreview(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border rounded-lg transition-colors hover:opacity-80"
+              style={{ color: "#c9a84c", borderColor: "rgba(201,168,76,0.3)", backgroundColor: "rgba(201,168,76,0.06)" }}
+            >
+              <Layers size={12} />
+              Meta Preview
+            </button>
+          )}
 
           {isActive && (
             <>
@@ -557,6 +1056,11 @@ function DraftCard({
         </div>
       </div>
     </div>
+
+    {showPreview && (
+      <MetaPayloadPreviewModal draftId={draft.id} onClose={() => setShowPreview(false)} />
+    )}
+    </>
   );
 }
 

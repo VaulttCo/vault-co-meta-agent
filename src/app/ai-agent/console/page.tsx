@@ -50,6 +50,7 @@ import {
   type AssetType,
 } from "@/lib/creativeAssets";
 import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
+import { buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
 import { getDataProvider } from "@/lib/data/data-provider";
 import { getStorageProvider } from "@/lib/storage/storage-provider";
 import { mimeToFileType } from "@/lib/storage/types";
@@ -1410,10 +1411,29 @@ function AICampaignBuilderContent() {
       setAiProvider(provider ?? "mock");
     } catch (err) {
       console.error("Campaign generation failed:", err);
-      // Client-side fallback to local mock
+      // Client-side fallback to local mock — build adVariations from selectedAssets directly
       const plan = generateMockPlan(selectedClient, goal, service, market, budget, creative);
+      const fallbackVariations =
+        selectedAssets.length > 0
+          ? selectedAssets.map((a, i) =>
+              buildAssetAdVariation(
+                {
+                  id: a.id,
+                  fileName: a.fileName,
+                  assetType: a.assetType,
+                  fileType: a.fileType as "image" | "video",
+                  approvedForAds: a.approvedForAds,
+                  notes: a.notes || undefined,
+                },
+                service,
+                clientIntelligence,
+                i === 0
+              )
+            )
+          : undefined;
       setCurrentPlan({
         ...plan,
+        adVariations: fallbackVariations,
         selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
       setMockModeActive(true);

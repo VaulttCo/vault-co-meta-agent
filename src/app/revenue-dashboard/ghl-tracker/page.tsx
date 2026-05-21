@@ -136,6 +136,9 @@ export default function GhlTrackerPage() {
   const [ghlPreviews, setGhlPreviews]   = useState<Record<string, GHLPreviewEntry>>({});
   const [savingGhl, setSavingGhl]       = useState<Record<string, boolean>>({});
 
+  // ── Phase 2D: review / lock state ────────────────────────────────────────
+  const [reviewSaving, setReviewSaving] = useState<Record<string, boolean>>({});
+
   // ── Revenue Settings panel (inline accordion per client) ──────────────────
   const [openPanel, setOpenPanel]         = useState<string | null>(null);
   const [panelSaving, setPanelSaving]     = useState<Record<string, boolean>>({});
@@ -508,6 +511,38 @@ export default function GhlTrackerPage() {
     }
   }
 
+  // ── Phase 2D: update reviewStatus for a snapshot ─────────────────────────
+  async function handleUpdateReviewStatus(
+    snapshotId: string,
+    clientId: string,
+    source: "manual" | "ghl",
+    newStatus: "draft" | "reviewed" | "locked"
+  ) {
+    const key = `${snapshotId}-${newStatus}`;
+    setReviewSaving((prev) => ({ ...prev, [key]: true }));
+    try {
+      const res = await fetch(`/api/revenue-snapshots/${snapshotId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewStatus: newStatus }),
+      });
+      if (res.ok) {
+        const { snapshot } = await res.json() as { snapshot: MonthlyRevenueSnapshot };
+        if (snapshot) {
+          if (source === "manual") {
+            setManualSnapshotsMap((prev) => ({ ...prev, [clientId]: snapshot }));
+          } else {
+            setGhlSnapshotsMap((prev) => ({ ...prev, [clientId]: snapshot }));
+          }
+        }
+      }
+    } catch {
+      // silent fail — snapshot retains previous status in UI
+    } finally {
+      setReviewSaving((prev) => ({ ...prev, [key]: false }));
+    }
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const pipelineClients = useMemo(() => clients.filter((c) => c.status !== "archived"), [clients]);
   const recurringActiveCount = useMemo(
@@ -537,10 +572,22 @@ export default function GhlTrackerPage() {
         closedWonRevenue: allSnaps.reduce((s, x) => s + x.closedWonRevenue, 0),
         vaultCoFee:       allSnaps.reduce((s, x) => s + x.vaultCoFee, 0),
         nickEarnings:     allSnaps.reduce((s, x) => s + x.nickRecurringEarnings, 0),
-        reviewed:         allSnaps.filter((x) => x.reviewStatus !== "draft").length,
+        locked:           allSnaps.filter((x) => x.reviewStatus === "locked").length,
+        reviewed:         allSnaps.filter((x) => x.reviewStatus === "reviewed").length,
         draft:            allSnaps.filter((x) => x.reviewStatus === "draft").length,
         total:            allSnaps.length,
       },
+    };
+  }, [manualSnapshotsMap, ghlSnapshotsMap]);
+
+  const lockedTotals = useMemo(() => {
+    const all = [...Object.values(manualSnapshotsMap), ...Object.values(ghlSnapshotsMap)];
+    const locked = all.filter((x) => x.reviewStatus === "locked");
+    return {
+      count:            locked.length,
+      closedWonRevenue: locked.reduce((s, x) => s + x.closedWonRevenue, 0),
+      vaultCoFee:       locked.reduce((s, x) => s + x.vaultCoFee, 0),
+      nickEarnings:     locked.reduce((s, x) => s + x.nickRecurringEarnings, 0),
     };
   }, [manualSnapshotsMap, ghlSnapshotsMap]);
 
@@ -666,8 +713,9 @@ export default function GhlTrackerPage() {
                   { label: "Total Closed Won", value: fmtCurrency(monthTotals.combined.closedWonRevenue), color: "var(--t-text)" },
                   { label: "Total Vault Co Fee", value: fmtCurrency(monthTotals.combined.vaultCoFee),    color: GOLD           },
                   { label: "Total Nick Recurring", value: fmtCurrency(monthTotals.combined.nickEarnings), color: "#a78bfa"     },
-                  { label: "Status", value: `${monthTotals.combined.reviewed} reviewed · ${monthTotals.combined.draft} draft`,
-                    color: monthTotals.combined.reviewed > 0 ? "#22c55e" : "rgba(107,122,153,0.6)" },
+                  { label: "Status",
+                    value: `${monthTotals.combined.locked} locked · ${monthTotals.combined.reviewed} reviewed · ${monthTotals.combined.draft} draft`,
+                    color: monthTotals.combined.locked > 0 ? "#0081f2" : monthTotals.combined.reviewed > 0 ? "#22c55e" : "rgba(107,122,153,0.6)" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-1.5">
                     <span className="text-[12px] font-bold"
@@ -682,13 +730,59 @@ export default function GhlTrackerPage() {
           </div>
         )}
 
+        {/* ── Billing Basis panel (Phase 2D) ──────────────────────────────── */}
+        <div className="px-5 py-4 border-b" style={{ borderColor: "var(--t-border-nav)" }}>
+          <div className="text-[9px] font-bold uppercase tracking-widest mb-3 flex items-center gap-2"
+            style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#0081f2" }}>
+            Billing Basis — {formatBillingMonthLabel(billingMonth)}
+            <span className="normal-case font-normal text-[9px]" style={{ color: "rgba(107,122,153,0.5)" }}>
+              locked snapshots only · no invoice created or sent
+            </span>
+          </div>
+          {lockedTotals.count === 0 ? (
+            <div className="rounded-lg px-4 py-3"
+              style={{ backgroundColor: "rgba(61,79,110,0.05)", border: "1px solid rgba(61,79,110,0.10)" }}>
+              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.6)" }}>
+                No locked billing basis yet for {formatBillingMonthLabel(billingMonth)}.
+                Review and lock snapshots below before creating invoices in a future phase.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg p-3.5 space-y-2"
+              style={{ backgroundColor: "rgba(0,129,242,0.04)", border: "1px solid rgba(0,129,242,0.18)" }}>
+              <div className="text-[9px] font-semibold" style={{ color: "#0081f2" }}>
+                {lockedTotals.count} locked snapshot{lockedTotals.count !== 1 ? "s" : ""}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  { label: "Locked Client Closed Won Revenue", value: fmtCurrency(lockedTotals.closedWonRevenue), color: "var(--t-text)" },
+                  { label: "Locked Vault Co 5% Fee",           value: fmtCurrency(lockedTotals.vaultCoFee),       color: GOLD           },
+                  { label: "Estimated Nick Recurring Earnings", value: fmtCurrency(lockedTotals.nickEarnings),    color: "#a78bfa"       },
+                  { label: "Locked Snapshots",                  value: String(lockedTotals.count),                color: "#0081f2"       },
+                ].map((item) => (
+                  <div key={item.label}>
+                    <div className="text-[14px] font-bold"
+                      style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: item.color }}>
+                      {item.value}
+                    </div>
+                    <div className="text-[9px] mt-0.5 leading-snug" style={{ color: "var(--t-dim)" }}>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[9px] pt-1" style={{ color: "rgba(107,122,153,0.45)" }}>
+                Estimated billing basis only. No invoice has been created or sent. No revenue confirmed collected. Locking confirms the internal revenue basis for this month.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* ── Alerts ──────────────────────────────────────────────────────── */}
         <div className="px-5 pt-4 space-y-2">
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
             style={{ backgroundColor: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}>
             <AlertCircle size={13} style={{ color: "#22c55e" }} />
             <span className="text-[12px]" style={{ color: "#22c55e" }}>
-              Phase 2C: GHL read-only sync is active. Click &quot;Preview GHL&quot; to fetch Closed Won revenue for the billing month. Review and save to create a GHL Revenue Snapshot.
+              Phase 2C · 2D: GHL read-only sync is active. Review and lock snapshots to confirm the billing basis. Locking does not create or send an invoice.
             </span>
           </div>
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
@@ -849,7 +943,12 @@ export default function GhlTrackerPage() {
                             Enable billing
                           </span>
                         ) : (
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5" style={{ opacity: manualSnapshot?.reviewStatus === "locked" ? 0.45 : 1 }}>
+                            {manualSnapshot?.reviewStatus === "locked" && (
+                              <div className="flex items-center gap-1 text-[9px] font-semibold mb-0.5" style={{ color: "#0081f2" }}>
+                                <CheckCircle2 size={9} /> Locked
+                              </div>
+                            )}
                             <div className="flex items-center gap-1">
                               <span className="text-[12px] flex-shrink-0" style={{ color: "var(--t-dim)" }}>$</span>
                               <input
@@ -859,10 +958,11 @@ export default function GhlTrackerPage() {
                                 value={revenueInputs[client.id] ?? ""}
                                 onChange={(e) => setRevenueInputs((prev) => ({ ...prev, [client.id]: e.target.value }))}
                                 placeholder="0.00"
-                                className="w-24 px-2 py-1 rounded-md text-[12px] font-semibold bg-transparent outline-none"
+                                disabled={manualSnapshot?.reviewStatus === "locked"}
+                                className="w-24 px-2 py-1 rounded-md text-[12px] font-semibold bg-transparent outline-none disabled:cursor-not-allowed"
                                 style={{
-                                  backgroundColor: "rgba(0,129,242,0.04)",
-                                  border: "1px solid rgba(61,79,110,0.25)",
+                                  backgroundColor: manualSnapshot?.reviewStatus === "locked" ? "transparent" : "rgba(0,129,242,0.04)",
+                                  border: `1px solid ${manualSnapshot?.reviewStatus === "locked" ? "rgba(0,129,242,0.15)" : "rgba(61,79,110,0.25)"}`,
                                   color: "var(--t-text)",
                                   fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
                                 }}
@@ -873,7 +973,8 @@ export default function GhlTrackerPage() {
                               value={notesInputs[client.id] ?? ""}
                               onChange={(e) => setNotesInputs((prev) => ({ ...prev, [client.id]: e.target.value }))}
                               placeholder="Notes"
-                              className="w-full px-2 py-0.5 rounded text-[10px] bg-transparent outline-none"
+                              disabled={manualSnapshot?.reviewStatus === "locked"}
+                              className="w-full px-2 py-0.5 rounded text-[10px] bg-transparent outline-none disabled:cursor-not-allowed"
                               style={{
                                 backgroundColor: "rgba(0,129,242,0.02)",
                                 border: "1px solid rgba(61,79,110,0.12)",
@@ -1016,23 +1117,31 @@ export default function GhlTrackerPage() {
 
                       {/* Review Status */}
                       <td className="px-4 py-3.5">
-                        {displayReviewStatus ? (
-                          <ReviewStatusBadge status={displayReviewStatus} />
-                        ) : (
-                          <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
-                        )}
-                        {ghlSnapshot && manualSnapshot && (
-                          <div className="text-[9px] mt-0.5" style={{ color: "rgba(107,122,153,0.4)" }}>
-                            GHL + Manual
-                          </div>
-                        )}
+                        <div className="space-y-1">
+                          {ghlSnapshot && (
+                            <div className="flex items-center gap-1.5">
+                              <ReviewStatusBadge status={ghlSnapshot.reviewStatus} />
+                              <span className="text-[8px]" style={{ color: "rgba(34,197,94,0.5)" }}>GHL</span>
+                            </div>
+                          )}
+                          {manualSnapshot && (
+                            <div className="flex items-center gap-1.5"
+                              style={{ opacity: ghlSnapshot && manualSnapshot.closedWonRevenue === 0 && manualSnapshot.reviewStatus === "draft" ? 0.4 : 1 }}>
+                              <ReviewStatusBadge status={manualSnapshot.reviewStatus} />
+                              <span className="text-[8px]" style={{ color: "rgba(107,122,153,0.4)" }}>Manual{ghlSnapshot && manualSnapshot.closedWonRevenue === 0 && manualSnapshot.reviewStatus === "draft" ? " ($0)" : ""}</span>
+                            </div>
+                          )}
+                          {!ghlSnapshot && !manualSnapshot && (
+                            <span className="text-[10px]" style={{ color: "rgba(107,122,153,0.4)" }}>—</span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}
                       <td className="px-4 py-3.5">
                         <div className="flex flex-col gap-1.5">
-                          {/* Save Manual */}
-                          {isOn && (
+                          {/* Save Manual — hidden when manual snapshot is locked */}
+                          {isOn && manualSnapshot?.reviewStatus !== "locked" && (
                             <button
                               onClick={() => void handleSaveSnapshot(client.id)}
                               disabled={!isOn || isSaving || isSnapshotSaving}
@@ -1042,8 +1151,8 @@ export default function GhlTrackerPage() {
                               {isSnapshotSaving ? "Saving…" : manualSnapshot ? "Update Manual" : "Save Manual"}
                             </button>
                           )}
-                          {/* Save / Update GHL Snapshot — visible whenever a preview is loaded */}
-                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && (
+                          {/* Save / Update GHL Snapshot — hidden when GHL snapshot is locked */}
+                          {isOn && canPreviewGHL && ghlPreviewEntry.status === "loaded" && ghlSnapshot?.reviewStatus !== "locked" && (
                             <button
                               onClick={() => void handleSaveGHLSnapshot(client.id)}
                               disabled={isGhlSaving}
@@ -1071,6 +1180,127 @@ export default function GhlTrackerPage() {
                               <RefreshCw size={9} /> Refresh again
                             </button>
                           )}
+                          {/* ── Phase 2D: Review / Lock actions ─────────── */}
+                          {/* Manual snapshot review actions */}
+                          {manualSnapshot && (() => {
+                            const sid = manualSnapshot.id;
+                            const st  = manualSnapshot.reviewStatus;
+                            const saving = reviewSaving[`${sid}-${st === "draft" ? "reviewed" : st === "reviewed" ? "locked" : "reviewed"}`] ?? false;
+                            return (
+                              <div className="pt-0.5 flex flex-col gap-1">
+                                <div className="text-[8px] uppercase tracking-widest font-bold"
+                                  style={{ color: "rgba(107,122,153,0.4)", fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
+                                  Manual Snapshot
+                                </div>
+                                {st === "draft" && (
+                                  <button
+                                    onClick={() => void handleUpdateReviewStatus(sid, client.id, "manual", "reviewed")}
+                                    disabled={saving}
+                                    className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                    style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                                    {saving && <Loader2 size={9} className="animate-spin" />}
+                                    Mark Reviewed
+                                  </button>
+                                )}
+                                {st === "reviewed" && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm("Lock this revenue snapshot? This confirms the billing basis for this client and month. It will not create or send an invoice.")) {
+                                          void handleUpdateReviewStatus(sid, client.id, "manual", "locked");
+                                        }
+                                      }}
+                                      disabled={saving}
+                                      className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                      style={{ color: "#0081f2", backgroundColor: "rgba(0,129,242,0.08)", border: "1px solid rgba(0,129,242,0.20)" }}>
+                                      {saving && <Loader2 size={9} className="animate-spin" />}
+                                      Lock Snapshot
+                                    </button>
+                                    <button
+                                      onClick={() => void handleUpdateReviewStatus(sid, client.id, "manual", "draft")}
+                                      className="text-[9px] px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+                                      style={{ color: "rgba(107,122,153,0.5)" }}>
+                                      Revert to Draft
+                                    </button>
+                                  </>
+                                )}
+                                {st === "locked" && (
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
+                                        void handleUpdateReviewStatus(sid, client.id, "manual", "reviewed");
+                                      }
+                                    }}
+                                    disabled={saving}
+                                    className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
+                                    style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
+                                    Unlock Snapshot
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* GHL snapshot review actions */}
+                          {ghlSnapshot && (() => {
+                            const sid = ghlSnapshot.id;
+                            const st  = ghlSnapshot.reviewStatus;
+                            const saving = reviewSaving[`${sid}-${st === "draft" ? "reviewed" : st === "reviewed" ? "locked" : "reviewed"}`] ?? false;
+                            return (
+                              <div className="pt-0.5 flex flex-col gap-1">
+                                <div className="text-[8px] uppercase tracking-widest font-bold"
+                                  style={{ color: "rgba(34,197,94,0.4)", fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
+                                  GHL Snapshot
+                                </div>
+                                {st === "draft" && (
+                                  <button
+                                    onClick={() => void handleUpdateReviewStatus(sid, client.id, "ghl", "reviewed")}
+                                    disabled={saving}
+                                    className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                    style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.20)" }}>
+                                    {saving && <Loader2 size={9} className="animate-spin" />}
+                                    Mark Reviewed
+                                  </button>
+                                )}
+                                {st === "reviewed" && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm("Lock this revenue snapshot? This confirms the billing basis for this client and month. It will not create or send an invoice.")) {
+                                          void handleUpdateReviewStatus(sid, client.id, "ghl", "locked");
+                                        }
+                                      }}
+                                      disabled={saving}
+                                      className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                      style={{ color: "#0081f2", backgroundColor: "rgba(0,129,242,0.08)", border: "1px solid rgba(0,129,242,0.20)" }}>
+                                      {saving && <Loader2 size={9} className="animate-spin" />}
+                                      Lock Snapshot
+                                    </button>
+                                    <button
+                                      onClick={() => void handleUpdateReviewStatus(sid, client.id, "ghl", "draft")}
+                                      className="text-[9px] px-1.5 py-0.5 rounded transition-opacity hover:opacity-70"
+                                      style={{ color: "rgba(107,122,153,0.5)" }}>
+                                      Revert to Draft
+                                    </button>
+                                  </>
+                                )}
+                                {st === "locked" && (
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
+                                        void handleUpdateReviewStatus(sid, client.id, "ghl", "reviewed");
+                                      }
+                                    }}
+                                    disabled={saving}
+                                    className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
+                                    style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
+                                    Unlock Snapshot
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           {/* Settings gear — always available for admin */}
                           <button
                             onClick={() => handleOpenPanel(client.id)}

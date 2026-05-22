@@ -402,8 +402,175 @@ export function runCreativeAnalysisAgent(
 }
 
 // ─────────────────────────────────────────────────────────────
-// buildAssetAdVariation — per-asset copy generator
-// Deterministic. No API calls. Uses creative analysis + client intelligence.
+// assignToAdSet — maps creative type to best-fit ad set
+// Option B: one ad per asset, assigned to best-fit ad set
+// ─────────────────────────────────────────────────────────────
+
+function assignToAdSet(assetType: string, isRoofing: boolean): {
+  adSetAssignment: string;
+  adSetAudienceTemperature: "cold" | "warm" | "hot";
+} {
+  // Higher-intent / urgency → Storm & Roof Replacement Intent (Ad Set 2)
+  if (isRoofing && ["Storm Damage", "Inspection Day", "Warranty Explanation"].includes(assetType)) {
+    return { adSetAssignment: "Storm & Roof Replacement Intent", adSetAudienceTemperature: "hot" };
+  }
+  // Social proof / trust / owner-face → Retargeting & Social Proof (Ad Set 3)
+  if (["Testimonial", "Owner On Camera", "Team Photo", "Q&A Clip"].includes(assetType)) {
+    return { adSetAssignment: "Retargeting & Social Proof", adSetAudienceTemperature: "warm" };
+  }
+  // Everything else → Broad Homeowner Prospecting (Ad Set 1)
+  return { adSetAssignment: "Broad Homeowner Prospecting", adSetAudienceTemperature: "cold" };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Per-asset-type copy templates (intel-powered)
+// ─────────────────────────────────────────────────────────────
+
+function buildIntelPrimaryText1(
+  assetType: string,
+  isRoofing: boolean,
+  ownerFirst: string,
+  clientName: string,
+  mainOffer: string,
+  warranty: string | null,
+  uniqueMechanism: string | null,
+  locationDesc: string,
+): string {
+  if (!isRoofing) {
+    return `${clientName} — premium ${assetType.toLowerCase()} in ${locationDesc}. ${mainOffer}.`;
+  }
+  const wStack = warranty ?? "50-year manufacturer warranty + 15-year wind warranty + 10-year workmanship warranty";
+  const gaf = uniqueMechanism ? "GAF Certified Plus" : "certified";
+  switch (assetType) {
+    case "Owner On Camera":
+      return `Hi, I'm ${ownerFirst} — owner of ${clientName}. If you're comparing roofing quotes in ${locationDesc}, here's what most roofers won't say upfront: the cheapest quote today means a $15,000–$25,000 replacement in 5 years.\n\nWe're ${gaf}. Every roof comes with our triple warranty: ${wStack}. That's not a sales pitch — it's a written guarantee.\n\n${mainOffer}. No pressure. Honest answers. Family-owned.`;
+    case "Storm Damage":
+      return `${locationDesc} homeowners: storm damage to your roof is often invisible from the ground — but it compounds fast.\n\n${clientName} has completed free inspections across the area and found damage homeowners didn't know existed. We're ${gaf}. If there's damage, we'll show you exactly what needs fixing — no insurance games, no pressure, just honest findings.\n\n${mainOffer}. Free.`;
+    case "Testimonial":
+      return `The #1 thing ${locationDesc} homeowners tell us after choosing ${clientName}: "I wish I'd called you first."\n\nBefore you sign with a cheaper roofer — ask what warranty they're backing it with. Ours: ${wStack}. ${gaf}. Family-owned.\n\n${mainOffer}.`;
+    case "Before/After":
+      return `This is what a proper roof replacement looks like in ${locationDesc}.\n\nNot a patch job. Not a quick fix. A ${gaf} installation backed by ${wStack}.\n\n${mainOffer} — free, honest findings, zero pressure from a family-owned company.`;
+    case "Project Reveal":
+      return `${clientName} just finished this ${locationDesc} home. ${gaf} installation. ${warranty ?? "Triple warranty: " + wStack}.\n\nThis is what premium roofing looks like when done right — not the cheapest quote, the right quote, backed by the best warranty in the business.\n\n${mainOffer}. Free inspection today.`;
+    case "Inspection Day":
+      return `Wondering what actually happens during a free roof inspection?\n\n45 minutes. ${ownerFirst} walks your roof, shows you exactly what we find, and gives you honest answers — no upsell, no urgency tricks, no insurance pressure.\n\n${gaf} · Family-Owned · ${locationDesc}.\n\n${mainOffer}. Schedule today.`;
+    case "Warranty Explanation":
+      return `Most roofing companies offer a 1-year workmanship warranty. ${clientName} offers three:\n\n✓ ${wStack}\n\nThis is what the price difference actually buys you — not a better salesperson, a better guarantee.\n\n${mainOffer}. Let's talk.`;
+    case "Drone Footage":
+      return `We serve homes throughout ${locationDesc} — and we've done the roof on more than a few of your neighbors'.\n\n${gaf}. ${warranty ?? wStack}. Family-owned. Every job backed by the same warranty, the same standards.\n\n${mainOffer}. Free inspection for ${locationDesc} homeowners.`;
+    default:
+      return `${clientName} — ${gaf} roofing in ${locationDesc}. ${warranty ? `Backed by ${warranty}.` : ""} ${mainOffer}. Honest, no-pressure inspection from a family-owned company.`;
+  }
+}
+
+function buildIntelPrimaryText2(
+  assetType: string,
+  isRoofing: boolean,
+  objection: string,
+  bestSalesAngle: string,
+  mainOffer: string,
+  ownerFirst: string,
+  clientName: string,
+  locationDesc: string,
+): string {
+  if (!isRoofing) {
+    return `${objection ? `"${objection}" — ${bestSalesAngle}.` : bestSalesAngle + "."} ${mainOffer}.`;
+  }
+  const objStr = objection || "getting the cheapest quote";
+  switch (assetType) {
+    case "Owner On Camera":
+      return `Most homeowners evaluating ${locationDesc} roofers ask: "${objStr}"\n\nHere's the honest answer: ${bestSalesAngle}. ${ownerFirst} shows up personally to every inspection. ${clientName} puts its name on every roof. ${mainOffer}.`;
+    case "Storm Damage":
+      return `"${objStr}" — we hear that. Here's what most ${locationDesc} homeowners don't realize: ${bestSalesAngle}. No obligation. No insurance pressure. Just facts about your roof. ${mainOffer}.`;
+    case "Testimonial":
+      return `"${objStr}" — that's the #1 objection we get. ${bestSalesAngle}. See what real ${locationDesc} homeowners say about ${clientName} before you make your decision. ${mainOffer}.`;
+    case "Warranty Explanation":
+      return `When a cheaper roofer says "${objStr}" — ask them to show you their warranty paperwork. ${bestSalesAngle}. ${clientName} shows you ours on the first call. ${mainOffer}.`;
+    default:
+      return `"${objStr}" — ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}. Honest, no-pressure, family-owned.`;
+  }
+}
+
+function buildIntelHeadline1(
+  assetType: string,
+  isRoofing: boolean,
+  offersToTest: string[],
+  locationDesc: string,
+  analysis: CreativeAnalysis,
+  service: string,
+): string {
+  if (isRoofing) {
+    const h1Map: Record<string, string> = {
+      "Owner On Camera": `${locationDesc}'s GAF Certified Roofer`,
+      "Storm Damage": `Free Roof Inspection — Honest Findings`,
+      "Testimonial": `Why ${locationDesc} Homeowners Choose Us`,
+      "Before/After": `Before & After — GAF Certified Replacement`,
+      "Project Reveal": `Premium Roofing Done Right — ${locationDesc}`,
+      "Inspection Day": `Free Inspection — See What We Actually Do`,
+      "Drone Footage": `Serving ${locationDesc} Neighborhoods`,
+      "Warranty Explanation": `Triple Warranty: 50yr + 15yr + 10yr`,
+      "Q&A Clip": `Your Roof Questions — Answered Honestly`,
+      "Team Photo": `Meet the ${locationDesc} Roofing Team`,
+      "Jobsite Walkthrough": `Inside a Real ${locationDesc} Roof Job`,
+      "UGC Style Video": `${locationDesc} Homeowner — Watch This First`,
+    };
+    return h1Map[assetType] ?? offersToTest[0] ?? `${service} — ${analysis.recommendedCTA}`;
+  }
+  return offersToTest[0] ?? `${service} — ${analysis.recommendedCTA}`;
+}
+
+function buildIntelHeadline2(
+  assetType: string,
+  isRoofing: boolean,
+  warranty: string | null,
+  ownerFirst: string,
+): string {
+  if (isRoofing) {
+    const h2Map: Record<string, string> = {
+      "Owner On Camera": `${ownerFirst} Shows Up to Every Inspection`,
+      "Storm Damage": `GAF Certified · No Insurance Games`,
+      "Testimonial": warranty ? "Triple Warranty — See for Yourself" : "Family-Owned · Locally Trusted",
+      "Before/After": warranty ? warranty.split("+")[0].trim() : "50-Year Manufacturer Warranty",
+      "Project Reveal": warranty ? warranty.split("+")[0].trim() : "Premium Roofing — Done Right",
+      "Inspection Day": "45 Min · Free · Zero Pressure",
+      "Drone Footage": "GAF Certified Plus · Family-Owned",
+      "Warranty Explanation": "Compare Any Quote — We Back Ours",
+      "Q&A Clip": "Ask Us Anything — We Answer Honestly",
+      "Team Photo": "Family-Owned · Same Crew Every Job",
+      "Jobsite Walkthrough": "Professional · Clean · Certified",
+      "UGC Style Video": "Real Homeowner. Real Experience.",
+    };
+    return h2Map[assetType] ?? (warranty ? warranty.split("+")[0].trim() : "Family-Owned. Locally Trusted.");
+  }
+  return warranty ? warranty.split("—")[0].trim().split("+")[0].trim() : "Family-Owned. Locally Trusted.";
+}
+
+function buildWhyThisCopyMatchesCreative(
+  assetType: string,
+  isRoofing: boolean,
+  hasIntel: boolean,
+): string {
+  const note = hasIntel
+    ? "Copy generated from asset type, creative metadata, operator notes, and full client intelligence. Visual analysis not yet available — no physical asset inspection was performed."
+    : "Copy generated from asset type and service context. Visual analysis not available. Connect client intelligence for richer, client-specific copy.";
+
+  const reasonMap: Record<string, string> = {
+    "Owner On Camera": "Owner-face format demands trust-first copy that establishes personal credibility before making any offer. Copy leads with identity and warranty proof, not price.",
+    "Storm Damage": "Urgency format requires fact-based copy that identifies the problem and offers a low-pressure solution. Avoids insurance guarantee language per compliance rules.",
+    "Testimonial": "Social proof format should let the result speak — copy frames the peer recommendation and handles the price objection, not the brand selling itself.",
+    "Before/After": "Transformation format needs copy that anchors quality (warranty, certification) before the offer, so the visual comparison reinforces a premium — not a commodity — decision.",
+    "Project Reveal": "Reveal format builds desire. Copy should reinforce that this result is what you get when you choose quality over the cheapest quote.",
+    "Inspection Day": "Process-transparency format removes the #1 pre-booking friction: fear of a high-pressure inspection. Copy demystifies the experience.",
+    "Warranty Explanation": "Objection-handling format. Copy reframes the price comparison by making the warranty stack the unit of comparison, not the quote.",
+    "Drone Footage": "Neighborhood-level format builds geographic trust. Copy ties local presence to brand credibility.",
+  };
+
+  const reason = reasonMap[assetType] ?? "Creative type informs copy angle — copy is matched to the expected viewer intent and emotional state at the moment this creative is encountered.";
+  return `${reason} ${note}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// buildOpeningFrame — video-specific opening frame suggestion
 // ─────────────────────────────────────────────────────────────
 
 function buildOpeningFrame(assetType: string, intel: ClientIntelligence | null): string {
@@ -430,6 +597,11 @@ function buildOpeningFrame(assetType: string, intel: ClientIntelligence | null):
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// buildAssetAdVariation — per-asset copy generator
+// Deterministic. No API calls. Uses creative analysis + client intelligence.
+// ─────────────────────────────────────────────────────────────
+
 export function buildAssetAdVariation(
   asset: {
     id: string;
@@ -446,59 +618,75 @@ export function buildAssetAdVariation(
   const analysis = runCreativeAnalysisAgent(asset.assetType, service, asset.approvedForAds, asset.notes);
   const isVideo = asset.fileType === "video";
   const isRoofing = /roof|storm|inspect/i.test(service);
+  const hasIntel = !!intel;
 
-  const mainOffer: string =
-    (intel as { offerIntelligence?: { mainOffer?: string } } | null)?.offerIntelligence?.mainOffer ??
-    (isRoofing ? "Free Roof Inspection" : "Free Consultation");
-  const uniqueMechanism: string | null =
-    (intel as { brandIntelligence?: { uniqueMechanism?: string } } | null)?.brandIntelligence?.uniqueMechanism ?? null;
-  const trustTrigger1: string =
-    ((intel as { buyerProfile?: { trustTriggers?: string[] } } | null)?.buyerProfile?.trustTriggers?.[0]) ??
-    analysis.trustSignals[0] ??
-    "Family-owned, locally trusted";
-  const objection: string =
-    ((intel as { buyerProfile?: { commonObjections?: string[] } } | null)?.buyerProfile?.commonObjections?.[0]) ??
-    analysis.objectionAddressed;
-  const bestSalesAngle: string =
-    ((intel as { salesIntelligence?: { bestSalesAngles?: string[] } } | null)?.salesIntelligence?.bestSalesAngles?.[0]) ??
-    analysis.bestCampaignAngle;
-  const offersToTest: string[] =
-    (intel as { campaignImplications?: { offersToTest?: string[] } } | null)?.campaignImplications?.offersToTest ?? [];
-  const warranty: string | null =
-    ((intel as { offerIntelligence?: { guarantees?: string[] } } | null)?.offerIntelligence?.guarantees?.[0]) ??
-    uniqueMechanism;
+  // ── Intel fields ─────────────────────────────────────────────
+  type IntelShape = {
+    companyProfile?: { ownerName?: string };
+    offerIntelligence?: { mainOffer?: string; guarantees?: string[] };
+    brandIntelligence?: { uniqueMechanism?: string };
+    buyerProfile?: { trustTriggers?: string[]; commonObjections?: string[] };
+    salesIntelligence?: { bestSalesAngles?: string[] };
+    campaignImplications?: { offersToTest?: string[] };
+    serviceArea?: { cities?: string[] };
+  };
+  const i = intel as IntelShape | null;
+
+  const mainOffer = i?.offerIntelligence?.mainOffer ?? (isRoofing ? "Free Roof Inspection" : "Free Consultation");
+  const uniqueMechanism = i?.brandIntelligence?.uniqueMechanism ?? null;
+  const warranty = i?.offerIntelligence?.guarantees?.[0] ?? uniqueMechanism;
+  const trustTrigger1 = i?.buyerProfile?.trustTriggers?.[0] ?? analysis.trustSignals[0] ?? "Family-owned, locally trusted";
+  const objection = i?.buyerProfile?.commonObjections?.[0] ?? analysis.objectionAddressed;
+  const bestSalesAngle = i?.salesIntelligence?.bestSalesAngles?.[0] ?? analysis.bestCampaignAngle;
+  const offersToTest = i?.campaignImplications?.offersToTest ?? [];
+  const ownerName = i?.companyProfile?.ownerName ?? "";
+  const ownerFirst = ownerName.split(" ")[0] || "the owner";
+  const locationDesc = i?.serviceArea?.cities?.[0] ?? service.split(" ")[0] ?? "your area";
 
   const visualAssumption = asset.notes?.trim()
     ? asset.notes.trim()
-    : "Visual analysis not available yet — copy generated from asset metadata and client intelligence.";
+    : "Copy generated from asset metadata, selected creative type, and client intelligence. Visual analysis not yet available.";
 
-  // primary text 1
-  const primaryText1 = isVideo
-    ? [
-        analysis.recommendedCopyAngle,
-        uniqueMechanism ? `— ${uniqueMechanism}.` : "",
-        mainOffer + ".",
-      ].filter(Boolean).join(" ").trim()
-    : [
-        trustTrigger1,
-        `— this is what ${service} looks like when done right.`,
-        warranty ? `Backed by ${warranty}.` : "",
-        mainOffer + ".",
-      ].filter(Boolean).join(" ").trim();
+  // ── Ad set assignment ─────────────────────────────────────────
+  const { adSetAssignment, adSetAudienceTemperature } = assignToAdSet(asset.assetType, isRoofing);
 
-  // primary text 2 — objection-handling angle
-  const primaryText2 = objection
-    ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
-    : `${analysis.bestCampaignAngle}. ${mainOffer}.`;
+  // ── Copy generation ───────────────────────────────────────────
+  let primaryText1: string;
+  let primaryText2: string;
 
-  const headline1 = offersToTest[0] ?? `${service} — ${analysis.recommendedCTA}`;
-  const headline2 = warranty
-    ? warranty.split("—")[0].trim().split("+")[0].trim()
-    : "Family-Owned. Locally Trusted.";
-  const description = analysis.bestCampaignAngle;
+  if (hasIntel && isRoofing) {
+    primaryText1 = buildIntelPrimaryText1(
+      asset.assetType, isRoofing, ownerFirst, ownerName ? ownerName.split(" ").slice(-1)[0] + " Builders" : service,
+      mainOffer, warranty, uniqueMechanism, locationDesc
+    );
+    primaryText2 = buildIntelPrimaryText2(
+      asset.assetType, isRoofing, objection, bestSalesAngle, mainOffer, ownerFirst,
+      ownerName ? ownerName.split(" ").slice(-1)[0] + " Builders" : service, locationDesc
+    );
+  } else if (isVideo) {
+    primaryText1 = [analysis.recommendedCopyAngle, uniqueMechanism ? `— ${uniqueMechanism}.` : "", mainOffer + "."].filter(Boolean).join(" ").trim();
+    primaryText2 = objection
+      ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
+      : `${analysis.bestCampaignAngle}. ${mainOffer}.`;
+  } else {
+    primaryText1 = [trustTrigger1, `— this is what ${service} looks like when done right.`, warranty ? `Backed by ${warranty}.` : "", mainOffer + "."].filter(Boolean).join(" ").trim();
+    primaryText2 = objection
+      ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
+      : `${analysis.bestCampaignAngle}. ${mainOffer}.`;
+  }
+
+  const headline1 = buildIntelHeadline1(asset.assetType, isRoofing, offersToTest, locationDesc, analysis, service);
+  const headline2 = buildIntelHeadline2(asset.assetType, isRoofing, warranty, ownerFirst);
+
+  const description = hasIntel && isRoofing
+    ? `GAF Certified Plus · Family-Owned · ${locationDesc}`
+    : analysis.bestCampaignAngle;
+
   const hook = isVideo
     ? `First 3 sec: ${analysis.recommendedCopyAngle.split(".")[0]}. Hook must land immediately.`
     : `${analysis.trustSignals[0] ?? analysis.bestCampaignAngle} — ${asset.assetType} format.`;
+
+  const whyThisCopyMatchesCreative = buildWhyThisCopyMatchesCreative(asset.assetType, isRoofing, hasIntel);
 
   const variation: AssetAdVariation = {
     assetId: asset.id,
@@ -520,12 +708,15 @@ export function buildAssetAdVariation(
     complianceNotes: analysis.complianceRisks.slice(0, 3).join(" | ") || "No specific compliance risks identified.",
     bestUseCase: analysis.whyThisCreative,
     recommendedPlacement: analysis.bestPlacement,
+    adSetAssignment,
+    adSetAudienceTemperature,
+    whyThisCopyMatchesCreative,
   };
 
   if (isVideo) {
     variation.firstThreeSecondHook = `Open with: ${analysis.recommendedCopyAngle.split(".")[0]}. Hook must land within 3 seconds.`;
     variation.suggestedOpeningFrame = buildOpeningFrame(asset.assetType, intel);
-    variation.captionPrimaryText = primaryText1;
+    variation.captionPrimaryText = primaryText1.split("\n\n")[0];
     variation.retargetingUse = analysis.retargetingUse;
   }
 

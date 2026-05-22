@@ -204,6 +204,11 @@ export interface ClientMonthlyRevenueSnapshotRow {
   source_payload: Record<string, unknown>;
   synced_at: string | null;
   reviewed_at: string | null;
+  // Phase 2E: Stripe draft invoice metadata
+  stripe_invoice_id: string | null;
+  stripe_invoice_status: string | null;
+  stripe_invoice_url: string | null;
+  invoice_draft_created_at: string | null;
 }
 
 export interface IntegrationConnectionRow {

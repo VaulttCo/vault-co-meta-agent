@@ -99,6 +99,11 @@ export interface MonthlyRevenueSnapshot {
   // Phase 2C
   dealCount: number;
   syncedAt: string | null;
+  // Phase 2E: Stripe draft invoice metadata
+  stripeInvoiceId: string | null;
+  stripeInvoiceStatus: string | null;
+  stripeInvoiceUrl: string | null;
+  invoiceDraftCreatedAt: string | null;
 }
 
 // Fields the POST endpoint accepts
@@ -169,6 +174,10 @@ export function rowToMonthlyRevenueSnapshot(row: any): MonthlyRevenueSnapshot {
     updatedAt:              row.updated_at ?? new Date().toISOString(),
     dealCount:              Number(row.deal_count ?? 0),
     syncedAt:               row.synced_at ?? null,
+    stripeInvoiceId:        row.stripe_invoice_id ?? null,
+    stripeInvoiceStatus:    row.stripe_invoice_status ?? null,
+    stripeInvoiceUrl:       row.stripe_invoice_url ?? null,
+    invoiceDraftCreatedAt:  row.invoice_draft_created_at ?? null,
   };
 }
 
@@ -192,6 +201,10 @@ export function makeDefaultSnapshot(clientId: string, billingMonth: string): Mon
     updatedAt:              now,
     dealCount:              0,
     syncedAt:               null,
+    stripeInvoiceId:        null,
+    stripeInvoiceStatus:    null,
+    stripeInvoiceUrl:       null,
+    invoiceDraftCreatedAt:  null,
   };
 }
 

@@ -252,14 +252,43 @@ function MetaPayloadPreviewModal({
                     <div
                       key={i}
                       className="rounded-xl p-4 space-y-1.5"
-                      style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                      style={{
+                        backgroundColor: "var(--t-surface-2)",
+                        border: adSet.launchBlocker ? "1px solid rgba(245,158,11,0.25)" : "1px solid var(--t-border)",
+                      }}
                     >
-                      <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--t-text)" }}>{adSet.name}</div>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <span className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>{adSet.name}</span>
+                        {adSet.audienceTemperature && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+                            style={{
+                              backgroundColor: adSet.audienceTemperature === "cold" ? "rgba(96,165,250,0.12)" : adSet.audienceTemperature === "hot" ? "rgba(239,68,68,0.12)" : "rgba(251,191,36,0.12)",
+                              color: adSet.audienceTemperature === "cold" ? "#60a5fa" : adSet.audienceTemperature === "hot" ? "#ef4444" : "#fbbf24",
+                            }}
+                          >
+                            {adSet.audienceTemperature}
+                          </span>
+                        )}
+                        {adSet.budgetAmount && (
+                          <span className="text-[9px] font-semibold ml-auto" style={{ color: "var(--t-muted)" }}>
+                            {adSet.budgetSplit} · {adSet.budgetAmount}
+                          </span>
+                        )}
+                      </div>
+                      {adSet.purpose && (
+                        <div className="text-[10px] mb-2 italic" style={{ color: "var(--t-muted)" }}>{adSet.purpose}</div>
+                      )}
+                      {adSet.launchBlocker && (
+                        <div className="flex items-start gap-1.5 rounded-lg px-2.5 py-2 mb-2" style={{ backgroundColor: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+                          <AlertTriangle size={10} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />
+                          <span className="text-[10px] text-[#f59e0b]">{adSet.launchBlocker}</span>
+                        </div>
+                      )}
                       {[
                         ["Audience", adSet.audience],
                         ["Location", adSet.locationTargeting],
                         ["Optimization", adSet.optimizationEvent],
-                        ["Budget Split", adSet.budgetSplit],
                         ["Status", adSet.status],
                       ].map(([label, value]) => (
                         <div key={label} className="flex items-start gap-3 text-[11px]">
@@ -281,6 +310,16 @@ function MetaPayloadPreviewModal({
               {/* ── Ads tab ── */}
               {activeTab === "ads" && (
                 <div className="space-y-3">
+                  {payload.ads.some((a) => a.adSetAssignment) && (
+                    <div
+                      className="flex items-center gap-2 rounded-lg px-3 py-2"
+                      style={{ backgroundColor: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)" }}
+                    >
+                      <Layers size={10} className="text-[#a78bfa]" />
+                      <span className="text-[10px] font-semibold text-[#a78bfa]">Creative-to-Ad Mapping (Option B)</span>
+                      <span className="text-[10px]" style={{ color: "var(--t-muted)" }}>— one ad per asset, assigned to best-fit ad set</span>
+                    </div>
+                  )}
                   {payload.ads.map((ad, i) => (
                     <div
                       key={i}
@@ -290,7 +329,7 @@ function MetaPayloadPreviewModal({
                         border: `1px solid ${ad.approvedForAds ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
                       }}
                     >
-                      <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <Film size={12} className="text-[#a78bfa]" />
                         <span className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>{ad.name}</span>
                         <span
@@ -304,6 +343,23 @@ function MetaPayloadPreviewModal({
                           {ad.approvedForAds ? "Creative approved" : "Creative not approved"}
                         </span>
                       </div>
+                      {ad.adSetAssignment && (
+                        <div className="flex items-center gap-2 mb-3 rounded-lg px-2.5 py-1.5" style={{ backgroundColor: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.15)" }}>
+                          <Layers size={9} className="text-[#a78bfa] flex-shrink-0" />
+                          <span className="text-[10px] text-[#a78bfa] font-medium">{ad.adSetAssignment}</span>
+                          {ad.adSetAudienceTemperature && (
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider ml-1"
+                              style={{
+                                backgroundColor: ad.adSetAudienceTemperature === "cold" ? "rgba(96,165,250,0.12)" : ad.adSetAudienceTemperature === "hot" ? "rgba(239,68,68,0.12)" : "rgba(251,191,36,0.12)",
+                                color: ad.adSetAudienceTemperature === "cold" ? "#60a5fa" : ad.adSetAudienceTemperature === "hot" ? "#ef4444" : "#fbbf24",
+                              }}
+                            >
+                              {ad.adSetAudienceTemperature}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="space-y-1.5 text-[11px]">
                         {ad.assetId && (
                           <div className="flex gap-3">
@@ -341,6 +397,12 @@ function MetaPayloadPreviewModal({
                           <div className="flex gap-3">
                             <span className="w-28 flex-shrink-0" style={{ color: "var(--t-dim)" }}>Placements</span>
                             <span style={{ color: "var(--t-text)" }}>{ad.placements.join(", ")}</span>
+                          </div>
+                        )}
+                        {ad.copyGenerationNote && (
+                          <div className="mt-2 rounded-lg px-2.5 py-2" style={{ backgroundColor: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)" }}>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-[#c9a84c] mb-0.5">Why this copy matches this creative</div>
+                            <div className="text-[10px]" style={{ color: "var(--t-muted)" }}>{ad.copyGenerationNote}</div>
                           </div>
                         )}
                         <div className="flex gap-3">

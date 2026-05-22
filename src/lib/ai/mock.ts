@@ -12,6 +12,7 @@ import type {
   CreativeDirection,
   ComplianceCheck,
   OptimizationRules,
+  AdSetDefinition,
 } from "@/lib/planStore";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import { KACZMAR_INTELLIGENCE } from "@/lib/clientIntelligence";
@@ -62,7 +63,10 @@ export function generateMockPlan(
 ): CampaignDraft {
   const budgetNum = parseInt(budget.replace(/[^0-9]/g, "")) || 1500;
   const adSpend = Math.round(budgetNum * 0.85);
-  const perSetBudget = Math.round(adSpend / 4);
+  const reserveBudget = budgetNum - adSpend;
+  const as1Budget = Math.round(adSpend * 0.5);
+  const as2Budget = Math.round(adSpend * 0.3);
+  const as3Budget = adSpend - as1Budget - as2Budget;
 
   const svc = service.toLowerCase();
   const cat =
@@ -124,31 +128,111 @@ export function generateMockPlan(
     ? `Homeowners · ${market} ±15mi · Ages 30–65 · Home Ownership: Yes · Interests: Home Improvement, Homeowners Insurance, Roofing · Est. reach: 45,000–120,000`
     : `Homeowners · ${market} ±20mi · Ages 35–65 · HHI $75k+ · Interests: Home Improvement, Interior Design, Kitchen & Bath · Est. reach: 30,000–90,000`;
 
-  const adSetNames = hasIntel
+  const locationLabel = hasIntel ? serviceAreas : market;
+
+  const adSetNames = isRoofing
     ? [
-        `${serviceAreas} — ${intel.targetMarket.householdIncome} Homeowner Prospecting`,
-        `${serviceAreas} — ${isRoofing ? "Storm/Weather Intent" : "Home Improvement Intent"}`,
-        `${serviceAreas} — Lookalike 1% (Past ${isRoofing ? "Inspection" : "Consultation"} Leads)`,
-        `${serviceAreas} — Retargeting (30-Day Visitors + Page Engagers)`,
-      ]
-    : isRoofing
-    ? [
-        `${market} — Broad Homeowner Prospecting`,
-        `${market} — Storm/Weather Intent`,
-        `${market} — Lookalike 1% (Past Leads)`,
-        `${market} — Retargeting (30-Day Visitors)`,
+        `${locationLabel} — Broad Homeowner Prospecting`,
+        `${locationLabel} — Storm & Roof Replacement Intent`,
+        `${locationLabel} — Retargeting & Social Proof`,
       ]
     : [
-        `${market} — High-Intent Homeowner Prospecting`,
-        `${market} — Home Improvement Interest`,
-        `${market} — Lookalike 1–2% (Past Consultations)`,
-        `${market} — Retargeting (Page Engagers 60 Days)`,
+        `${locationLabel} — High-Intent Homeowner Prospecting`,
+        `${locationLabel} — Home Improvement Decision Intent`,
+        `${locationLabel} — Retargeting & Social Proof`,
+      ];
+
+  const adSets: AdSetDefinition[] = isRoofing
+    ? [
+        {
+          name: adSetNames[0],
+          purpose:
+            "Cold prospecting — homeowners aged 30–65 who own a home in the service area. Broad targeting to maximize new lead volume at lowest CPL.",
+          audience: audienceDesc,
+          locationTargeting: `${locationLabel} ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "50%",
+          budgetAmount: `$${as1Budget}/mo`,
+          optimizationEvent: "LEAD (Meta Instant Form Submit)",
+          audienceTemperature: "cold",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[1],
+          purpose:
+            "High-intent targeting — homeowners showing storm damage research, insurance claim awareness, or roof replacement comparison signals. Smaller pool, higher intent.",
+          audience: `Homeowners · Ages 30–65 · ${locationLabel} ±15mi · Intent signals: storm damage search, insurance claim research, roof replacement shopping · Est. reach: 8,000–25,000`,
+          locationTargeting: `${locationLabel} ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels"],
+          budgetSplit: "30%",
+          budgetAmount: `$${as2Budget}/mo`,
+          optimizationEvent: "LEAD (Meta Instant Form Submit)",
+          audienceTemperature: "hot",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[2],
+          purpose:
+            "Warm retargeting — website visitors, page engagers, and video viewers. Uses social proof creative to convert warm audiences. Requires Pixel + Facebook Page to run.",
+          audience: `30-day website visitors · Facebook page engagers · Video viewers (25%+) · ${locationLabel} ±15mi · Est. reach: 2,000–8,000`,
+          locationTargeting: `${locationLabel} ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "20%",
+          budgetAmount: `$${as3Budget}/mo`,
+          optimizationEvent: "LEAD (Meta Instant Form Submit)",
+          audienceTemperature: "warm",
+          requiredForLaunch: false,
+          launchBlocker: "Requires Meta Pixel + Facebook Page ID in Integration Settings before this ad set can run.",
+        },
+      ]
+    : [
+        {
+          name: adSetNames[0],
+          purpose:
+            "Cold prospecting — homeowners aged 35–65 with home improvement interest in the service area. Broad targeting to drive new consultation leads.",
+          audience: audienceDesc,
+          locationTargeting: `${locationLabel} ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "50%",
+          budgetAmount: `$${as1Budget}/mo`,
+          optimizationEvent: goal === "Lead Generation" ? "LEAD (Meta Instant Form Submit)" : "OFFSITE_CONVERSION → Lead",
+          audienceTemperature: "cold",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[1],
+          purpose:
+            "Mid-funnel decision intent — homeowners actively researching remodeling projects, comparing pricing, or evaluating contractors.",
+          audience: `Homeowners · Ages 35–65 · ${locationLabel} ±20mi · Intent signals: remodeling search, home improvement research, contractor comparison · Est. reach: 10,000–30,000`,
+          locationTargeting: `${locationLabel} ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels"],
+          budgetSplit: "30%",
+          budgetAmount: `$${as2Budget}/mo`,
+          optimizationEvent: goal === "Lead Generation" ? "LEAD (Meta Instant Form Submit)" : "OFFSITE_CONVERSION → Lead",
+          audienceTemperature: "hot",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[2],
+          purpose:
+            "Warm retargeting — website visitors, page engagers, and video viewers. Social proof creative closes warm audiences. Requires Pixel + Facebook Page to run.",
+          audience: `60-day website visitors · Facebook page engagers · Video viewers (25%+) · ${locationLabel} ±20mi · Est. reach: 1,500–6,000`,
+          locationTargeting: `${locationLabel} ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "20%",
+          budgetAmount: `$${as3Budget}/mo`,
+          optimizationEvent: goal === "Lead Generation" ? "LEAD (Meta Instant Form Submit)" : "OFFSITE_CONVERSION → Lead",
+          audienceTemperature: "warm",
+          requiredForLaunch: false,
+          launchBlocker: "Requires Meta Pixel + Facebook Page ID in Integration Settings before this ad set can run.",
+        },
       ];
 
   const metaStructure: MetaStructure = {
     campaignObjective: goalObjectiveMap[goal] ?? "LEAD_GENERATION",
     campaignType: goal === "Lead Generation" ? "Instant Form (Native Lead Form)" : "Link Click → Landing Page",
     adSetNames,
+    adSets,
     audience: audienceDesc,
     locationTargeting: hasIntel
       ? `Target cities: ${intel.serviceArea.cities.join(", ")} · Target ZIPs: ${intel.serviceArea.targetZips.slice(0, 6).join(", ")} · Premium neighborhood targeting enabled · Mobile-first`
@@ -161,7 +245,7 @@ export function generateMockPlan(
       "Facebook Stories",
       "Instagram Stories",
     ],
-    budgetSplit: `Ad Set 1: $${perSetBudget}/mo · Ad Set 2: $${perSetBudget}/mo · Ad Set 3: $${Math.round(perSetBudget * 0.6)}/mo · Ad Set 4: $${Math.round(perSetBudget * 0.4)}/mo · Total: $${adSpend}/mo ad spend`,
+    budgetSplit: `Total: $${budgetNum.toLocaleString()}/mo · Ad spend: $${adSpend}/mo · Reserve: $${reserveBudget}/mo · AS1 Broad (50%): $${as1Budget}/mo · AS2 Intent (30%): $${as2Budget}/mo · AS3 Retargeting (20%): $${as3Budget}/mo`,
     optimizationEvent: goal === "Lead Generation" ? "LEAD (Meta Instant Form Submit)" : "OFFSITE_CONVERSION → Lead",
   };
 

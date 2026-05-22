@@ -139,6 +139,10 @@ export default function GhlTrackerPage() {
   // ── Phase 2D: review / lock state ────────────────────────────────────────
   const [reviewSaving, setReviewSaving] = useState<Record<string, boolean>>({});
 
+  // ── Phase 2E: invoice draft creation state ────────────────────────────────
+  const [invoiceSaving, setInvoiceSaving] = useState<Record<string, boolean>>({});
+  const [invoiceErrors, setInvoiceErrors] = useState<Record<string, string>>({});
+
   // ── Revenue Settings panel (inline accordion per client) ──────────────────
   const [openPanel, setOpenPanel]         = useState<string | null>(null);
   const [panelSaving, setPanelSaving]     = useState<Record<string, boolean>>({});
@@ -543,6 +547,45 @@ export default function GhlTrackerPage() {
     }
   }
 
+  // ── Phase 2E: Create Stripe draft invoice ────────────────────────────────
+  async function handleCreateInvoiceDraft(
+    snapshotId: string,
+    clientId: string,
+    source: "manual" | "ghl"
+  ) {
+    if (!window.confirm(
+      "Create a Stripe DRAFT invoice for this locked snapshot?\n\n" +
+      "The invoice will not be sent, finalized, or charged. You must open it in Stripe to review before sending."
+    )) return;
+
+    setInvoiceSaving((prev) => ({ ...prev, [snapshotId]: true }));
+    setInvoiceErrors((prev) => ({ ...prev, [snapshotId]: "" }));
+
+    try {
+      const res = await fetch(`/api/revenue-snapshots/${snapshotId}/create-invoice-draft`, {
+        method: "POST",
+      });
+      const data = await res.json() as { success?: boolean; snapshot?: MonthlyRevenueSnapshot; error?: string };
+
+      if (res.ok && data.snapshot) {
+        if (source === "manual") {
+          setManualSnapshotsMap((prev) => ({ ...prev, [clientId]: data.snapshot! }));
+        } else {
+          setGhlSnapshotsMap((prev) => ({ ...prev, [clientId]: data.snapshot! }));
+        }
+      } else {
+        setInvoiceErrors((prev) => ({ ...prev, [snapshotId]: data.error ?? "Failed to create invoice draft." }));
+      }
+    } catch (err) {
+      setInvoiceErrors((prev) => ({
+        ...prev,
+        [snapshotId]: err instanceof Error ? err.message : "Network error.",
+      }));
+    } finally {
+      setInvoiceSaving((prev) => ({ ...prev, [snapshotId]: false }));
+    }
+  }
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const pipelineClients = useMemo(() => clients.filter((c) => c.status !== "archived"), [clients]);
   const recurringActiveCount = useMemo(
@@ -597,7 +640,7 @@ export default function GhlTrackerPage() {
       <RevenuePageHeader
         title="GHL Revenue Share Tracker"
         subtitle="Manual revenue entry · GHL Closed Won read-only sync · recurring billing management"
-        badge={<PhaseBadge label="PHASE 2C" />}
+        badge={<PhaseBadge label="PHASE 2E" />}
       />
 
       <SectionCard>
@@ -605,7 +648,7 @@ export default function GhlTrackerPage() {
           icon={RefreshCw}
           title="GHL Revenue Share Tracker"
           subtitle="Enter revenue manually or pull Closed Won data from GHL. Vault Co 5% fee and Nick recurring earnings are computed server-side."
-          badge={<PhaseBadge label="PHASE 2C" />}
+          badge={<PhaseBadge label="PHASE 2E" />}
         />
 
         {/* ── Billing Month Selector ──────────────────────────────────────── */}
@@ -770,7 +813,7 @@ export default function GhlTrackerPage() {
                 ))}
               </div>
               <p className="text-[9px] pt-1" style={{ color: "rgba(107,122,153,0.45)" }}>
-                Estimated billing basis only. No invoice has been created or sent. No revenue confirmed collected. Locking confirms the internal revenue basis for this month.
+                Estimated billing basis only. Locking confirms the internal revenue basis for this month. Use the Create Draft Invoice button per client to generate a Stripe draft — no invoice is sent or charged automatically.
               </p>
             </div>
           )}
@@ -782,14 +825,14 @@ export default function GhlTrackerPage() {
             style={{ backgroundColor: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)" }}>
             <AlertCircle size={13} style={{ color: "#22c55e" }} />
             <span className="text-[12px]" style={{ color: "#22c55e" }}>
-              Phase 2C · 2D: GHL read-only sync is active. Review and lock snapshots to confirm the billing basis. Locking does not create or send an invoice.
+              Phase 2C · 2D · 2E: GHL read-only sync is active. Review and lock snapshots to confirm the billing basis. Create Draft Invoice generates a Stripe draft — not sent, not charged.
             </span>
           </div>
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg"
             style={{ backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.18)" }}>
             <AlertCircle size={13} style={{ color: "rgba(107,122,153,0.7)" }} />
             <span className="text-[12px]" style={{ color: "rgba(107,122,153,0.7)" }}>
-              Stripe not connected. No invoices are created or sent. Revenue snapshots are records only.
+              Phase 2C · 2D · 2E: Lock a snapshot, then use Create Draft Invoice to generate a Stripe draft. No invoice is sent or charged automatically.
             </span>
           </div>
           {settingsError && (
@@ -1225,17 +1268,55 @@ export default function GhlTrackerPage() {
                                   </>
                                 )}
                                 {st === "locked" && (
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
-                                        void handleUpdateReviewStatus(sid, client.id, "manual", "reviewed");
-                                      }
-                                    }}
-                                    disabled={saving}
-                                    className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
-                                    style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
-                                    Unlock Snapshot
-                                  </button>
+                                  <>
+                                    {!manualSnapshot.stripeInvoiceId ? (
+                                      <div className="flex flex-col gap-1">
+                                        <button
+                                          onClick={() => void handleCreateInvoiceDraft(sid, client.id, "manual")}
+                                          disabled={invoiceSaving[sid]}
+                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                          style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.20)" }}>
+                                          {invoiceSaving[sid] && <Loader2 size={9} className="animate-spin" />}
+                                          {invoiceSaving[sid] ? "Creating…" : "Create Draft Invoice"}
+                                        </button>
+                                        {invoiceErrors[sid] && (
+                                          <div className="text-[9px] leading-snug" style={{ color: "#ef4444" }}>
+                                            {invoiceErrors[sid]}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col gap-0.5">
+                                        <div className="text-[9px] font-semibold" style={{ color: "#a78bfa" }}>
+                                          Draft Invoice Created
+                                        </div>
+                                        <div className="text-[8px] font-mono" style={{ color: "rgba(167,139,250,0.6)" }}>
+                                          {manualSnapshot.stripeInvoiceId}
+                                        </div>
+                                        {manualSnapshot.stripeInvoiceUrl && (
+                                          <a
+                                            href={manualSnapshot.stripeInvoiceUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[9px] font-bold underline"
+                                            style={{ color: "#a78bfa" }}>
+                                            Open in Stripe ↗
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
+                                          void handleUpdateReviewStatus(sid, client.id, "manual", "reviewed");
+                                        }
+                                      }}
+                                      disabled={saving}
+                                      className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
+                                      style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
+                                      Unlock Snapshot
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             );
@@ -1285,17 +1366,55 @@ export default function GhlTrackerPage() {
                                   </>
                                 )}
                                 {st === "locked" && (
-                                  <button
-                                    onClick={() => {
-                                      if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
-                                        void handleUpdateReviewStatus(sid, client.id, "ghl", "reviewed");
-                                      }
-                                    }}
-                                    disabled={saving}
-                                    className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
-                                    style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
-                                    Unlock Snapshot
-                                  </button>
+                                  <>
+                                    {!ghlSnapshot.stripeInvoiceId ? (
+                                      <div className="flex flex-col gap-1">
+                                        <button
+                                          onClick={() => void handleCreateInvoiceDraft(sid, client.id, "ghl")}
+                                          disabled={invoiceSaving[sid]}
+                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                          style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.20)" }}>
+                                          {invoiceSaving[sid] && <Loader2 size={9} className="animate-spin" />}
+                                          {invoiceSaving[sid] ? "Creating…" : "Create Draft Invoice"}
+                                        </button>
+                                        {invoiceErrors[sid] && (
+                                          <div className="text-[9px] leading-snug" style={{ color: "#ef4444" }}>
+                                            {invoiceErrors[sid]}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col gap-0.5">
+                                        <div className="text-[9px] font-semibold" style={{ color: "#a78bfa" }}>
+                                          Draft Invoice Created
+                                        </div>
+                                        <div className="text-[8px] font-mono" style={{ color: "rgba(167,139,250,0.6)" }}>
+                                          {ghlSnapshot.stripeInvoiceId}
+                                        </div>
+                                        {ghlSnapshot.stripeInvoiceUrl && (
+                                          <a
+                                            href={ghlSnapshot.stripeInvoiceUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-[9px] font-bold underline"
+                                            style={{ color: "#a78bfa" }}>
+                                            Open in Stripe ↗
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm("Unlock this snapshot? This allows the revenue basis to be edited again.")) {
+                                          void handleUpdateReviewStatus(sid, client.id, "ghl", "reviewed");
+                                        }
+                                      }}
+                                      disabled={saving}
+                                      className="flex items-center gap-1 text-[9px] font-medium px-2 py-1 rounded transition-opacity hover:opacity-70 whitespace-nowrap"
+                                      style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.06)", border: "1px solid rgba(61,79,110,0.12)" }}>
+                                      Unlock Snapshot
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             );

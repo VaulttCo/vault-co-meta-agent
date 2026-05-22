@@ -10,10 +10,25 @@ export type DraftStatus =
   | "pushed_paused"
   | "live";
 
+export interface AdSetDefinition {
+  name: string;
+  purpose: string;
+  audience: string;
+  locationTargeting: string;
+  placements: string[];
+  budgetSplit: string;
+  budgetAmount: string;
+  optimizationEvent: string;
+  audienceTemperature: "cold" | "warm" | "hot";
+  requiredForLaunch: boolean;
+  launchBlocker?: string;
+}
+
 export interface MetaStructure {
   campaignObjective: string;
   campaignType: string;
   adSetNames: string[];
+  adSets?: AdSetDefinition[];
   audience: string;
   locationTargeting: string;
   placements: string[];
@@ -134,6 +149,10 @@ export interface AssetAdVariation {
   complianceNotes: string;
   bestUseCase: string;
   recommendedPlacement: string[];
+  // Ad set assignment (Option B mapping)
+  adSetAssignment?: string;
+  adSetAudienceTemperature?: "cold" | "warm" | "hot";
+  whyThisCopyMatchesCreative?: string;
   // Video-only fields
   firstThreeSecondHook?: string;
   suggestedOpeningFrame?: string;

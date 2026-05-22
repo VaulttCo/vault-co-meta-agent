@@ -4,6 +4,7 @@
 import type { Client } from "@/lib/data";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
+import type { StoredAssetAnalysis } from "@/lib/agents/creativeAnalysis";
 
 export interface CampaignGenerationInput {
   client: Client;
@@ -16,6 +17,10 @@ export interface CampaignGenerationInput {
   clientIntelligence?: ClientIntelligence | null;
   selectedAsset?: CreativeAsset | null;
   selectedAssets?: CreativeAsset[];
+  // Per-asset operator notes (keyed by asset id)
+  assetNotes?: Record<string, string>;
+  // Per-asset vision/AI analysis (keyed by asset id)
+  assetAnalyses?: Record<string, StoredAssetAnalysis>;
 }
 
 // ─────────────────────────────────────────────────────────────

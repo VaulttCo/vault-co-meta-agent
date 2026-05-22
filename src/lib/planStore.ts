@@ -153,6 +153,10 @@ export interface AssetAdVariation {
   adSetAssignment?: string;
   adSetAudienceTemperature?: "cold" | "warm" | "hot";
   whyThisCopyMatchesCreative?: string;
+  // Vision analysis fields
+  visualSummary?: string;
+  analysisSource?: "vision" | "metadata_only";
+  visualConfidence?: "high" | "medium" | "low";
   // Video-only fields
   firstThreeSecondHook?: string;
   suggestedOpeningFrame?: string;

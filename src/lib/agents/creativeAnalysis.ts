@@ -5,6 +5,17 @@ import type { AssetType } from "@/lib/creativeAssets";
 import type { AssetAdVariation } from "@/lib/planStore";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
 
+export interface StoredAssetAnalysis {
+  visual_summary?: string;
+  visible_subjects?: string[];
+  analysis_source?: "vision" | "metadata_only";
+  visual_confidence?: "high" | "medium" | "low";
+  bestCampaignAngle?: string;
+  trustSignals?: string[];
+  recommendedCopyAngle?: string;
+  whyThisCreative?: string;
+}
+
 export interface CreativeAnalysis {
   creativeType: string;
   serviceShown: string;
@@ -613,7 +624,8 @@ export function buildAssetAdVariation(
   },
   service: string,
   intel: ClientIntelligence | null,
-  isPrimary: boolean
+  isPrimary: boolean,
+  storedAnalysis?: StoredAssetAnalysis | null
 ): AssetAdVariation {
   const analysis = runCreativeAnalysisAgent(asset.assetType, service, asset.approvedForAds, asset.notes);
   const isVideo = asset.fileType === "video";
@@ -643,7 +655,13 @@ export function buildAssetAdVariation(
   const ownerFirst = ownerName.split(" ")[0] || "the owner";
   const locationDesc = i?.serviceArea?.cities?.[0] ?? service.split(" ")[0] ?? "your area";
 
-  const visualAssumption = asset.notes?.trim()
+  const hasRealVision =
+    !!storedAnalysis?.visual_summary &&
+    storedAnalysis.visual_summary !== "Image not available for analysis";
+
+  const visualAssumption = hasRealVision
+    ? storedAnalysis!.visual_summary!
+    : asset.notes?.trim()
     ? asset.notes.trim()
     : "Copy generated from asset metadata, selected creative type, and client intelligence. Visual analysis not yet available.";
 
@@ -711,6 +729,9 @@ export function buildAssetAdVariation(
     adSetAssignment,
     adSetAudienceTemperature,
     whyThisCopyMatchesCreative,
+    visualSummary: hasRealVision ? storedAnalysis!.visual_summary : undefined,
+    analysisSource: storedAnalysis?.analysis_source ?? "metadata_only",
+    visualConfidence: storedAnalysis?.visual_confidence ?? "low",
   };
 
   if (isVideo) {

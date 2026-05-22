@@ -5,12 +5,15 @@ import { can } from "@/lib/auth/permissions";
 import { runCreativeAnalysisAgent } from "@/lib/agents/creativeAnalysis";
 import type { AssetType } from "@/lib/creativeAssets";
 
+// Server-side only — never expose ANTHROPIC_API_KEY in responses or logs.
+
 // ─────────────────────────────────────────────────────────────
 // POST /api/creatives/analyze
 //
 // Analyzes one or more creative assets and returns structured
-// intelligence. Results are persisted to the creative_assets
-// table via the notes field using the __META__ pattern.
+// intelligence. For image assets with a public storage_url,
+// Claude vision is used; otherwise falls back to text-only.
+// Results are persisted to creative_assets.notes via __META__ pattern.
 //
 // Request body:
 //   { assets: Array<{ id, assetType, service, market, notes?, approvedForAds, fileName?, clientName? }> }
@@ -23,6 +26,18 @@ import type { AssetType } from "@/lib/creativeAssets";
 // ─────────────────────────────────────────────────────────────
 
 export const dynamic = "force-dynamic";
+
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "avif"]);
+
+function isImageUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    const ext = path.split(".").pop() ?? "";
+    return IMAGE_EXTENSIONS.has(ext);
+  } catch {
+    return false;
+  }
+}
 
 interface AnalyzeAssetInput {
   id: string;
@@ -37,19 +52,13 @@ interface AnalyzeAssetInput {
 
 export async function POST(req: NextRequest) {
   // ── 1. Server-side auth + role resolution ────────────────────────────────
-  // SECURITY: Role is resolved entirely from the Supabase server-side session.
-  // Any role value in the request body is intentionally ignored.
   const auth = await resolveServerRole();
   if (!auth) {
-    // No valid session — unauthenticated
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { userId, role: serverRole } = auth;
 
-  // ── 2. Permission check — admin and media_buyer only ─────────────────────
-  // This check is unconditional — it does NOT depend on Supabase being
-  // configured. resolveServerRole() returns null when Supabase is missing,
-  // which is already handled above as a 401.
+  // ── 2. Permission check ───────────────────────────────────────────────────
   if (!can(serverRole, "canAnalyzeCreatives")) {
     return NextResponse.json(
       { error: "Forbidden — admin or media_buyer role required" },
@@ -94,7 +103,29 @@ export async function POST(req: NextRequest) {
   const useAnthropic = !!apiKey;
   let overallMockMode = !useAnthropic;
 
-  // ── 6. Analyze each asset ─────────────────────────────────────────────────
+  // ── 6. Fetch storage_url for each asset from Supabase (server-side only) ──
+  const supabase = getSupabaseServerClient();
+  const storageUrls: Record<string, string | null> = {};
+
+  if (supabase) {
+    try {
+      const ids = assets.map((a) => a.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rows } = await (supabase.from("creative_assets") as any)
+        .select("id, storage_url")
+        .in("id", ids);
+
+      if (rows && Array.isArray(rows)) {
+        for (const row of rows) {
+          storageUrls[row.id] = row.storage_url ?? null;
+        }
+      }
+    } catch (err) {
+      console.warn("[/api/creatives/analyze] Failed to fetch storage_urls:", err);
+    }
+  }
+
+  // ── 7. Analyze each asset ─────────────────────────────────────────────────
   const results: Array<{
     assetId: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,22 +135,20 @@ export async function POST(req: NextRequest) {
     error?: string;
   }> = [];
 
-  const supabase = getSupabaseServerClient();
-
   for (const asset of assets) {
-    let analysis: ReturnType<typeof runCreativeAnalysisAgent> & {
-      qualityScore?: number;
-      approvalRecommendation?: string;
-      approvalReason?: string;
-    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let analysis: any;
     let assetMockMode = !useAnthropic;
 
     try {
       if (useAnthropic) {
-        // Try Anthropic REST API, fall back to mock on error
         try {
+          const storageUrl = storageUrls[asset.id] ?? null;
+          const canUseVision = !!storageUrl && isImageUrl(storageUrl);
+          const analysisSource = canUseVision ? "vision" : "metadata_only";
+
           const systemPrompt = `You are Veronica, an expert Meta Ads creative strategist for home service businesses.
-Analyze the provided creative asset metadata and return a structured JSON analysis.
+Analyze the provided creative asset and return a structured JSON analysis.
 You must return ONLY valid JSON matching this exact schema — no markdown, no explanation, no code fences:
 {
   "creativeType": "string",
@@ -139,21 +168,46 @@ You must return ONLY valid JSON matching this exact schema — no markdown, no e
   "recommendedObjective": "string",
   "retargetingUse": "string",
   "whyThisCreative": "string",
+  "visual_summary": "string — one sentence describing what is literally visible in the image",
+  "visible_subjects": ["string — each main visible element or person"],
+  "analysis_source": "${analysisSource}",
+  "visual_confidence": "high" or "medium" or "low",
   "qualityScore": 1-10,
   "approvalRecommendation": "Approve" or "Needs Revision" or "Reject",
   "approvalReason": "string"
 }`;
 
-          const userPrompt = `Analyze this creative asset:
-Asset Type: ${asset.assetType}
+          const metadataBlock = `Asset Type: ${asset.assetType}
 Service: ${asset.service}
 Market: ${asset.market ?? "General"}
 File Name: ${asset.fileName ?? "unknown"}
 Client: ${asset.clientName ?? "unknown"}
 Currently Approved for Ads: ${asset.approvedForAds ? "Yes" : "No"}
-Notes: ${asset.notes ?? "None provided"}
+Notes: ${asset.notes ?? "None provided"}`;
 
-Provide a complete strategic analysis for Meta Ads campaign use.`;
+          // Build message content — include image for vision when available
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let messageContent: any[];
+
+          if (canUseVision) {
+            messageContent = [
+              {
+                type: "image",
+                source: { type: "url", url: storageUrl },
+              },
+              {
+                type: "text",
+                text: `Analyze this creative asset image for Meta Ads use.\n\n${metadataBlock}\n\nFor visual_summary: describe exactly what you see in the image. For visible_subjects: list the main subjects/elements. Set visual_confidence to "high" since you have the actual image.`,
+              },
+            ];
+          } else {
+            messageContent = [
+              {
+                type: "text",
+                text: `Analyze this creative asset for Meta Ads use (no image available — metadata only).\n\n${metadataBlock}\n\nFor visual_summary: write "Image not available for analysis". For visible_subjects: infer from asset type and file name. Set visual_confidence to "low" since no image was provided.`,
+              },
+            ];
+          }
 
           const response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
@@ -166,7 +220,7 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
               model: "claude-3-5-haiku-20241022",
               max_tokens: 1024,
               system: systemPrompt,
-              messages: [{ role: "user", content: userPrompt }],
+              messages: [{ role: "user", content: messageContent }],
             }),
           });
 
@@ -196,6 +250,10 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
             recommendedObjective: parsed.recommendedObjective ?? "LEAD_GENERATION",
             retargetingUse: parsed.retargetingUse ?? "",
             whyThisCreative: parsed.whyThisCreative ?? "",
+            visual_summary: parsed.visual_summary ?? (canUseVision ? "" : "Image not available for analysis"),
+            visible_subjects: parsed.visible_subjects ?? [],
+            analysis_source: analysisSource,
+            visual_confidence: parsed.visual_confidence ?? (canUseVision ? "high" : "low"),
             qualityScore: parsed.qualityScore,
             approvalRecommendation: parsed.approvalRecommendation,
             approvalReason: parsed.approvalReason,
@@ -204,25 +262,39 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
           overallMockMode = false;
         } catch (anthropicErr) {
           console.warn("[/api/creatives/analyze] Anthropic failed, falling back to mock:", anthropicErr);
-          analysis = runCreativeAnalysisAgent(
+          const mockResult = runCreativeAnalysisAgent(
             asset.assetType,
             asset.service,
             asset.approvedForAds ?? false,
             asset.notes
           );
+          analysis = {
+            ...mockResult,
+            visual_summary: "Image not available for analysis",
+            visible_subjects: [],
+            analysis_source: "metadata_only",
+            visual_confidence: "low",
+          };
           assetMockMode = true;
         }
       } else {
         // Mock mode
-        analysis = runCreativeAnalysisAgent(
+        const mockResult = runCreativeAnalysisAgent(
           asset.assetType,
           asset.service,
           asset.approvedForAds ?? false,
           asset.notes
         );
+        analysis = {
+          ...mockResult,
+          visual_summary: "Image not available for analysis",
+          visible_subjects: [],
+          analysis_source: "metadata_only",
+          visual_confidence: "low",
+        };
       }
 
-      // ── 7. Persist analysis to Supabase via notes __META__ ────────────────
+      // ── 8. Persist analysis to Supabase via notes __META__ ────────────────
       let savedToDb = false;
       if (supabase) {
         try {
@@ -271,9 +343,16 @@ Provide a complete strategic analysis for Meta Ads campaign use.`;
       results.push({ assetId: asset.id, analysis, mockMode: assetMockMode, savedToDb });
     } catch (err) {
       console.error(`[/api/creatives/analyze] Error analyzing asset ${asset.id}:`, err);
+      const mockResult = runCreativeAnalysisAgent(asset.assetType, asset.service, false);
       results.push({
         assetId: asset.id,
-        analysis: runCreativeAnalysisAgent(asset.assetType, asset.service, false),
+        analysis: {
+          ...mockResult,
+          visual_summary: "Image not available for analysis",
+          visible_subjects: [],
+          analysis_source: "metadata_only",
+          visual_confidence: "low",
+        },
         mockMode: true,
         savedToDb: false,
         error: "Analysis failed — mock result returned",

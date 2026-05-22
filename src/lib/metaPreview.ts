@@ -15,11 +15,16 @@ export interface MetaCampaignPreview {
 
 export interface MetaAdSetPreview {
   name: string;
+  purpose?: string;
   audience: string;
   locationTargeting: string;
   placements: string[];
   optimizationEvent: string;
   budgetSplit: string;
+  budgetAmount?: string;
+  audienceTemperature?: "cold" | "warm" | "hot";
+  requiredForLaunch?: boolean;
+  launchBlocker?: string;
   status: "PAUSED_PREVIEW_ONLY";
   notes: string;
 }
@@ -36,6 +41,9 @@ export interface MetaAdPreview {
   description: string;
   cta: string;
   placements: string[];
+  adSetAssignment?: string;
+  adSetAudienceTemperature?: "cold" | "warm" | "hot";
+  copyGenerationNote?: string;
   status: "PAUSED_PREVIEW_ONLY";
   notes: string;
 }
@@ -115,9 +123,30 @@ export function buildMetaPreviewPayload(
   };
 
   // ── Ad Sets ───────────────────────────────────────────────────────
+  const richAdSetsRaw = asArr(metaStructure.adSets);
   const adSetNames: string[] = asArr(metaStructure.adSetNames).map((n) => asStr(n));
+
   const adSets: MetaAdSetPreview[] =
-    adSetNames.length > 0
+    richAdSetsRaw.length > 0
+      ? richAdSetsRaw.map((raw) => {
+          const s = asObj(raw);
+          return {
+            name: asStr(s.name),
+            purpose: asStr(s.purpose) || undefined,
+            audience: asStr(s.audience, asStr(metaStructure.audience, draft.market)),
+            locationTargeting: asStr(s.locationTargeting, draft.market),
+            placements: asArr(s.placements).map((p) => asStr(p)).filter(Boolean),
+            optimizationEvent: asStr(s.optimizationEvent, "LEAD"),
+            budgetSplit: asStr(s.budgetSplit, ""),
+            budgetAmount: asStr(s.budgetAmount) || undefined,
+            audienceTemperature: (s.audienceTemperature as "cold" | "warm" | "hot") || undefined,
+            requiredForLaunch: s.requiredForLaunch === true,
+            launchBlocker: asStr(s.launchBlocker) || undefined,
+            status: "PAUSED_PREVIEW_ONLY" as const,
+            notes: "Preview only — not sent to Meta",
+          };
+        })
+      : adSetNames.length > 0
       ? adSetNames.map((name) => ({
           name,
           audience: asStr(metaStructure.audience, draft.market),
@@ -125,7 +154,7 @@ export function buildMetaPreviewPayload(
           placements: asArr(metaStructure.placements).map((p) => asStr(p)).filter(Boolean),
           optimizationEvent: asStr(metaStructure.optimizationEvent, "LEAD"),
           budgetSplit: asStr(metaStructure.budgetSplit, "Even split"),
-          status: "PAUSED_PREVIEW_ONLY",
+          status: "PAUSED_PREVIEW_ONLY" as const,
           notes: "Preview only — not sent to Meta",
         }))
       : [
@@ -162,6 +191,9 @@ export function buildMetaPreviewPayload(
       const variationPlacements = asArr(variation.recommendedPlacement)
         .map((p) => asStr(p))
         .filter(Boolean);
+      const adSetAssignment = asStr(variation.adSetAssignment) || undefined;
+      const adSetAudienceTemperature = (variation.adSetAudienceTemperature as "cold" | "warm" | "hot") || undefined;
+      const copyGenerationNote = asStr(variation.whyThisCopyMatchesCreative) || undefined;
       return {
         name: adName,
         assetId: asStr(variation.assetId) || null,
@@ -174,6 +206,9 @@ export function buildMetaPreviewPayload(
         description: asStr(variation.description, baseDescriptions[0] ?? ""),
         cta: asStr(variation.cta, baseCta),
         placements: variationPlacements.length > 0 ? variationPlacements : basePlacements,
+        adSetAssignment,
+        adSetAudienceTemperature,
+        copyGenerationNote,
         status: "PAUSED_PREVIEW_ONLY",
         notes: "Preview only — not sent to Meta",
       };
@@ -262,6 +297,10 @@ export function buildMetaPreviewPayload(
   const hasLeadForm = !!(leadForm.formName && leadForm.qualificationQuestions.length > 0);
   const hasAdCopy = ads.every((a) => a.primaryTexts.length > 0 && a.headline);
 
+  // Retargeting ad set blocked — any ad set with a launchBlocker and pixel/page missing
+  const retargetingAdSets = adSets.filter((s) => s.launchBlocker);
+  const retargetingBlocked = retargetingAdSets.length > 0 && (!tracking.pixelConnected || !tracking.facebookPageConnected);
+
   const safetyChecklist: SafetyCheckItem[] = [
     {
       label: "Meta Policy Risk",
@@ -327,6 +366,17 @@ export function buildMetaPreviewPayload(
       status: asStr(compliance.smsCompliance).startsWith("COMPLIANT") ? "pass" : "warn",
       detail: asStr(compliance.smsCompliance, "Not assessed"),
     },
+    ...(retargetingAdSets.length > 0
+      ? [
+          {
+            label: "Retargeting Ad Set",
+            status: retargetingBlocked ? ("warn" as const) : ("pass" as const),
+            detail: retargetingBlocked
+              ? `Blocked — connect Meta Pixel + Facebook Page to enable: ${retargetingAdSets.map((s) => s.name).join(", ")}`
+              : `Ready — Pixel + Page connected for: ${retargetingAdSets.map((s) => s.name).join(", ")}`,
+          },
+        ]
+      : []),
   ];
 
   // ── Missing Requirements ──────────────────────────────────────────

@@ -19,7 +19,7 @@ import { KACZMAR_INTELLIGENCE } from "@/lib/clientIntelligence";
 import type { CreativeAsset } from "@/lib/creativeAssets";
 import { runMarketResearchAgent } from "@/lib/agents/marketResearch";
 import { runBuyerPsychologyAgent } from "@/lib/agents/buyerPsychology";
-import { runCreativeAnalysisAgent, buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
+import { runCreativeAnalysisAgent, buildAssetAdVariation, type StoredAssetAnalysis } from "@/lib/agents/creativeAnalysis";
 import type { CreativeAnalysisInput, CreativeAnalysisResult, WeeklyReportInput, WeeklyReportDraft } from "@/lib/ai/prompts";
 
 export function mockTimestamp(): string {
@@ -59,7 +59,9 @@ export function generateMockPlan(
   creativeType: string,
   intelligence?: ClientIntelligence | null,
   selectedAsset?: CreativeAsset | null,
-  selectedAssets?: CreativeAsset[]
+  selectedAssets?: CreativeAsset[],
+  assetNotes?: Record<string, string>,
+  assetAnalyses?: Record<string, StoredAssetAnalysis>
 ): CampaignDraft {
   const budgetNum = parseInt(budget.replace(/[^0-9]/g, "")) || 1500;
   const adSpend = Math.round(budgetNum * 0.85);
@@ -594,12 +596,24 @@ export function generateMockPlan(
     ? [selectedAsset]
     : [];
   const adVariations = allAssets.length > 0
-    ? allAssets.map((a, i) => buildAssetAdVariation(
-        { id: a.id, fileName: a.fileName, assetType: a.assetType, fileType: a.fileType, approvedForAds: a.approvedForAds, notes: a.notes },
-        service,
-        intel,
-        i === 0
-      ))
+    ? allAssets.map((a, i) => {
+        const operatorNote = assetNotes?.[a.id];
+        const storedAnalysis = assetAnalyses?.[a.id] ?? null;
+        return buildAssetAdVariation(
+          {
+            id: a.id,
+            fileName: a.fileName,
+            assetType: a.assetType,
+            fileType: a.fileType,
+            approvedForAds: a.approvedForAds,
+            notes: operatorNote || a.notes,
+          },
+          service,
+          intel,
+          i === 0,
+          storedAnalysis
+        );
+      })
     : undefined;
 
   const createdAt = mockTimestamp();

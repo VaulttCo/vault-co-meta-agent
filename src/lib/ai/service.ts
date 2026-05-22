@@ -19,7 +19,7 @@ import {
   type WeeklyReportInput,
   type WeeklyReportDraft,
 } from "@/lib/ai/prompts";
-import { buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
+import { buildAssetAdVariation, type StoredAssetAnalysis } from "@/lib/agents/creativeAnalysis";
 
 export type { CampaignGenerationInput, CreativeAnalysisInput, CreativeAnalysisResult, WeeklyReportInput, WeeklyReportDraft };
 
@@ -179,7 +179,9 @@ function mockFallback(input: CampaignGenerationInput, notice?: string): Generate
     input.creativeType ?? "",
     input.clientIntelligence ?? null,
     input.selectedAsset ?? null,
-    input.selectedAssets
+    input.selectedAssets,
+    input.assetNotes,
+    input.assetAnalyses
   );
   return { draft, mockMode: true, provider: "mock", notice };
 }
@@ -248,21 +250,25 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
           ? [input.selectedAsset]
           : [];
       return assets.length > 0
-        ? assets.map((a, i) =>
-            buildAssetAdVariation(
+        ? assets.map((a, i) => {
+            const storedAnalysis: StoredAssetAnalysis | null =
+              input.assetAnalyses?.[a.id] ?? null;
+            const operatorNote = input.assetNotes?.[a.id];
+            return buildAssetAdVariation(
               {
                 id: a.id,
                 fileName: a.fileName,
                 assetType: a.assetType,
                 fileType: a.fileType as "image" | "video",
                 approvedForAds: a.approvedForAds,
-                notes: a.notes || undefined,
+                notes: operatorNote || a.notes || undefined,
               },
               input.service,
               input.clientIntelligence ?? null,
-              i === 0
-            )
-          )
+              i === 0,
+              storedAnalysis
+            );
+          })
         : undefined;
     })(),
   };

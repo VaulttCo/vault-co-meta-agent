@@ -942,6 +942,29 @@ alter table public.client_monthly_revenue_snapshots
 
 ---
 
+### Phase 2E — Revenue Dashboard: Stripe Draft Invoice Columns
+
+Adds Stripe invoice tracking columns to `client_monthly_revenue_snapshots`. Run **after** the Phase 2C migration (which added `reviewed_at`).
+
+No invoice is created, sent, finalized, or charged by this migration — it only adds nullable columns for storing Stripe invoice metadata after a human explicitly triggers draft creation via the API.
+
+```sql
+alter table public.client_monthly_revenue_snapshots
+  add column if not exists stripe_invoice_id          text,
+  add column if not exists stripe_invoice_status      text,
+  add column if not exists stripe_invoice_url         text,
+  add column if not exists invoice_draft_created_at   timestamptz;
+```
+
+**Column notes:**
+- `stripe_invoice_id` — Stripe invoice object ID (e.g. `in_1234...`). Null until a draft is explicitly created. Used as a duplicate-creation guard: if non-null, the create-invoice-draft endpoint returns 409.
+- `stripe_invoice_status` — Stripe invoice status at the time of creation (always `"draft"` for Phase 2E). Updated if the snapshot is re-fetched after a Stripe state change.
+- `stripe_invoice_url` — Stripe-hosted invoice URL (read-only admin link). Null until created. Never exposed to end clients.
+- `invoice_draft_created_at` — Server timestamp when the draft was created. Null until then.
+- No `auto_advance`, no `send_invoice`, no finalize. Draft only.
+
+---
+
 ### GHL Sync Phase 2 — Per-Opportunity Pipeline Snapshots
 
 Creates the `ghl_opportunity_snapshots` table. Run in the Supabase SQL editor **after** the `clients` table exists.

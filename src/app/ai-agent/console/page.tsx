@@ -50,7 +50,7 @@ import {
   type AssetType,
 } from "@/lib/creativeAssets";
 import { usePersistedCreativeAssets } from "@/lib/usePersistedCreativeAssets";
-import { buildAssetAdVariation } from "@/lib/agents/creativeAnalysis";
+import { buildAssetAdVariation, type StoredAssetAnalysis } from "@/lib/agents/creativeAnalysis";
 import { getDataProvider } from "@/lib/data/data-provider";
 import { getStorageProvider } from "@/lib/storage/storage-provider";
 import { mimeToFileType } from "@/lib/storage/types";
@@ -67,6 +67,7 @@ import {
   type ComplianceCheck,
   type OptimizationRules,
   type AssetAdVariation,
+  type AdSetDefinition,
 } from "@/lib/planStore";
 
 // ─────────────────────────────────────────────────────────────
@@ -94,7 +95,10 @@ function generateMockPlan(
 ): CampaignDraft {
   const budgetNum = parseInt(budget.replace(/[^0-9]/g, "")) || 1500;
   const adSpend = Math.round(budgetNum * 0.85);
-  const perSetBudget = Math.round(adSpend / 4);
+  const reserveBudget = budgetNum - adSpend;
+  const as1Budget = Math.round(adSpend * 0.5);
+  const as2Budget = Math.round(adSpend * 0.3);
+  const as3Budget = adSpend - as1Budget - as2Budget;
 
   const svc = service.toLowerCase();
   const cat =
@@ -121,15 +125,93 @@ function generateMockPlan(
   const adSetNames = isRoofing
     ? [
         `${market} — Broad Homeowner Prospecting`,
-        `${market} — Storm/Weather Intent`,
-        `${market} — Lookalike 1% (Past Leads)`,
-        `${market} — Retargeting (30-Day Visitors)`,
+        `${market} — Storm & Roof Replacement Intent`,
+        `${market} — Retargeting & Social Proof`,
       ]
     : [
         `${market} — High-Intent Homeowner Prospecting`,
-        `${market} — Home Improvement Interest`,
-        `${market} — Lookalike 1–2% (Past Consultations)`,
-        `${market} — Retargeting (Page Engagers 60 Days)`,
+        `${market} — Home Improvement Decision Intent`,
+        `${market} — Retargeting & Social Proof`,
+      ];
+
+  const adSets: AdSetDefinition[] = isRoofing
+    ? [
+        {
+          name: adSetNames[0],
+          purpose: "Cold prospecting — homeowners with no prior brand exposure",
+          audience: `Homeowners · ${market} ±15mi · Ages 30–65 · Interests: Home Improvement, Homeowners Insurance, Roofing`,
+          locationTargeting: `Primary city: ${market} · Radius: ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels"],
+          budgetSplit: "50% of ad spend",
+          budgetAmount: `$${as1Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "cold",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[1],
+          purpose: "Mid-funnel — homeowners actively researching storm damage or replacement",
+          audience: `${market} ±15mi · Ages 30–65 · Interests: Roof Repair, Storm Damage, Homeowners Insurance Claims`,
+          locationTargeting: `Primary city: ${market} · Radius: ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories"],
+          budgetSplit: "30% of ad spend",
+          budgetAmount: `$${as2Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "warm",
+          requiredForLaunch: false,
+        },
+        {
+          name: adSetNames[2],
+          purpose: "Retargeting — warm audiences who engaged but haven't converted",
+          audience: `Website visitors (30 days) · Video viewers (75%) · Lead form openers · Page engagers (60 days)`,
+          locationTargeting: `Primary city: ${market} · Radius: ±15mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "20% of ad spend",
+          budgetAmount: `$${as3Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "hot",
+          requiredForLaunch: false,
+          launchBlocker: "Requires Meta Pixel + Facebook Page connected to activate retargeting audiences",
+        },
+      ]
+    : [
+        {
+          name: adSetNames[0],
+          purpose: "Cold prospecting — homeowners actively seeking remodeling services",
+          audience: `Homeowners · ${market} ±20mi · Ages 35–65 · HHI $75k+ · Interests: Home Improvement, Interior Design`,
+          locationTargeting: `Primary city: ${market} · Radius: ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Reels", "Instagram Reels"],
+          budgetSplit: "50% of ad spend",
+          budgetAmount: `$${as1Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "cold",
+          requiredForLaunch: true,
+        },
+        {
+          name: adSetNames[1],
+          purpose: "Mid-funnel — homeowners in decision phase for home improvement",
+          audience: `${market} ±20mi · Ages 35–65 · Interests: Kitchen Remodeling, Bathroom Design, Home Renovation`,
+          locationTargeting: `Primary city: ${market} · Radius: ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories"],
+          budgetSplit: "30% of ad spend",
+          budgetAmount: `$${as2Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "warm",
+          requiredForLaunch: false,
+        },
+        {
+          name: adSetNames[2],
+          purpose: "Retargeting — warm audiences who engaged but haven't converted",
+          audience: `Website visitors (30 days) · Video viewers (75%) · Lead form openers · Page engagers (60 days)`,
+          locationTargeting: `Primary city: ${market} · Radius: ±20mi`,
+          placements: ["Facebook Feed", "Instagram Feed", "Facebook Stories", "Instagram Stories"],
+          budgetSplit: "20% of ad spend",
+          budgetAmount: `$${as3Budget}/mo`,
+          optimizationEvent: "LEAD",
+          audienceTemperature: "hot",
+          requiredForLaunch: false,
+          launchBlocker: "Requires Meta Pixel + Facebook Page connected to activate retargeting audiences",
+        },
       ];
 
   const metaStructure: MetaStructure = {
@@ -139,6 +221,7 @@ function generateMockPlan(
         ? "Instant Form (Native Lead Form)"
         : "Link Click → Landing Page",
     adSetNames,
+    adSets,
     audience: isRoofing
       ? `Homeowners · ${market} ±15mi · Ages 30–65 · Home Ownership: Yes · Interests: Home Improvement, Homeowners Insurance, Roofing · Est. reach: 45,000–120,000`
       : `Homeowners · ${market} ±20mi · Ages 35–65 · HHI $75k+ · Interests: Home Improvement, Interior Design, Kitchen & Bath · Est. reach: 30,000–90,000`,
@@ -151,7 +234,7 @@ function generateMockPlan(
       "Facebook Stories",
       "Instagram Stories",
     ],
-    budgetSplit: `Ad Set 1: $${perSetBudget}/mo · Ad Set 2: $${perSetBudget}/mo · Ad Set 3: $${Math.round(perSetBudget * 0.6)}/mo · Ad Set 4: $${Math.round(perSetBudget * 0.4)}/mo · Total: $${adSpend}/mo ad spend`,
+    budgetSplit: `Total: $${budgetNum.toLocaleString()}/mo · Ad spend: $${adSpend}/mo · Reserve: $${reserveBudget}/mo · AS1 Broad (50%): $${as1Budget}/mo · AS2 Intent (30%): $${as2Budget}/mo · AS3 Retargeting (20%): $${as3Budget}/mo`,
     optimizationEvent:
       goal === "Lead Generation"
         ? "LEAD (Meta Instant Form Submit)"
@@ -1234,6 +1317,9 @@ function AICampaignBuilderContent() {
   const [creative, setCreative] = useState("");
   const [creativeNotes, setCreativeNotes] = useState("");
   const [selectedAssets, setSelectedAssets] = useState<CreativeAsset[]>([]);
+  const [assetNotes, setAssetNotes] = useState<Record<string, string>>({});
+  const [assetAnalyses, setAssetAnalyses] = useState<Record<string, StoredAssetAnalysis>>({});
+  const [analyzingAssets, setAnalyzingAssets] = useState<Set<string>>(new Set());
   const [showAssetPicker, setShowAssetPicker] = useState(false);
 
   // Asset drop zone state
@@ -1396,6 +1482,8 @@ function AICampaignBuilderContent() {
           clientIntelligence,
           selectedAsset: selectedAssets[0] ?? null,
           selectedAssets,
+          assetNotes: Object.keys(assetNotes).length > 0 ? assetNotes : undefined,
+          assetAnalyses: Object.keys(assetAnalyses).length > 0 ? assetAnalyses : undefined,
         }),
       });
 
@@ -1415,21 +1503,24 @@ function AICampaignBuilderContent() {
       const plan = generateMockPlan(selectedClient, goal, service, market, budget, creative);
       const fallbackVariations =
         selectedAssets.length > 0
-          ? selectedAssets.map((a, i) =>
-              buildAssetAdVariation(
+          ? selectedAssets.map((a, i) => {
+              const operatorNote = assetNotes[a.id];
+              const storedAnalysis = assetAnalyses[a.id] ?? null;
+              return buildAssetAdVariation(
                 {
                   id: a.id,
                   fileName: a.fileName,
                   assetType: a.assetType,
                   fileType: a.fileType as "image" | "video",
                   approvedForAds: a.approvedForAds,
-                  notes: a.notes || undefined,
+                  notes: operatorNote || a.notes || undefined,
                 },
                 service,
                 clientIntelligence,
-                i === 0
-              )
-            )
+                i === 0,
+                storedAnalysis
+              );
+            })
           : undefined;
       setCurrentPlan({
         ...plan,
@@ -1460,6 +1551,43 @@ function AICampaignBuilderContent() {
     };
     setCurrentPlan(updated);
     saveDraft(updated);
+  }
+
+  async function handleAnalyzeAsset(asset: CreativeAsset) {
+    if (analyzingAssets.has(asset.id)) return;
+    setAnalyzingAssets((prev) => new Set(prev).add(asset.id));
+    try {
+      const res = await fetch("/api/creatives/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assets: [{
+            id: asset.id,
+            assetType: asset.assetType,
+            service: service || asset.assetType,
+            market: market || undefined,
+            notes: assetNotes[asset.id] || asset.notes || undefined,
+            approvedForAds: asset.approvedForAds,
+            fileName: asset.fileName,
+            clientName: selectedClient?.name,
+          }],
+        }),
+      });
+      if (!res.ok) throw new Error(`Analyze API error ${res.status}`);
+      const data = await res.json();
+      const result = data.results?.[0];
+      if (result?.analysis) {
+        setAssetAnalyses((prev) => ({ ...prev, [asset.id]: result.analysis }));
+      }
+    } catch (err) {
+      console.error("Asset analysis failed:", err);
+    } finally {
+      setAnalyzingAssets((prev) => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
+    }
   }
 
   async function sendConsoleMessage() {
@@ -1865,44 +1993,90 @@ function AICampaignBuilderContent() {
 
                 {/* Selected assets list */}
                 {selectedAssets.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {selectedAssets.map((asset, i) => {
                       const color = assetTypeColors[asset.assetType as AssetType] ?? "#6b7a99";
+                      const storedAnalysis = assetAnalyses[asset.id];
+                      const isAnalyzing = analyzingAssets.has(asset.id);
+                      const analysisSource = storedAnalysis?.analysis_source;
+                      const visualConfidence = storedAnalysis?.visual_confidence;
                       return (
-                        <div key={asset.id} className="flex items-center gap-2 px-2.5 py-2 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
-                          <div
-                            className="w-7 h-7 rounded flex-shrink-0 flex items-center justify-center"
-                            style={{ backgroundColor: `${color}15`, border: `1px solid ${color}28` }}
-                          >
-                            {asset.fileType === "video"
-                              ? <Video size={11} style={{ color }} />
-                              : <ImageIcon size={11} style={{ color }} />
-                            }
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-medium text-[var(--t-text)] truncate">{asset.fileName}</span>
-                              {i === 0 && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0081f2]/12 text-[#0081f2] border border-[#0081f2]/20 flex-shrink-0">Primary</span>
-                              )}
-                            </div>
-                            <div className="text-[10px] text-[var(--t-muted)]">
-                              {asset.assetType}
-                              {asset.approvedForAds
-                                ? <span className="ml-1.5 text-[#22c55e]">· Approved</span>
-                                : <span className="ml-1.5 text-[#f59e0b]">· Needs Approval</span>
+                        <div key={asset.id} className="bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg overflow-hidden">
+                          {/* Asset header row */}
+                          <div className="flex items-center gap-2 px-2.5 py-2">
+                            <div
+                              className="w-7 h-7 rounded flex-shrink-0 flex items-center justify-center"
+                              style={{ backgroundColor: `${color}15`, border: `1px solid ${color}28` }}
+                            >
+                              {asset.fileType === "video"
+                                ? <Video size={11} style={{ color }} />
+                                : <ImageIcon size={11} style={{ color }} />
                               }
                             </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-medium text-[var(--t-text)] truncate">{asset.fileName}</span>
+                                {i === 0 && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0081f2]/12 text-[#0081f2] border border-[#0081f2]/20 flex-shrink-0">Primary</span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-[var(--t-muted)]">
+                                {asset.assetType}
+                                {asset.approvedForAds
+                                  ? <span className="ml-1.5 text-[#22c55e]">· Approved</span>
+                                  : <span className="ml-1.5 text-[#f59e0b]">· Needs Approval</span>
+                                }
+                              </div>
+                            </div>
+                            {/* Analysis status badge */}
+                            {isAnalyzing ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 flex items-center gap-1 flex-shrink-0">
+                                <Loader2 size={8} className="animate-spin" />Analyzing…
+                              </span>
+                            ) : analysisSource === "vision" ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 flex-shrink-0">
+                                Vision {visualConfidence === "high" ? "✓" : "~"}
+                              </span>
+                            ) : analysisSource === "metadata_only" ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#6b7a99]/10 text-[#6b7a99] border border-[#6b7a99]/20 flex-shrink-0">
+                                Metadata
+                              </span>
+                            ) : null}
+                            {/* Analyze button */}
+                            {!isAnalyzing && asset.fileType !== "video" && (
+                              <button
+                                onClick={() => handleAnalyzeAsset(asset)}
+                                className="text-[9px] px-1.5 py-0.5 rounded border border-[#c9a84c]/30 text-[#c9a84c] hover:bg-[#c9a84c]/8 transition-colors flex-shrink-0"
+                              >
+                                {storedAnalysis ? "Re-analyze" : "Analyze"}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setSelectedAssets((prev) => prev.filter((a) => a.id !== asset.id));
+                                if (selectedAssets.length === 1) setCreative("");
+                              }}
+                              className="text-[var(--t-dim)] hover:text-[#ef4444] flex-shrink-0 transition-colors"
+                            >
+                              <XCircle size={12} />
+                            </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              setSelectedAssets((prev) => prev.filter((a) => a.id !== asset.id));
-                              if (selectedAssets.length === 1) setCreative("");
-                            }}
-                            className="text-[var(--t-dim)] hover:text-[#ef4444] flex-shrink-0 transition-colors"
-                          >
-                            <XCircle size={12} />
-                          </button>
+                          {/* Visual summary (if analyzed) */}
+                          {storedAnalysis?.visual_summary && storedAnalysis.visual_summary !== "Image not available for analysis" && (
+                            <div className="px-2.5 pb-1.5 border-t border-[var(--t-border)]/40">
+                              <p className="text-[10px] text-[#22c55e]/70 italic leading-snug pt-1.5">{storedAnalysis.visual_summary}</p>
+                            </div>
+                          )}
+                          {/* Per-asset operator notes */}
+                          <div className="px-2.5 pb-2 border-t border-[var(--t-border)]/40">
+                            <textarea
+                              value={assetNotes[asset.id] ?? ""}
+                              onChange={(e) => setAssetNotes((prev) => ({ ...prev, [asset.id]: e.target.value }))}
+                              placeholder="Operator notes for this asset (optional)…"
+                              rows={2}
+                              className="w-full mt-1.5 bg-[var(--t-surface)] border border-[var(--t-border)] rounded px-2 py-1.5 text-[10px] text-[var(--t-text)] placeholder-[var(--t-dim)] resize-none focus:outline-none focus:border-[#c9a84c]/40"
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -2672,9 +2846,24 @@ function AICampaignBuilderContent() {
                                     <p className="text-[10px] text-[var(--t-muted)] leading-snug">{v.complianceNotes}</p>
                                   </div>
                                 </div>
-                                {/* Visual assumption */}
+                                {/* Visual assumption / Vision summary */}
                                 <div className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
-                                  <div className="text-[10px] font-semibold text-[var(--t-dim)] uppercase tracking-wider mb-0.5">Visual Assumption</div>
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <div className="text-[10px] font-semibold text-[var(--t-dim)] uppercase tracking-wider">
+                                      {v.analysisSource === "vision" ? "Vision Summary" : "Visual Assumption"}
+                                    </div>
+                                    {v.analysisSource && (
+                                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                                        v.analysisSource === "vision"
+                                          ? "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20"
+                                          : "bg-[#6b7a99]/10 text-[#6b7a99] border-[#6b7a99]/20"
+                                      }`}>
+                                        {v.analysisSource === "vision"
+                                          ? `Vision · ${v.visualConfidence ?? "medium"} confidence`
+                                          : "Metadata only"}
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-[10px] text-[var(--t-dim)] leading-snug italic">{v.visualAssumption}</p>
                                 </div>
                               </div>

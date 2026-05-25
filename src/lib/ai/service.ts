@@ -33,11 +33,21 @@ function resolveAnthropicKey(): string | undefined {
   return (process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPC_API_KEY)?.trim() || undefined;
 }
 
+export type GenerationFailureStage =
+  | "env"           // API key not configured
+  | "provider_call" // Provider API returned an error (4xx/5xx from Anthropic/OpenAI)
+  | "timeout"       // Fetch aborted after ANTHROPIC_TIMEOUT_MS
+  | "json_parse"    // Provider responded but output was not valid JSON
+  | "unknown";      // Unexpected exception outside normal provider paths
+
 export interface GenerateCampaignResult {
   draft: CampaignDraft;
   mockMode: boolean;
   provider: string;
   notice?: string;
+  // Only present when mockMode=true and the configured provider failed.
+  // Carried through to the route so it can include failureStage in the 502 response.
+  failureStage?: GenerationFailureStage;
 }
 
 export interface ExtractIntelligenceResult {
@@ -91,7 +101,7 @@ export async function generateCampaignDraft(
   if (provider === "anthropic") {
     const apiKey = resolveAnthropicKey();
     if (!apiKey) {
-      return mockFallback(input, "ANTHROPIC_API_KEY is not set — using mock generation.");
+      return mockFallback(input, "ANTHROPIC_API_KEY is not set — using mock generation.", "env");
     }
     try {
       const draft = await callAnthropic(input, apiKey);
@@ -99,12 +109,22 @@ export async function generateCampaignDraft(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
+      // JSON parse failures surface as SyntaxError or Unexpected token/end from JSON.parse()
+      const isJsonParse =
+        !isTimeout &&
+        (msg.includes("SyntaxError") ||
+          msg.includes("Unexpected token") ||
+          msg.includes("Unexpected end") ||
+          msg.includes("JSON"));
       console.error("[AI Service] Anthropic error:", err);
       return mockFallback(
         input,
         isTimeout
           ? "Anthropic timed out (>50s) — using mock fallback. Consider upgrading to Vercel Pro for longer function timeouts."
-          : "Anthropic generation failed — using mock fallback."
+          : isJsonParse
+          ? "Anthropic returned malformed JSON — using mock fallback."
+          : `Anthropic generation failed — ${msg.slice(0, 200)}`,
+        isTimeout ? "timeout" : isJsonParse ? "json_parse" : "provider_call"
       );
     }
   }
@@ -112,14 +132,27 @@ export async function generateCampaignDraft(
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
-      return mockFallback(input, "OPENAI_API_KEY is not set — using mock generation.");
+      return mockFallback(input, "OPENAI_API_KEY is not set — using mock generation.", "env");
     }
     try {
       const draft = await callOpenAI(input, apiKey);
       return { draft, mockMode: false, provider: "openai" };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
+      const isJsonParse =
+        !isTimeout &&
+        (msg.includes("SyntaxError") || msg.includes("Unexpected token") || msg.includes("Unexpected end") || msg.includes("JSON"));
       console.error("[AI Service] OpenAI error:", err);
-      return mockFallback(input, "OpenAI generation failed — using mock fallback.");
+      return mockFallback(
+        input,
+        isTimeout
+          ? "OpenAI timed out (>50s) — using mock fallback."
+          : isJsonParse
+          ? "OpenAI returned malformed JSON — using mock fallback."
+          : `OpenAI generation failed — ${msg.slice(0, 200)}`,
+        isTimeout ? "timeout" : isJsonParse ? "json_parse" : "provider_call"
+      );
     }
   }
 
@@ -179,7 +212,11 @@ export async function extractClientIntelligence(
 // Mock fallbacks
 // ─────────────────────────────────────────────────────────────
 
-function mockFallback(input: CampaignGenerationInput, notice?: string): GenerateCampaignResult {
+function mockFallback(
+  input: CampaignGenerationInput,
+  notice?: string,
+  failureStage?: GenerationFailureStage
+): GenerateCampaignResult {
   const draft = generateMockPlan(
     input.client,
     input.goal,
@@ -193,7 +230,7 @@ function mockFallback(input: CampaignGenerationInput, notice?: string): Generate
     input.assetNotes,
     input.assetAnalyses
   );
-  return { draft, mockMode: true, provider: "mock", notice };
+  return { draft, mockMode: true, provider: "mock", notice, failureStage };
 }
 
 function mockExtractionFallback(clientId: string, summary: string, notice?: string): ExtractIntelligenceResult {

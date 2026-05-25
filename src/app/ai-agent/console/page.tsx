@@ -1556,26 +1556,37 @@ function AICampaignBuilderContent() {
 
       if (!res.ok) {
         // Parse the error body to surface a specific, actionable message.
-        let errMsg = `API error ${res.status}`;
+        // Tag the message with the status so the catch block can classify it.
+        let errMsg = `HTTP ${res.status}:Generation API returned ${res.status}`;
         try {
           const errBody = await res.json() as {
             error?: string;
             sanitizedError?: string;
             missingEnvNames?: string[];
             usingLegacyKeyName?: boolean;
+            failureStage?: string;
           };
+          const stage = errBody.failureStage ? ` [${errBody.failureStage}]` : "";
           if (res.status === 503 && errBody.missingEnvNames?.length) {
-            errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} is missing from your environment variables.`;
-          } else if (res.status === 502 && errBody.sanitizedError) {
-            // Append hint if Vercel has the Anthropic key under a misspelled env var name
+            errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} missing from environment variables.`;
+          } else if (res.status === 502) {
+            // 502 = live provider configured but fell back to mock.
+            // The error field contains a human-readable message; sanitizedError has the raw provider error.
             const legacyHint = errBody.usingLegacyKeyName
-              ? " (Vercel has the key under a misspelled env var name — rename it to ANTHROPIC_API_KEY in Vercel settings)"
+              ? " (key is stored under a misspelled env var name — rename to ANTHROPIC_API_KEY in Vercel settings)"
               : "";
-            errMsg = `502:AI provider call failed: ${errBody.sanitizedError}${legacyHint}`;
+            const detail = errBody.error || errBody.sanitizedError || "Provider call failed";
+            errMsg = `502:${detail}${stage}${legacyHint}`;
+          } else if (res.status === 500) {
+            const detail = errBody.sanitizedError || errBody.error || "Unexpected server error";
+            errMsg = `500:${detail}${stage}`;
           } else if (errBody.error) {
-            errMsg = `${res.status}:${errBody.error}`;
+            errMsg = `HTTP ${res.status}:${errBody.error}${stage}`;
           }
-        } catch { /* ignore parse errors */ }
+        } catch {
+          // Body was not JSON (e.g. Vercel gateway timeout page).
+          // errMsg already contains the status code, which is the most useful info available.
+        }
         throw new Error(errMsg);
       }
 
@@ -1594,14 +1605,37 @@ function AICampaignBuilderContent() {
       setLatestGenerationError(null);
     } catch (err) {
       console.error("Campaign generation failed:", err);
-      const rawMsg = err instanceof Error ? err.message : "";
+      const rawMsg = err instanceof Error ? err.message : String(err);
       let generateErrorMsg: string;
       if (rawMsg.startsWith("503:")) {
+        // Key not configured in Vercel.
         generateErrorMsg = rawMsg.slice(4);
       } else if (rawMsg.startsWith("502:")) {
-        generateErrorMsg = `Live AI provider call failed: ${rawMsg.slice(4)}`;
+        // Live provider configured but call failed — error field has the human message.
+        generateErrorMsg = rawMsg.slice(4);
+      } else if (rawMsg.startsWith("500:")) {
+        // Unexpected server error — sanitizedError from route.
+        generateErrorMsg = `Server error: ${rawMsg.slice(4)}`;
+      } else if (rawMsg.startsWith("HTTP ")) {
+        // Other HTTP errors (400 validation, 504 gateway timeout, etc.)
+        // The status code is included so the operator can look it up.
+        const isGatewayTimeout = rawMsg.includes("504");
+        generateErrorMsg = isGatewayTimeout
+          ? "Generation timed out — the Vercel function exceeded its 60s limit. Fallback draft shown."
+          : `Request failed (${rawMsg.replace("HTTP ", "HTTP ")}) — check Vercel function logs.`;
+      } else if (
+        rawMsg.includes("Failed to fetch") ||
+        rawMsg.includes("NetworkError") ||
+        rawMsg.includes("Load failed") ||
+        rawMsg.includes("fetch")
+      ) {
+        // Browser-level network failure (offline, DNS, CORS, etc.)
+        generateErrorMsg = "Network error — could not connect to the generation API. Check your connection.";
       } else {
-        generateErrorMsg = "Could not reach the generation API — showing mock draft.";
+        // Unknown / unexpected client-side exception.
+        generateErrorMsg = rawMsg
+          ? `Unexpected error: ${rawMsg.slice(0, 200)}`
+          : "Generation failed — unknown error. Check browser console for details.";
       }
       // Client-side fallback to local mock — build adVariations from selectedAssets directly
       const plan = generateMockPlan(selectedClient, goal, service, market, budget, creative);

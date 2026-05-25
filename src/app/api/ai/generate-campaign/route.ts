@@ -67,6 +67,13 @@ export async function POST(req: NextRequest) {
   const hasOpenAIKey = !!(process.env.OPENAI_API_KEY?.trim());
   const runtime = detectRuntime();
 
+  // Approximate request body size from Content-Length header.
+  // Available before body is parsed; used in diagnostics only — key values never appear here.
+  const approximatePayloadSize = (() => {
+    const cl = req.headers.get("content-length");
+    return cl ? parseInt(cl, 10) : null;
+  })();
+
   const providerDiagnostics = {
     providerName: provider,
     hasAIProvider: provider !== "mock",
@@ -74,6 +81,7 @@ export async function POST(req: NextRequest) {
     // Flag if the key was found under the legacy misspelled env var name
     usingLegacyKeyName: provider === "anthropic" ? usingLegacyKeyName : undefined,
     runtime,
+    approximatePayloadSize,
   } as const;
 
   // ── 3. Check: live provider set but API key missing → 503 ────────────────
@@ -85,6 +93,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: "Live AI provider is not configured in Vercel.",
+        failureStage: "env",
         missingEnvNames,
         ...providerDiagnostics,
       },
@@ -97,15 +106,27 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body", failureStage: "parse", ...providerDiagnostics },
+      { status: 400 }
+    );
   }
 
   if (!body.client || !body.service || !body.market || !body.budget || !body.goal) {
     return NextResponse.json(
-      { error: "Missing required fields: client, service, market, budget, goal" },
+      {
+        error: "Missing required fields: client, service, market, budget, goal",
+        failureStage: "parse",
+        ...providerDiagnostics,
+      },
       { status: 400 }
     );
   }
+
+  // Count assets and analyses for diagnostics (never log their content).
+  const assetCount =
+    (body.selectedAssets?.length ?? 0) + (body.selectedAsset ? 1 : 0);
+  const analysisCount = Object.keys(body.assetAnalyses ?? {}).length;
 
   // ── 5. Generate ──────────────────────────────────────────────────────────
   try {
@@ -115,10 +136,20 @@ export async function POST(req: NextRequest) {
     // Means the provider call failed at runtime (wrong model, API error, timeout).
     // Return 502 with a sanitized error so the frontend can show something actionable.
     if ((provider === "anthropic" || provider === "openai") && result.mockMode) {
+      const failureStage = result.failureStage ?? "provider_call";
+      const rawNotice = result.notice ?? "Provider call failed — check Vercel function logs.";
+      // For timeouts: give a clear, actionable message instead of the raw notice.
+      const errorMessage =
+        failureStage === "timeout"
+          ? "Live AI generation timed out (>50s). Vercel Hobby plan has a 60s function limit. Fallback draft shown."
+          : `Live AI provider call failed: ${sanitizeError(rawNotice)}`;
       return NextResponse.json(
         {
-          error: "Live AI provider call failed.",
-          sanitizedError: sanitizeError(result.notice ?? "Provider call failed — check Vercel function logs."),
+          error: errorMessage,
+          sanitizedError: sanitizeError(rawNotice),
+          failureStage,
+          assetCount,
+          analysisCount,
           ...providerDiagnostics,
         },
         { status: 502 }
@@ -131,8 +162,11 @@ export async function POST(req: NextRequest) {
     console.error("[POST /api/ai/generate-campaign] Unexpected error:", err);
     return NextResponse.json(
       {
-        error: "Campaign generation failed.",
+        error: "Campaign generation failed unexpectedly.",
         sanitizedError: sanitizeError(err),
+        failureStage: "unknown",
+        assetCount,
+        analysisCount,
         ...providerDiagnostics,
       },
       { status: 500 }

@@ -1335,7 +1335,15 @@ function AICampaignBuilderContent() {
   const [currentPlan, setCurrentPlan] = useState<CampaignDraft | null>(null);
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
+  // Generation error state — scoped to the current attempt only.
+  // latestGenerationFailed is the authoritative render gate: it is false on mount,
+  // after Reset, at the start of each handleGenerate, and on success. Only the
+  // catch block for the ACTIVE attempt (matching generationAttemptIdRef) sets it true.
+  // This prevents any stale error from a prior attempt surfacing on page load,
+  // after Reset, or after a subsequent successful generation.
+  const generationAttemptIdRef = useRef(0);
+  const [latestGenerationFailed, setLatestGenerationFailed] = useState(false);
+  const [latestGenerationError, setLatestGenerationError] = useState<string | null>(null);
   // mockModeActive: true only when server AI provider IS mock or key is genuinely missing.
   // Generation errors do NOT set this — a failed live generation ≠ mock mode.
   // Cleared by status check when configured:true or by each new generation start.
@@ -1391,13 +1399,14 @@ function AICampaignBuilderContent() {
         if (!status) return;
         if (status.provider !== "mock" && status.configured) {
           // Live provider is correctly configured — record it and clear any stale state.
-          // generateError is cleared here because on mount no generation has run yet,
-          // so any residual error string would be stale and should not show.
+          // Clear any residual generation error state. On mount no generation has
+          // run yet; any non-null value would be stale and must not show.
           setProviderConfigured(true);
           setProviderStatus(status.provider ?? "anthropic");
           setMockModeActive(false);
           setMockModeNotice(null);
-          setGenerateError(null);
+          setLatestGenerationFailed(false);
+          setLatestGenerationError(null);
         } else {
           // Provider is mock or key is missing.
           setProviderConfigured(false);
@@ -1510,12 +1519,16 @@ function AICampaignBuilderContent() {
 
   async function handleGenerate() {
     if (!selectedClient || !goal || !service || !market || !budget) return;
+    // Increment attempt ID first so any in-flight catch block from a prior
+    // attempt can detect it is stale and skip setting the error state.
+    const attemptId = ++generationAttemptIdRef.current;
     setIsGenerating(true);
     setCurrentPlan(null);
-    setGenerateError(null);
-    // Reset per-attempt state before each generation.
-    // mockModeActive: cleared so a new attempt starts clean; status check re-applies if needed.
-    // generationSource: cleared so the live-provider badge shows during generation.
+    // Clear generation error for the new attempt immediately — the red banner
+    // must not show from any prior attempt once a new one begins.
+    setLatestGenerationFailed(false);
+    setLatestGenerationError(null);
+    // Clear other per-attempt state.
     setMockModeActive(false);
     setMockModeNotice(null);
     setGenerationSource(null);
@@ -1576,8 +1589,9 @@ function AICampaignBuilderContent() {
       // Record what produced this draft. providerStatus is NOT touched here —
       // it is the server-configured provider and must not be overwritten by generation.
       setGenerationSource(provider ?? "mock");
-      // Explicit defensive clear: no stale error from a prior failed run alongside a success.
-      setGenerateError(null);
+      // Success: explicitly clear the generation failure state for this attempt.
+      setLatestGenerationFailed(false);
+      setLatestGenerationError(null);
     } catch (err) {
       console.error("Campaign generation failed:", err);
       const rawMsg = err instanceof Error ? err.message : "";
@@ -1617,15 +1631,19 @@ function AICampaignBuilderContent() {
         adVariations: fallbackVariations,
         selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
+      // Only record the failure if this catch belongs to the ACTIVE attempt.
+      // If a newer handleGenerate() call has already started (incrementing
+      // generationAttemptIdRef), this catch is stale and must not overwrite state.
+      if (generationAttemptIdRef.current !== attemptId) return;
+
       // Mark this draft as a local fallback so the banner shows "fallback" not "Anthropic".
       // providerStatus is NOT touched — the server-confirmed provider stays intact, so
       // the live-provider badge continues to show the correct configured provider.
       setGenerationSource("fallback");
-      // Do NOT set mockModeActive here. A generation failure (timeout, 502, network
-      // error) does not mean the AI provider is configured as mock — it means this
-      // specific call failed. The mock banner reflects provider configuration only.
-      // The generateError display (red banner below) already surfaces the failure.
-      setGenerateError(generateErrorMsg);
+      // Set the failure gate — this is the ONLY place that sets latestGenerationFailed=true.
+      // Do NOT set mockModeActive: a generation failure ≠ provider configured as mock.
+      setLatestGenerationFailed(true);
+      setLatestGenerationError(generateErrorMsg);
     } finally {
       setIsGenerating(false);
     }
@@ -1834,7 +1852,7 @@ function AICampaignBuilderContent() {
       {/* AI provider notice — three mutually exclusive states:
           1. mockModeActive=true          → mock config banner (provider=mock or key missing)
           2. live generation succeeded    → "Generated by Veronica" banner (uses generationSource)
-             condition: displayPlan && !generateError && generationSource !== "fallback"
+             condition: displayPlan && !latestGenerationFailed && generationSource !== "fallback"
           3. live provider confirmed,
              no successful live draft yet → live-provider status badge (uses providerStatus)
              condition: providerConfigured=true (else branch)
@@ -1857,7 +1875,7 @@ function AICampaignBuilderContent() {
             </span>
           </div>
         </div>
-      ) : (displayPlan && !generateError && generationSource !== null && generationSource !== "fallback") ? (
+      ) : (displayPlan && !latestGenerationFailed && generationSource !== null && generationSource !== "fallback") ? (
         /* "Generated by Veronica" — only when the most recent generation was a LIVE success */
         <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-xl">
           <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0" />
@@ -1884,16 +1902,22 @@ function AICampaignBuilderContent() {
         </div>
       ) : null}
 
-      {/* Generate error notice — only shown when the error belongs to the currently
-          displayed plan (currentPlan !== null). If the draft was loaded from a URL
-          param or the user reset the form, currentPlan is null and there is no
-          generation attempt to associate an error with. */}
-      {generateError && currentPlan && (
+      {/* Generation error banner — rendered ONLY when latestGenerationFailed is true.
+          latestGenerationFailed is the single authoritative gate:
+          - false on component mount (initial state)
+          - false after /api/ai/status confirms configured
+          - false at the start of every handleGenerate() call
+          - false on success
+          - false after Reset
+          - true ONLY in the catch block for the ACTIVE attempt (matching attemptId)
+          This makes it impossible for an old error to survive across page loads,
+          Reset, new attempts, or URL-param draft displays. */}
+      {latestGenerationFailed && latestGenerationError && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-[var(--t-muted)] leading-snug">
             <span className="text-[#ef4444] font-semibold">Generation error: </span>
-            {generateError}
+            {latestGenerationError}
           </p>
         </div>
       )}
@@ -2395,7 +2419,7 @@ function AICampaignBuilderContent() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                       <button
-                        onClick={() => { setCurrentPlan(null); setPlanResetByUser(true); setGenerateError(null); }}
+                        onClick={() => { setCurrentPlan(null); setPlanResetByUser(true); setLatestGenerationFailed(false); setLatestGenerationError(null); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[var(--t-muted)] border border-[var(--t-border)] rounded-lg hover:text-[var(--t-text)] hover:border-[var(--t-border)] transition-colors"
                       >
                         <RotateCcw size={11} />Reset

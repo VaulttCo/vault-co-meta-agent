@@ -1336,12 +1336,16 @@ function AICampaignBuilderContent() {
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  // mockModeActive: set proactively from /api/ai/status on mount,
-  // then updated by each generation response.
+  // mockModeActive: true only when server AI provider IS mock or key is genuinely missing.
+  // Generation errors do NOT set this — a failed live generation ≠ mock mode.
+  // Cleared by status check when configured:true or by each new generation start.
   // Never derived from build-time env vars — the server's AI_PROVIDER is authoritative.
   const [mockModeActive, setMockModeActive] = useState(false);
   const [mockModeNotice, setMockModeNotice] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<string>("mock");
+  // aiConfigured: null = status check not yet complete; true/false = result.
+  // Used to show the live-provider badge before any generation attempt.
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
 
   // Derived: the plan to display is either a locally generated plan,
   // or the URL-param draft once plans load from localStorage.
@@ -1368,25 +1372,34 @@ function AICampaignBuilderContent() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, isConsoleLoading]);
 
-  // Check server AI provider status on mount so the mock banner shows immediately
-  // when AI_PROVIDER=mock or the API key is missing — before any generation attempt.
+  // Check server AI provider status on mount.
+  // When configured:true  → explicitly clear mock state (fixes stale true from prior sessions).
+  // When configured:false → set mock state so the banner shows before any generation attempt.
   useEffect(() => {
     fetch("/api/ai/status")
       .then((r) => r.ok ? r.json() : null)
       .then((status: { provider?: string; configured?: boolean; usingLegacyKeyName?: boolean } | null) => {
         if (!status) return;
-        if (status.provider === "mock" || !status.configured) {
+        if (status.provider !== "mock" && status.configured) {
+          // Live provider is correctly configured — clear any stale mock state.
+          setAiConfigured(true);
+          setAiProvider(status.provider ?? "anthropic");
+          setMockModeActive(false);
+          setMockModeNotice(null);
+        } else {
+          // Provider is mock or key is missing.
+          setAiConfigured(false);
           setMockModeActive(true);
-          if (status.provider !== "mock" && !status.configured && status.usingLegacyKeyName) {
+          if (status.usingLegacyKeyName) {
             setMockModeNotice(
               "A Vercel env var for the Anthropic key has a misspelled name. Rename it to ANTHROPIC_API_KEY in Vercel settings to enable live generation."
             );
-          } else if (status.provider !== "mock" && !status.configured) {
+          } else if (status.provider !== "mock") {
             setMockModeNotice(
               "ANTHROPIC_API_KEY is missing in Vercel — add it alongside AI_PROVIDER=anthropic to enable live generation."
             );
           } else {
-            // provider=mock: clear any stale notice so default text shows
+            // Intentional mock mode — default banner text is sufficient.
             setMockModeNotice(null);
           }
         }
@@ -1488,6 +1501,9 @@ function AICampaignBuilderContent() {
     setIsGenerating(true);
     setCurrentPlan(null);
     setGenerateError(null);
+    // Reset mock state before each attempt — a new generation supersedes prior errors.
+    // If the server is configured, this clears any stale mockModeActive from a prior failure.
+    setMockModeActive(false);
     setMockModeNotice(null);
     setActiveSection("overview");
 
@@ -1583,7 +1599,10 @@ function AICampaignBuilderContent() {
         adVariations: fallbackVariations,
         selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
-      setMockModeActive(true);
+      // Do NOT set mockModeActive here. A generation failure (timeout, 502, network
+      // error) does not mean the AI provider is in mock mode — it means this specific
+      // call failed. The mock banner reflects provider configuration, not call errors.
+      // The generateError display (red banner below) already surfaces the failure.
       setGenerateError(generateErrorMsg);
     } finally {
       setIsGenerating(false);
@@ -1790,7 +1809,11 @@ function AICampaignBuilderContent() {
         </p>
       </div>
 
-      {/* AI provider notice */}
+      {/* AI provider notice — three mutually exclusive states:
+          1. mockModeActive: provider is mock or key missing → show mock banner
+          2. !mockModeActive + displayPlan: generation succeeded live → show result banner
+          3. !mockModeActive + !displayPlan + aiConfigured: configured but no draft yet → show live status badge
+      */}
       {mockModeActive ? (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#3d4f6e]/20 border border-[#3d4f6e]/40 rounded-xl">
           <AlertCircle size={13} className="text-[var(--t-muted)] flex-shrink-0 mt-0.5" />
@@ -1804,7 +1827,7 @@ function AICampaignBuilderContent() {
             </span>
           </div>
         </div>
-      ) : displayPlan && (
+      ) : displayPlan ? (
         <div className="flex items-center gap-2.5 px-4 py-2.5 bg-[#22c55e]/5 border border-[#22c55e]/20 rounded-xl">
           <CheckCircle2 size={13} className="text-[#22c55e] flex-shrink-0" />
           <p className="text-[12px] text-[#22c55e] flex-1">
@@ -1815,7 +1838,20 @@ function AICampaignBuilderContent() {
             {aiProvider === "anthropic" ? "Live · Claude" : aiProvider === "openai" ? "Live · GPT-4o" : "Live"}
           </span>
         </div>
-      )}
+      ) : aiConfigured === true ? (
+        /* Live status badge — shown before any generation when provider is confirmed live */
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-[#22c55e]/5 border border-[#22c55e]/15 rounded-xl">
+          <CheckCircle2 size={11} className="text-[#22c55e] flex-shrink-0" />
+          <p className="text-[11px] text-[#22c55e] flex-1">
+            <span className="font-semibold">Live AI Provider: </span>
+            {aiProvider === "anthropic" ? "Anthropic Claude (claude-sonnet-4-6)" : aiProvider === "openai" ? "OpenAI GPT-4o" : aiProvider}
+            {" "}— ready to generate
+          </p>
+          <span className="flex-shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 uppercase tracking-wider">
+            Live
+          </span>
+        </div>
+      ) : null}
 
       {/* Generate error notice */}
       {generateError && (

@@ -28,6 +28,7 @@ import {
   MessageSquare,
   BookOpen,
   Repeat2,
+  CalendarCheck,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -235,7 +236,8 @@ export function Sidebar({ onClose }: SidebarProps) {
             <NavLink label="Leaderboard"         href="/revenue-dashboard/leaderboard"      icon={Trophy}     />
             <NavLink label="Forecast Calculator" href="/revenue-dashboard/forecast"         icon={Calculator} />
             <NavLink label="Scenario Modeling"   href="/revenue-dashboard/scenarios"        icon={BarChart3}  />
-            <NavLink label="GHL Revenue Tracker" href="/revenue-dashboard/ghl-tracker"      icon={RefreshCw}  />
+            <NavLink label="GHL Revenue Tracker"  href="/revenue-dashboard/ghl-tracker"        icon={RefreshCw}      />
+            <NavLink label="Monthly Closeout"    href="/revenue-dashboard/monthly-closeout"   icon={CalendarCheck}  />
           </>
         )}
 

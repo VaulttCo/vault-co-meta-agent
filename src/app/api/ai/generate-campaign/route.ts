@@ -159,12 +159,27 @@ export async function POST(req: NextRequest) {
     // ── 5b. Intentional mock (AI_PROVIDER=mock or unset) → 200 ───────────
     return NextResponse.json(result);
   } catch (err) {
-    console.error("[POST /api/ai/generate-campaign] Unexpected error:", err);
+    // generateCampaignDraft should never throw — safeFallback in service.ts handles recovery.
+    // If we reach here, both the provider AND the mock fallback crashed (extremely rare).
+    const sanitizedError = sanitizeError(err);
+    // Extract failureStage from StagedError if available, else "unknown".
+    const failureStage: string =
+      err != null && typeof err === "object" && "stage" in err
+        ? String((err as { stage: unknown }).stage)
+        : "unknown";
+    // Safe diagnostic log — no key values, no full prompts, no URLs.
+    console.error("[generate-campaign] Both provider and fallback failed:", {
+      failureStage,
+      assetCount,
+      analysisCount,
+      hasAdSets: !!(body as { metaStructure?: unknown } | undefined)?.metaStructure,
+      sanitizedError,
+    });
     return NextResponse.json(
       {
-        error: "Campaign generation failed unexpectedly.",
-        sanitizedError: sanitizeError(err),
-        failureStage: "unknown",
+        error: `Campaign generation failed [${failureStage}] — both provider and mock fallback crashed.`,
+        sanitizedError,
+        failureStage,
         assetCount,
         analysisCount,
         ...providerDiagnostics,

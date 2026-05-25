@@ -34,11 +34,14 @@ function resolveAnthropicKey(): string | undefined {
 }
 
 export type GenerationFailureStage =
-  | "env"           // API key not configured
-  | "provider_call" // Provider API returned an error (4xx/5xx from Anthropic/OpenAI)
-  | "timeout"       // Fetch aborted after ANTHROPIC_TIMEOUT_MS
-  | "json_parse"    // Provider responded but output was not valid JSON
-  | "unknown";      // Unexpected exception outside normal provider paths
+  | "env"              // API key not configured
+  | "provider_call"    // Provider API returned a 4xx/5xx error
+  | "timeout"          // Fetch aborted after ANTHROPIC_TIMEOUT_MS
+  | "json_parse"       // Provider responded but JSON.parse() on the text failed
+  | "response_shape"   // Provider returned empty or malformed content structure
+  | "generation_shape" // JSON parsed but resulted in an incomplete/invalid draft object
+  | "asset_mapping"    // buildAssetAdVariation threw processing selected assets
+  | "unknown";         // Unexpected exception outside normal provider paths
 
 export interface GenerateCampaignResult {
   draft: CampaignDraft;
@@ -93,6 +96,56 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = A
 // Campaign generation — main entry point
 // ─────────────────────────────────────────────────────────────
 
+// Classify an error thrown by callAnthropic/callOpenAI/parseAIJson into a stage.
+function classifyStage(err: unknown): GenerationFailureStage {
+  if (err instanceof StagedError) return err.stage;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError")) return "timeout";
+  if (msg.includes("SyntaxError") || msg.includes("Unexpected token") || msg.includes("Unexpected end")) return "json_parse";
+  if (msg.includes("empty content") || msg.includes("response_shape")) return "response_shape";
+  if (msg.includes("asset_mapping") || msg.includes("adVariations")) return "asset_mapping";
+  return "provider_call";
+}
+
+// Safe notice — never includes key material, safe to include in logs and responses.
+function toNotice(err: unknown, prefix: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return `${prefix} — ${msg.slice(0, 300)}`;
+}
+
+// Safe mockFallback wrapper — prevents a crash in generateMockPlan (e.g. missing arrays
+// in AI-extracted intelligence) from propagating out of generateCampaignDraft.
+// If the fallback itself crashes, returns the absolute minimum safe result.
+function safeFallback(
+  input: CampaignGenerationInput,
+  notice: string,
+  stage: GenerationFailureStage
+): GenerateCampaignResult {
+  try {
+    return mockFallback(input, notice, stage);
+  } catch (fallbackErr) {
+    // The mock fallback crashed — try without intelligence (removes the crash risk).
+    const safeInput: CampaignGenerationInput = {
+      client: input.client,
+      service: input.service,
+      market: input.market,
+      budget: input.budget,
+      goal: input.goal,
+      creativeType: input.creativeType,
+      // Omit intelligence and assets — they may have caused the crash.
+    };
+    const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message.slice(0, 200) : String(fallbackErr).slice(0, 200);
+    console.error("[AI Service] Mock fallback crashed — retrying without intelligence:", fallbackMsg);
+    try {
+      return mockFallback(safeInput, `${notice} (fallback crashed: ${fallbackMsg})`, stage);
+    } catch {
+      // Absolute last resort: the mock itself is broken. Throw so the route returns 500
+      // with a clear failureStage instead of a misleading undefined error.
+      throw new StagedError(`Both provider and mock fallback failed at stage "${stage}": ${fallbackMsg}`, stage);
+    }
+  }
+}
+
 export async function generateCampaignDraft(
   input: CampaignGenerationInput
 ): Promise<GenerateCampaignResult> {
@@ -101,58 +154,36 @@ export async function generateCampaignDraft(
   if (provider === "anthropic") {
     const apiKey = resolveAnthropicKey();
     if (!apiKey) {
-      return mockFallback(input, "ANTHROPIC_API_KEY is not set — using mock generation.", "env");
+      return safeFallback(input, "ANTHROPIC_API_KEY is not set — using mock generation.", "env");
     }
     try {
       const draft = await callAnthropic(input, apiKey);
       return { draft, mockMode: false, provider: "anthropic" };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
-      // JSON parse failures surface as SyntaxError or Unexpected token/end from JSON.parse()
-      const isJsonParse =
-        !isTimeout &&
-        (msg.includes("SyntaxError") ||
-          msg.includes("Unexpected token") ||
-          msg.includes("Unexpected end") ||
-          msg.includes("JSON"));
-      console.error("[AI Service] Anthropic error:", err);
-      return mockFallback(
-        input,
-        isTimeout
-          ? "Anthropic timed out (>50s) — using mock fallback. Consider upgrading to Vercel Pro for longer function timeouts."
-          : isJsonParse
-          ? "Anthropic returned malformed JSON — using mock fallback."
-          : `Anthropic generation failed — ${msg.slice(0, 200)}`,
-        isTimeout ? "timeout" : isJsonParse ? "json_parse" : "provider_call"
-      );
+      const stage = classifyStage(err);
+      console.error("[AI Service] Anthropic campaign generation failed:", {
+        stage,
+        errorMessage: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+      });
+      return safeFallback(input, toNotice(err, "Anthropic generation failed"), stage);
     }
   }
 
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
-      return mockFallback(input, "OPENAI_API_KEY is not set — using mock generation.", "env");
+      return safeFallback(input, "OPENAI_API_KEY is not set — using mock generation.", "env");
     }
     try {
       const draft = await callOpenAI(input, apiKey);
       return { draft, mockMode: false, provider: "openai" };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isTimeout = msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError");
-      const isJsonParse =
-        !isTimeout &&
-        (msg.includes("SyntaxError") || msg.includes("Unexpected token") || msg.includes("Unexpected end") || msg.includes("JSON"));
-      console.error("[AI Service] OpenAI error:", err);
-      return mockFallback(
-        input,
-        isTimeout
-          ? "OpenAI timed out (>50s) — using mock fallback."
-          : isJsonParse
-          ? "OpenAI returned malformed JSON — using mock fallback."
-          : `OpenAI generation failed — ${msg.slice(0, 200)}`,
-        isTimeout ? "timeout" : isJsonParse ? "json_parse" : "provider_call"
-      );
+      const stage = classifyStage(err);
+      console.error("[AI Service] OpenAI campaign generation failed:", {
+        stage,
+        errorMessage: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200),
+      });
+      return safeFallback(input, toNotice(err, "OpenAI generation failed"), stage);
     }
   }
 
@@ -289,34 +320,41 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
     creativeIntelligenceUsed: parsed.creativeIntelligenceUsed,
     // Build per-asset variations from the input assets — the AI response never
     // includes these because they're generated deterministically server-side.
+    // Wrapped in try-catch: asset mapping is best-effort.
+    // If buildAssetAdVariation throws (e.g. malformed stored analysis), adVariations
+    // is omitted rather than crashing the entire generation response.
     adVariations: (() => {
-      const assets =
-        input.selectedAssets && input.selectedAssets.length > 0
-          ? input.selectedAssets
-          : input.selectedAsset
-          ? [input.selectedAsset]
-          : [];
-      return assets.length > 0
-        ? assets.map((a, i) => {
-            const storedAnalysis: StoredAssetAnalysis | null =
-              input.assetAnalyses?.[a.id] ?? null;
-            const operatorNote = input.assetNotes?.[a.id];
-            return buildAssetAdVariation(
-              {
-                id: a.id,
-                fileName: a.fileName,
-                assetType: a.assetType,
-                fileType: a.fileType as "image" | "video",
-                approvedForAds: a.approvedForAds,
-                notes: operatorNote || a.notes || undefined,
-              },
-              input.service,
-              input.clientIntelligence ?? null,
-              i === 0,
-              storedAnalysis
-            );
-          })
-        : undefined;
+      try {
+        const assets =
+          input.selectedAssets && input.selectedAssets.length > 0
+            ? input.selectedAssets
+            : input.selectedAsset
+            ? [input.selectedAsset]
+            : [];
+        if (assets.length === 0) return undefined;
+        return assets.map((a, i) => {
+          const storedAnalysis: StoredAssetAnalysis | null =
+            input.assetAnalyses?.[a.id] ?? null;
+          const operatorNote = input.assetNotes?.[a.id];
+          return buildAssetAdVariation(
+            {
+              id: a.id,
+              fileName: a.fileName,
+              assetType: a.assetType,
+              fileType: a.fileType as "image" | "video",
+              approvedForAds: a.approvedForAds,
+              notes: operatorNote || a.notes || undefined,
+            },
+            input.service,
+            input.clientIntelligence ?? null,
+            i === 0,
+            storedAnalysis
+          );
+        });
+      } catch (assetErr) {
+        console.error("[AI Service] adVariations mapping failed — omitting:", assetErr instanceof Error ? assetErr.message : assetErr);
+        return undefined;
+      }
     })(),
   };
 }
@@ -343,6 +381,15 @@ function parseExtractionJson(text: string, clientId: string): ClientIntelligence
 // Haiku is fast enough to complete 4096 tokens within 50s on Vercel Hobby
 // ─────────────────────────────────────────────────────────────
 
+// Tagged error class — lets generateCampaignDraft classify stage without string-matching.
+class StagedError extends Error {
+  stage: GenerationFailureStage;
+  constructor(message: string, stage: GenerationFailureStage) {
+    super(message);
+    this.stage = stage;
+  }
+}
+
 async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
   const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -361,12 +408,23 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
 
   if (!response.ok) {
     const body = await response.text().catch(() => response.statusText);
-    throw new Error(`Anthropic API ${response.status}: ${body}`);
+    throw new StagedError(`Anthropic API ${response.status}: ${body}`, "provider_call");
   }
 
-  const data = await response.json();
-  const text: string = data?.content?.[0]?.text ?? "";
-  if (!text) throw new Error("Anthropic returned empty content");
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new StagedError("Anthropic response was not valid JSON", "response_shape");
+  }
+
+  const text: string = (data as { content?: { text?: string }[] })?.content?.[0]?.text ?? "";
+  if (!text) {
+    throw new StagedError(
+      `Anthropic returned empty content. Response shape: ${JSON.stringify(Object.keys(data as object ?? {})).slice(0, 100)}`,
+      "response_shape"
+    );
+  }
 
   return parseAIJson(text, input);
 }

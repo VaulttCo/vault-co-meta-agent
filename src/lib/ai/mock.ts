@@ -50,6 +50,95 @@ export function mockExtractIntelligence(clientId: string, _summary: string): Cli
 // Mock campaign draft generator
 // ─────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────
+// Intelligence normalizer
+// AI-extracted ClientIntelligence may be missing array fields that are present
+// in the TypeScript interface but absent from the extraction schema sent to the AI.
+// Accessing undefined[0] throws; this guard ensures every array field is at least [].
+// ─────────────────────────────────────────────────────────────
+
+function normalizeIntel(raw: ClientIntelligence | null): ClientIntelligence | null {
+  if (!raw) return null;
+  const a = <T>(v: T[] | undefined | null): T[] => (Array.isArray(v) ? v : []);
+  return {
+    ...raw,
+    serviceArea: {
+      ...raw.serviceArea,
+      cities: a(raw.serviceArea?.cities),
+      bestNeighborhoods: a(raw.serviceArea?.bestNeighborhoods),
+      targetZips: a(raw.serviceArea?.targetZips),
+    },
+    targetMarket: {
+      ...raw.targetMarket,
+      occupations: a(raw.targetMarket?.occupations),
+      preferredJobTypes: a(raw.targetMarket?.preferredJobTypes),
+    },
+    buyerProfile: {
+      ...raw.buyerProfile,
+      trustTriggers: a(raw.buyerProfile?.trustTriggers),
+      commonObjections: a(raw.buyerProfile?.commonObjections),
+      commonFears: a(raw.buyerProfile?.commonFears),
+      buyingMotivations: a(raw.buyerProfile?.buyingMotivations),
+      urgencyTriggers: a(raw.buyerProfile?.urgencyTriggers),
+      whyTheyChoose: a(raw.buyerProfile?.whyTheyChoose),
+      reasonsTheyDelay: a(raw.buyerProfile?.reasonsTheyDelay),
+    },
+    marketResearch: {
+      ...raw.marketResearch,
+      mainCompetitors: a(raw.marketResearch?.mainCompetitors),
+      competitorStrengths: a(raw.marketResearch?.competitorStrengths),
+      competitorWeaknesses: a(raw.marketResearch?.competitorWeaknesses),
+      opportunities: a(raw.marketResearch?.opportunities),
+      risks: a(raw.marketResearch?.risks),
+      serviceAreas: a(raw.marketResearch?.serviceAreas),
+      highValueNeighborhoods: a(raw.marketResearch?.highValueNeighborhoods),
+    },
+    offerIntelligence: {
+      ...raw.offerIntelligence,
+      guarantees: a(raw.offerIntelligence?.guarantees),
+      proofPoints: a(raw.offerIntelligence?.proofPoints),
+      secondaryOffers: a(raw.offerIntelligence?.secondaryOffers),
+      servicePriorities: a(raw.offerIntelligence?.servicePriorities),
+      mostProfitableServices: a(raw.offerIntelligence?.mostProfitableServices),
+      jobsTheyWantMore: a(raw.offerIntelligence?.jobsTheyWantMore),
+      jobsTheyWantLess: a(raw.offerIntelligence?.jobsTheyWantLess),
+    },
+    salesIntelligence: {
+      ...raw.salesIntelligence,
+      // testimonials is in the TypeScript interface but NOT in the AI extraction schema.
+      // It will always be undefined for AI-extracted intelligence.
+      testimonials: a(raw.salesIntelligence?.testimonials),
+      bestSalesAngles: a(raw.salesIntelligence?.bestSalesAngles),
+      worstFitLeads: a(raw.salesIntelligence?.worstFitLeads),
+      commonObjections: a(raw.salesIntelligence?.commonObjections),
+      objectionResponses: a(raw.salesIntelligence?.objectionResponses),
+      faqs: a(raw.salesIntelligence?.faqs),
+      pastClientWins: a(raw.salesIntelligence?.pastClientWins),
+      reviewHighlights: a(raw.salesIntelligence?.reviewHighlights),
+    },
+    brandIntelligence: {
+      ...raw.brandIntelligence,
+      whyCustomersTrust: a(raw.brandIntelligence?.whyCustomersTrust),
+      whatNotToSay: a(raw.brandIntelligence?.whatNotToSay),
+      complianceNotes: a(raw.brandIntelligence?.complianceNotes),
+    },
+    contentPlanning: {
+      ...raw.contentPlanning,
+      recommendedContentThemes: a(raw.contentPlanning?.recommendedContentThemes),
+    },
+    campaignImplications: {
+      ...raw.campaignImplications,
+      bestCampaignAngles: a(raw.campaignImplications?.bestCampaignAngles),
+      servicesToPrioritize: a(raw.campaignImplications?.servicesToPrioritize),
+      offersToTest: a(raw.campaignImplications?.offersToTest),
+      creativeFormats: a(raw.campaignImplications?.creativeFormats),
+      leadFormQuestions: a(raw.campaignImplications?.leadFormQuestions),
+      followUpStrategy: a(raw.campaignImplications?.followUpStrategy),
+      whatNotToSay: a(raw.campaignImplications?.whatNotToSay),
+    },
+  };
+}
+
 export function generateMockPlan(
   client: Client,
   goal: string,
@@ -82,7 +171,9 @@ export function generateMockPlan(
       : "construction";
 
   const isRoofing = cat === "roofing";
-  const intel = intelligence ?? null;
+  // Normalize intelligence before any access — AI-extracted intel may be missing array
+  // fields that are present in the TypeScript interface but absent from the extraction schema.
+  const intel = normalizeIntel(intelligence ?? null);
   const hasIntel = !!intel;
 
   // Run agents eagerly so their output is available throughout (creativeDirection, rationale, etc.)

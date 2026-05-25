@@ -979,7 +979,7 @@ export default function GhlTrackerPage() {
                             onClick={() => handleOpenPanel(client.id)}
                             className="mt-1.5 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded transition-opacity hover:opacity-80"
                             style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
-                            <Settings size={8} /> Configure GHL
+                            <Settings size={8} /> Configure
                           </button>
                         )}
                       </td>
@@ -1471,7 +1471,7 @@ export default function GhlTrackerPage() {
                               border: `1px solid ${openPanel === client.id ? GOLD_BORDER : "rgba(61,79,110,0.12)"}`,
                             }}>
                             <Settings size={9} />
-                            {openPanel === client.id ? "Close" : "GHL Settings"}
+                            {openPanel === client.id ? "Close" : "Settings"}
                           </button>
                         </div>
                       </td>
@@ -1492,7 +1492,7 @@ export default function GhlTrackerPage() {
                                   <Settings size={13} style={{ color: GOLD }} />
                                   <span className="text-[12px] font-bold"
                                     style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: GOLD }}>
-                                    GHL Revenue Settings — {client.name}
+                                    Client Revenue Settings — {client.name}
                                   </span>
                                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full"
                                     style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
@@ -1737,8 +1737,8 @@ export default function GhlTrackerPage() {
                                   <div className="pt-2">
                                     <p className="text-[9px] leading-relaxed" style={{ color: "rgba(107,122,153,0.45)" }}>
                                       GHL credentials (API keys) are stored encrypted server-side and never shown here.
-                                      To add or update credentials, use the Integrations tab in Client Settings.
-                                      This panel saves pipeline ID, location override, start date, and notes to Revenue Settings only.
+                                      To add or update GHL credentials, use the Integrations tab in Client Settings.
+                                      This panel saves GHL pipeline ID, location override, Stripe Customer ID, billing start date, and notes to Revenue Settings only. No Stripe API is called when saving.
                                     </p>
                                   </div>
                                 </div>

@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Loader2,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
@@ -72,7 +73,7 @@ function MetaPayloadPreviewModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<MetaPreviewPayload | null>(null);
-  const [activeTab, setActiveTab] = useState<"campaign" | "ads" | "lead_form" | "tracking" | "safety">("campaign");
+  const [activeTab, setActiveTab] = useState<"campaign" | "ads" | "lead_form" | "tracking" | "safety" | "push_readiness">("campaign");
 
   useEffect(() => {
     setLoading(true);
@@ -89,6 +90,7 @@ function MetaPayloadPreviewModal({
     { id: "lead_form" as const, label: "Lead Form" },
     { id: "tracking" as const, label: "Tracking" },
     { id: "safety" as const, label: "Safety" },
+    { id: "push_readiness" as const, label: "Push Readiness" },
   ];
 
   const passCount = payload?.safetyChecklist.filter((c) => c.status === "pass").length ?? 0;
@@ -561,6 +563,233 @@ function MetaPayloadPreviewModal({
                   )}
                 </div>
               )}
+
+              {/* ── Push Readiness Gate tab ── */}
+              {activeTab === "push_readiness" && (() => {
+                // ── Compute each gate check from payload data ─────────────────
+                const draftApproved = ["approved", "ready_for_meta", "pushed_paused", "live"].includes(payload.draftStatus);
+                const hasAds = payload.ads.length > 0;
+                const allCreativesApproved = hasAds && payload.ads.every((a) => a.approvedForAds);
+                const adAccountConnected = payload.tracking.adAccountConnected;
+                const pixelConnected = payload.tracking.pixelConnected;
+                const pageConnected = payload.tracking.facebookPageConnected;
+                const leadFormComplete =
+                  payload.leadForm.qualificationQuestions.length > 0 &&
+                  !!payload.leadForm.consentLanguage;
+                const noComplianceBlockers =
+                  !payload.missingRequirements.some((r) =>
+                    r.toLowerCase().includes("policy risk") || r.toLowerCase().includes("disallowed phrase")
+                  );
+                const noHighRisk = !payload.safetyChecklist.some(
+                  (c) => c.status === "fail" && c.label.toLowerCase().includes("risk")
+                );
+                const previewExists = true; // We are inside the modal — preview was built.
+
+                type GateStatus = "pass" | "fail" | "warn" | "unknown";
+                interface GateCheck {
+                  label: string;
+                  status: GateStatus;
+                  detail: string;
+                  manualOnly?: boolean;
+                }
+
+                const checks: GateCheck[] = [
+                  {
+                    label: "Campaign Draft Approved",
+                    status: draftApproved ? "pass" : "fail",
+                    detail: draftApproved
+                      ? `Status: ${payload.draftStatus}`
+                      : `Draft must be approved before push. Current status: ${payload.draftStatus}`,
+                  },
+                  {
+                    label: "All Creative Assets Approved for Ads",
+                    status: !hasAds ? "warn" : allCreativesApproved ? "pass" : "fail",
+                    detail: !hasAds
+                      ? "No ad variations found in draft — add creatives first."
+                      : allCreativesApproved
+                      ? `${payload.ads.length} ad variation${payload.ads.length !== 1 ? "s" : ""} — all approved for Meta ads.`
+                      : `${payload.ads.filter((a) => !a.approvedForAds).length} of ${payload.ads.length} creative(s) not yet approved. Review in Creative Library.`,
+                  },
+                  {
+                    label: "Meta Ad Account Connected",
+                    status: adAccountConnected ? "pass" : "fail",
+                    detail: adAccountConnected
+                      ? `Ad Account: ${payload.tracking.adAccountId ?? "connected"}`
+                      : "Connect Meta Ad Account in Integrations settings.",
+                  },
+                  {
+                    label: "Meta Pixel Confirmed",
+                    status: pixelConnected ? "pass" : "fail",
+                    detail: pixelConnected
+                      ? `Pixel ID: ${payload.tracking.pixelId ?? "confirmed"}`
+                      : "Add Meta Pixel ID to the Meta integration settings.",
+                  },
+                  {
+                    label: "Facebook Page Connected",
+                    status: pageConnected ? "pass" : "fail",
+                    detail: pageConnected
+                      ? `Page ID: ${payload.tracking.facebookPageId ?? "connected"}`
+                      : "Add Facebook Page ID to the Meta integration settings.",
+                  },
+                  {
+                    label: "Lead Form Configured",
+                    status: leadFormComplete ? "pass" : "fail",
+                    detail: leadFormComplete
+                      ? `${payload.leadForm.qualificationQuestions.length} qualification question(s) — consent language present.`
+                      : "Lead form missing qualification questions or consent language. Complete in Campaign Builder.",
+                  },
+                  {
+                    label: "No Compliance Blockers",
+                    status: noComplianceBlockers ? "pass" : "fail",
+                    detail: noComplianceBlockers
+                      ? "No compliance or policy-risk blockers detected."
+                      : "Compliance blocker detected. Review the Safety tab and resolve all HIGH-risk flags.",
+                  },
+                  {
+                    label: "No HIGH Policy Risk Phrases",
+                    status: noHighRisk ? "pass" : "warn",
+                    detail: noHighRisk
+                      ? "Ad copy passed policy phrase scan."
+                      : "One or more ad copy items flagged. Review Safety tab.",
+                  },
+                  {
+                    label: "Meta Payload Preview Generated",
+                    status: previewExists ? "pass" : "fail",
+                    detail: "Preview payload built successfully — campaign structure, ad sets, ads, lead form, and tracking are all defined.",
+                  },
+                  {
+                    label: "GHL Follow-up Sequence Verified",
+                    status: "warn",
+                    detail: "Manual verification required. Confirm the GHL automation sequence is live and a test lead has been submitted before any Meta push.",
+                    manualOnly: true,
+                  },
+                  {
+                    label: "Human Operator Confirmation",
+                    status: "unknown",
+                    detail: "An authorized operator must manually unlock push actions. This cannot be automated.",
+                    manualOnly: true,
+                  },
+                ];
+
+                const passCount = checks.filter((c) => c.status === "pass").length;
+                const failCount = checks.filter((c) => c.status === "fail").length;
+                const allCriticalPass = failCount === 0;
+
+                return (
+                  <div className="space-y-3">
+
+                    {/* Gate header */}
+                    <div
+                      className="rounded-xl p-4"
+                      style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock size={12} className="text-[#c9a84c]" />
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-[#c9a84c]">
+                          Meta Push Readiness Gate
+                        </span>
+                        <span
+                          className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+                          style={{
+                            color: allCriticalPass ? "#22c55e" : "#ef4444",
+                            backgroundColor: allCriticalPass ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+                            borderColor: allCriticalPass ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)",
+                          }}
+                        >
+                          {passCount}/{checks.length} pass
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--t-muted)" }}>
+                        All conditions below must be confirmed before Meta push is available.
+                        This gate is <span className="font-semibold text-[#c9a84c]">read-only</span> — it validates the current state without making any API calls or writes.
+                      </p>
+                    </div>
+
+                    {/* Checklist */}
+                    {checks.map((check, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2.5 rounded-lg px-3 py-2.5"
+                        style={{
+                          backgroundColor: "var(--t-surface-2)",
+                          border: `1px solid ${
+                            check.status === "pass" ? "rgba(34,197,94,0.18)" :
+                            check.status === "fail" ? "rgba(239,68,68,0.18)" :
+                            check.status === "warn" ? "rgba(245,158,11,0.18)" :
+                            "rgba(107,122,153,0.18)"
+                          }`,
+                        }}
+                      >
+                        {check.status === "pass" && <CheckCircle size={11} className="text-[#22c55e] flex-shrink-0 mt-0.5" />}
+                        {check.status === "fail" && <XCircle size={11} className="text-[#ef4444] flex-shrink-0 mt-0.5" />}
+                        {check.status === "warn" && <AlertTriangle size={11} className="text-[#f59e0b] flex-shrink-0 mt-0.5" />}
+                        {check.status === "unknown" && <Lock size={11} className="flex-shrink-0 mt-0.5" style={{ color: "var(--t-dim)" }} />}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span
+                              className="text-[11px] font-semibold"
+                              style={{
+                                color: check.status === "pass" ? "#22c55e" :
+                                       check.status === "fail" ? "#ef4444" :
+                                       check.status === "warn" ? "#f59e0b" :
+                                       "var(--t-muted)",
+                              }}
+                            >
+                              {check.label}
+                            </span>
+                            {check.manualOnly && (
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider"
+                                style={{ backgroundColor: "rgba(107,122,153,0.12)", color: "var(--t-dim)", border: "1px solid rgba(107,122,153,0.2)" }}
+                              >
+                                Manual
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px]" style={{ color: "var(--t-muted)" }}>{check.detail}</div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Disabled Push Placeholder */}
+                    <div
+                      className="rounded-xl p-5 mt-2"
+                      style={{ backgroundColor: "rgba(42,46,66,0.35)", border: "1px solid rgba(42,46,66,0.6)" }}
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lock size={13} style={{ color: "var(--t-dim)" }} />
+                        <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "var(--t-dim)" }}>
+                          Push to Meta — Not Available
+                        </span>
+                      </div>
+                      <p className="text-[11px] mb-4 leading-relaxed" style={{ color: "var(--t-muted)" }}>
+                        Meta push is not available in this build. This readiness gate prepares the future
+                        <span className="font-semibold text-[#c9a84c]"> paused-push workflow</span>.
+                        When the push action is implemented, it will only create campaigns in{" "}
+                        <span className="font-mono text-[#f59e0b]">PAUSED</span> status and will require all
+                        checks above to pass plus an explicit operator unlock.
+                      </p>
+                      <button
+                        disabled
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold cursor-not-allowed"
+                        style={{
+                          backgroundColor: "rgba(42,46,66,0.5)",
+                          border: "1px solid rgba(42,46,66,0.8)",
+                          color: "var(--t-dim)",
+                          opacity: 0.5,
+                        }}
+                      >
+                        <Lock size={12} />
+                        Push to Meta (Paused) — Locked
+                      </button>
+                      <p className="text-[10px] text-center mt-2" style={{ color: "var(--t-dim)" }}>
+                        No Meta API calls are made. No data is sent. This is a planning-only gate.
+                      </p>
+                    </div>
+
+                  </div>
+                );
+              })()}
 
             </div>
 

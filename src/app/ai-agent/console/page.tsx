@@ -1390,11 +1390,14 @@ function AICampaignBuilderContent() {
       .then((status: { provider?: string; configured?: boolean; usingLegacyKeyName?: boolean } | null) => {
         if (!status) return;
         if (status.provider !== "mock" && status.configured) {
-          // Live provider is correctly configured — record it and clear any stale mock state.
+          // Live provider is correctly configured — record it and clear any stale state.
+          // generateError is cleared here because on mount no generation has run yet,
+          // so any residual error string would be stale and should not show.
           setProviderConfigured(true);
           setProviderStatus(status.provider ?? "anthropic");
           setMockModeActive(false);
           setMockModeNotice(null);
+          setGenerateError(null);
         } else {
           // Provider is mock or key is missing.
           setProviderConfigured(false);
@@ -1881,8 +1884,11 @@ function AICampaignBuilderContent() {
         </div>
       ) : null}
 
-      {/* Generate error notice */}
-      {generateError && (
+      {/* Generate error notice — only shown when the error belongs to the currently
+          displayed plan (currentPlan !== null). If the draft was loaded from a URL
+          param or the user reset the form, currentPlan is null and there is no
+          generation attempt to associate an error with. */}
+      {generateError && currentPlan && (
         <div className="flex items-start gap-2.5 px-4 py-3 bg-[#ef4444]/5 border border-[#ef4444]/20 rounded-xl">
           <AlertCircle size={13} className="text-[#ef4444] flex-shrink-0 mt-0.5" />
           <p className="text-[12px] text-[var(--t-muted)] leading-snug">
@@ -2389,7 +2395,7 @@ function AICampaignBuilderContent() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                       <button
-                        onClick={() => { setCurrentPlan(null); setPlanResetByUser(true); }}
+                        onClick={() => { setCurrentPlan(null); setPlanResetByUser(true); setGenerateError(null); }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-[var(--t-muted)] border border-[var(--t-border)] rounded-lg hover:text-[var(--t-text)] hover:border-[var(--t-border)] transition-colors"
                       >
                         <RotateCcw size={11} />Reset

@@ -152,6 +152,7 @@ export default function GhlTrackerPage() {
     ghlPipelineId: string;
     ghlLocationId: string;
     recurringBillingStartDate: string;
+    stripeCustomerId: string;
     notes: string;
   }>>({});
 
@@ -451,6 +452,7 @@ export default function GhlTrackerPage() {
           ghlPipelineId:            s?.ghlPipelineId ?? "",
           ghlLocationId:            s?.ghlLocationId ?? "",
           recurringBillingStartDate: s?.recurringBillingStartDate ?? "",
+          stripeCustomerId:         s?.stripeCustomerId ?? "",
           notes:                    s?.notes ?? "",
         },
       }));
@@ -476,6 +478,7 @@ export default function GhlTrackerPage() {
           ghlPipelineId:             form.ghlPipelineId.trim() || null,
           ghlLocationId:             form.ghlLocationId.trim() || null,
           recurringBillingStartDate: form.recurringBillingStartDate || null,
+          stripeCustomerId:          form.stripeCustomerId.trim() || null,
           notes:                     form.notes.trim() || null,
         }),
       });
@@ -493,6 +496,7 @@ export default function GhlTrackerPage() {
             ghlPipelineId:            s.ghlPipelineId ?? "",
             ghlLocationId:            s.ghlLocationId ?? "",
             recurringBillingStartDate: s.recurringBillingStartDate ?? "",
+            stripeCustomerId:         s.stripeCustomerId ?? "",
             notes:                    s.notes ?? "",
           },
         }));
@@ -888,6 +892,7 @@ export default function GhlTrackerPage() {
                 pipelineClients.map((client) => {
                   const clientSettings   = settingsMap[client.id];
                   const isOn             = clientSettings?.recurringBillingActive ?? false;
+                  const stripeCustomerId = clientSettings?.stripeCustomerId ?? null;
                   const isSaving         = savingToggle[client.id] ?? false;
                   const isSnapshotSaving = savingSnapshot[client.id] ?? false;
                   const isGhlSaving      = savingGhl[client.id] ?? false;
@@ -924,7 +929,7 @@ export default function GhlTrackerPage() {
                   const displayReviewStatus = ghlSnapshot?.reviewStatus ?? manualSnapshot?.reviewStatus ?? null;
 
                   // Settings panel state for this client
-                  const defaultForm = { ghlPipelineId: "", ghlLocationId: "", recurringBillingStartDate: "", notes: "" };
+                  const defaultForm = { ghlPipelineId: "", ghlLocationId: "", recurringBillingStartDate: "", stripeCustomerId: "", notes: "" };
                   const form         = panelForm[client.id] ?? defaultForm;
                   const isSavingPanel = panelSaving[client.id] ?? false;
                   const panelErr     = panelError[client.id] ?? null;
@@ -1269,16 +1274,34 @@ export default function GhlTrackerPage() {
                                 )}
                                 {st === "locked" && (
                                   <>
+                                    {/* Stripe Customer status */}
+                                    {stripeCustomerId ? (
+                                      <div className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#a78bfa" }}>
+                                        <CheckCircle2 size={9} /> Stripe Customer Connected
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-0.5">
+                                        <div className="text-[9px] font-semibold" style={{ color: "#f59e0b" }}>
+                                          Stripe Customer Required
+                                        </div>
+                                        <div className="text-[9px] leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                          Add a Stripe Customer ID in GHL Settings to enable draft invoices.
+                                        </div>
+                                      </div>
+                                    )}
                                     {!manualSnapshot.stripeInvoiceId ? (
                                       <div className="flex flex-col gap-1">
                                         <button
                                           onClick={() => void handleCreateInvoiceDraft(sid, client.id, "manual")}
-                                          disabled={invoiceSaving[sid]}
-                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                          disabled={invoiceSaving[sid] || !stripeCustomerId}
+                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                                           style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.20)" }}>
                                           {invoiceSaving[sid] && <Loader2 size={9} className="animate-spin" />}
                                           {invoiceSaving[sid] ? "Creating…" : "Create Draft Invoice"}
                                         </button>
+                                        <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.4)" }}>
+                                          Draft invoices only · No invoice will be sent or charged automatically.
+                                        </div>
                                         {invoiceErrors[sid] && (
                                           <div className="text-[9px] leading-snug" style={{ color: "#ef4444" }}>
                                             {invoiceErrors[sid]}
@@ -1367,16 +1390,34 @@ export default function GhlTrackerPage() {
                                 )}
                                 {st === "locked" && (
                                   <>
+                                    {/* Stripe Customer status */}
+                                    {stripeCustomerId ? (
+                                      <div className="flex items-center gap-1 text-[9px] font-semibold" style={{ color: "#a78bfa" }}>
+                                        <CheckCircle2 size={9} /> Stripe Customer Connected
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-0.5">
+                                        <div className="text-[9px] font-semibold" style={{ color: "#f59e0b" }}>
+                                          Stripe Customer Required
+                                        </div>
+                                        <div className="text-[9px] leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                          Add a Stripe Customer ID in GHL Settings to enable draft invoices.
+                                        </div>
+                                      </div>
+                                    )}
                                     {!ghlSnapshot.stripeInvoiceId ? (
                                       <div className="flex flex-col gap-1">
                                         <button
                                           onClick={() => void handleCreateInvoiceDraft(sid, client.id, "ghl")}
-                                          disabled={invoiceSaving[sid]}
-                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 whitespace-nowrap"
+                                          disabled={invoiceSaving[sid] || !stripeCustomerId}
+                                          className="flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                                           style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.20)" }}>
                                           {invoiceSaving[sid] && <Loader2 size={9} className="animate-spin" />}
                                           {invoiceSaving[sid] ? "Creating…" : "Create Draft Invoice"}
                                         </button>
+                                        <div className="text-[9px]" style={{ color: "rgba(107,122,153,0.4)" }}>
+                                          Draft invoices only · No invoice will be sent or charged automatically.
+                                        </div>
                                         {invoiceErrors[sid] && (
                                           <div className="text-[9px] leading-snug" style={{ color: "#ef4444" }}>
                                             {invoiceErrors[sid]}
@@ -1545,6 +1586,32 @@ export default function GhlTrackerPage() {
                                     />
                                   </div>
 
+                                  {/* Stripe Customer ID */}
+                                  <div>
+                                    <label className="text-[10px] font-bold block mb-1"
+                                      style={{ color: "var(--t-dim)" }}>
+                                      Stripe Customer ID
+                                      <span className="ml-2 text-[9px] font-normal" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                        Required for draft invoice creation
+                                      </span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={form.stripeCustomerId}
+                                      onChange={(e) => setPanelForm((prev) => ({ ...prev, [client.id]: { ...(prev[client.id] ?? defaultForm), stripeCustomerId: e.target.value } }))}
+                                      placeholder="cus_…"
+                                      className="w-full px-3 py-2 rounded-lg text-[12px] font-mono bg-transparent outline-none"
+                                      style={{
+                                        backgroundColor: form.stripeCustomerId ? "rgba(167,139,250,0.04)" : "rgba(0,129,242,0.04)",
+                                        border: `1px solid ${form.stripeCustomerId ? "rgba(167,139,250,0.25)" : "rgba(61,79,110,0.25)"}`,
+                                        color: "var(--t-text)",
+                                      }}
+                                    />
+                                    <p className="text-[9px] mt-1 leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
+                                      Use a Stripe test customer ID first. This enables draft invoice creation only. No invoice will be sent or charged automatically.
+                                    </p>
+                                  </div>
+
                                   {/* Notes */}
                                   <div>
                                     <label className="text-[10px] font-bold block mb-1"
@@ -1625,6 +1692,14 @@ export default function GhlTrackerPage() {
                                       note: canPreviewGHL
                                         ? "Click Preview GHL to fetch Closed Won revenue"
                                         : (ghlStatus?.missingReason ?? "Connect GHL credentials first"),
+                                    },
+                                    {
+                                      label: "Stripe Customer",
+                                      value: stripeCustomerId ? "Connected" : "Required",
+                                      color: stripeCustomerId ? "#a78bfa" : "#f59e0b",
+                                      note: stripeCustomerId
+                                        ? `${stripeCustomerId.slice(0, 12)}… · Draft invoices only`
+                                        : "Add a Stripe Customer ID above to enable draft invoice creation",
                                     },
                                     ...(previewDebug?.locationIdMasked ? [{
                                       label: "Location (masked)",

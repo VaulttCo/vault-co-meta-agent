@@ -337,11 +337,11 @@ export function BillingEmptyState() {
             Actual Revenue Tracking Requires Connected Billing Data
           </div>
           <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-dim)" }}>
-            Connect Stripe, Square, or manual invoice records to activate collected revenue, outstanding balances, and payout reporting.
-            All figures on this dashboard are projections and estimates based on the Vault Co offer structure — no actual collected revenue is shown until billing is connected.
+            Connect Stripe or manual invoice records to activate invoiced amounts, outstanding balances, and payout reporting.
+            All figures on this dashboard are projections and estimates based on the Vault Co offer structure — no invoiced or confirmed amounts are shown until billing is connected.
           </p>
           <div className="flex flex-wrap gap-2 mt-3">
-            {["Stripe — Not Connected", "Square — Not Connected", "Manual Invoice Records — Not Connected"].map((label) => (
+            {["Stripe — Not Connected", "Manual Invoice Records — Not Connected"].map((label) => (
               <span key={label} className="text-[10px] font-bold px-3 py-1.5 rounded-lg cursor-not-allowed"
                 style={{ color: "rgba(107,122,153,0.6)", backgroundColor: "rgba(61,79,110,0.08)", border: "1px solid rgba(61,79,110,0.15)" }}>
                 {label}

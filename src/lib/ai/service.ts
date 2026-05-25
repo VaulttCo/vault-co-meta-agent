@@ -1,5 +1,6 @@
 // Server-side AI service — never import this in client components.
 // It reads process.env and makes outbound API calls.
+// NEVER log or return the resolved key value.
 
 import type { CampaignDraft } from "@/lib/planStore";
 import type { ClientIntelligence } from "@/lib/clientIntelligence";
@@ -22,6 +23,15 @@ import {
 import { buildAssetAdVariation, type StoredAssetAnalysis } from "@/lib/agents/creativeAnalysis";
 
 export type { CampaignGenerationInput, CreativeAnalysisInput, CreativeAnalysisResult, WeeklyReportInput, WeeklyReportDraft };
+
+// ─────────────────────────────────────────────────────────────
+// Env key resolver — primary name wins; legacy typo is a fallback
+// so that Vercel envs configured with the misspelled name still work.
+// Never log or return the resolved value.
+// ─────────────────────────────────────────────────────────────
+function resolveAnthropicKey(): string | undefined {
+  return (process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPC_API_KEY)?.trim() || undefined;
+}
 
 export interface GenerateCampaignResult {
   draft: CampaignDraft;
@@ -79,7 +89,7 @@ export async function generateCampaignDraft(
   const provider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
 
   if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = resolveAnthropicKey();
     if (!apiKey) {
       return mockFallback(input, "ANTHROPIC_API_KEY is not set — using mock generation.");
     }
@@ -127,7 +137,7 @@ export async function extractClientIntelligence(
   const provider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
 
   if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = resolveAnthropicKey();
     if (!apiKey) {
       return mockExtractionFallback(clientId, onboardingSummary, "ANTHROPIC_API_KEY is not set — using mock extraction.");
     }
@@ -441,7 +451,7 @@ export async function analyzeCreativeAsset(
   const provider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
 
   if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = resolveAnthropicKey();
     if (!apiKey) return mockCreativeFallback(input, "ANTHROPIC_API_KEY is not set — using mock analysis.");
     try {
       const analysis = await callAnthropicAnalyzeCreative(input, apiKey);
@@ -484,7 +494,7 @@ export async function generateWeeklyReport(
   const provider = (process.env.AI_PROVIDER ?? "mock").trim().toLowerCase();
 
   if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    const apiKey = resolveAnthropicKey();
     if (!apiKey) return mockReportFallback(input, "ANTHROPIC_API_KEY is not set — using mock report.");
     try {
       const report = await callAnthropicReport(input, apiKey);

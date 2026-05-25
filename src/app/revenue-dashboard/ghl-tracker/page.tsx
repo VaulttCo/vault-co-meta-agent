@@ -390,9 +390,9 @@ export default function GhlTrackerPage() {
           : raw.includes("Recurring billing")
           ? raw
           : raw.includes("No GHL Location ID")
-          ? "GHL credentials found, but no Location ID is saved. Add the correct Location ID in the GHL Settings panel below."
+          ? "GHL credentials found, but no Location ID is saved. Add the correct Location ID in the Settings panel below."
           : data.ghlStatusCode === 422
-          ? "GHL credentials found, but the Location ID was rejected. Add the correct Location ID override in the GHL Settings panel below, or update the client's GHL integration."
+          ? "GHL credentials found, but the Location ID was rejected. Add the correct Location ID override in the Settings panel below, or update the client's GHL integration."
           : raw || "GHL credentials connected, but the request failed. Manual entry is still available.";
         setGhlPreviews((prev) => ({
           ...prev,
@@ -1285,7 +1285,7 @@ export default function GhlTrackerPage() {
                                           Stripe Customer Required
                                         </div>
                                         <div className="text-[9px] leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
-                                          Add a Stripe Customer ID in GHL Settings to enable draft invoices.
+                                          Add a Stripe Customer ID in Settings to enable draft invoices.
                                         </div>
                                       </div>
                                     )}
@@ -1401,7 +1401,7 @@ export default function GhlTrackerPage() {
                                           Stripe Customer Required
                                         </div>
                                         <div className="text-[9px] leading-snug" style={{ color: "rgba(107,122,153,0.5)" }}>
-                                          Add a Stripe Customer ID in GHL Settings to enable draft invoices.
+                                          Add a Stripe Customer ID in Settings to enable draft invoices.
                                         </div>
                                       </div>
                                     )}
@@ -1640,7 +1640,7 @@ export default function GhlTrackerPage() {
                                       className="flex items-center gap-1.5 text-[11px] font-bold px-4 py-2 rounded-lg transition-opacity hover:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed"
                                       style={{ color: GOLD, backgroundColor: GOLD_BG, border: `1px solid ${GOLD_BORDER}` }}>
                                       {isSavingPanel && <Loader2 size={11} className="animate-spin" />}
-                                      {isSavingPanel ? "Saving…" : "Save GHL Settings"}
+                                      {isSavingPanel ? "Saving…" : "Save Settings"}
                                     </button>
                                     {panelOk && !isSavingPanel && (
                                       <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "#22c55e" }}>

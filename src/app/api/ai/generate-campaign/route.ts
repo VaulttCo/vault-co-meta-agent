@@ -19,14 +19,32 @@ function detectRuntime(): string {
   return process.env.NODE_ENV === "production" ? "production" : "local";
 }
 
-// Strip anything that looks like an API key (long base64/hex token) before
-// including an error string in the response. Never log key values.
+// Only redact patterns that are structurally API keys.
+// Does NOT redact model names, URLs, or JSON content — those are needed for debugging.
 function sanitizeError(raw: unknown): string {
   const msg = raw instanceof Error ? raw.message : String(raw);
   return msg
-    .slice(0, 300)
-    .replace(/[A-Za-z0-9+/=_-]{40,}/g, "[REDACTED]")
+    .slice(0, 400)
+    // Anthropic key: sk-ant-api03-<base64 payload>
+    .replace(/sk-ant-[A-Za-z0-9_-]+/gi, "[ANTHROPIC_KEY_REDACTED]")
+    // OpenAI key: sk-<48+ alphanumeric>
+    .replace(/sk-[A-Za-z0-9]{48,}/g, "[OPENAI_KEY_REDACTED]")
+    // Generic base64 blob (contains = padding and 40+ chars) — catches other token formats
+    .replace(/[A-Za-z0-9+/]{40,}={1,2}/g, "[TOKEN_REDACTED]")
     .trim();
+}
+
+// Resolve the Anthropic API key.
+// Primary: ANTHROPIC_API_KEY (correct spelling).
+// Fallback: ANTHROPC_API_KEY (historical typo — some Vercel envs may use this name).
+// Returns a boolean tuple: [resolvedKey, usingLegacyName]
+// NEVER log or return the resolved key value.
+function resolveAnthropicKeyInfo(): { hasKey: boolean; usingLegacyKeyName: boolean } {
+  const primary = process.env.ANTHROPIC_API_KEY?.trim();
+  if (primary) return { hasKey: true, usingLegacyKeyName: false };
+  const legacy = process.env.ANTHROPC_API_KEY?.trim();
+  if (legacy) return { hasKey: true, usingLegacyKeyName: true };
+  return { hasKey: false, usingLegacyKeyName: false };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -43,10 +61,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // ── 2. Env diagnostics — computed once, used in all error responses ──────
-  // NEVER include the actual key values in any response or log.
+  // ── 2. Env diagnostics — computed once, never include key values ──────────
   const provider = ((process.env.AI_PROVIDER ?? "").trim().toLowerCase()) || "mock";
-  const hasAnthropicKey = !!(process.env.ANTHROPIC_API_KEY?.trim());
+  const { hasKey: hasAnthropicKey, usingLegacyKeyName } = resolveAnthropicKeyInfo();
   const hasOpenAIKey = !!(process.env.OPENAI_API_KEY?.trim());
   const runtime = detectRuntime();
 
@@ -54,6 +71,8 @@ export async function POST(req: NextRequest) {
     providerName: provider,
     hasAIProvider: provider !== "mock",
     hasAnthropicKey: provider === "anthropic" ? hasAnthropicKey : undefined,
+    // Flag if the key was found under the legacy misspelled env var name
+    usingLegacyKeyName: provider === "anthropic" ? usingLegacyKeyName : undefined,
     runtime,
   } as const;
 
@@ -93,8 +112,8 @@ export async function POST(req: NextRequest) {
     const result = await generateCampaignDraft(body);
 
     // ── 5a. Live provider configured but fell back to mock → 502 ───────────
-    // This means the provider call failed at runtime (bad key, API error, timeout).
-    // Return 502 so the frontend can show a specific, actionable error.
+    // Means the provider call failed at runtime (wrong model, API error, timeout).
+    // Return 502 with a sanitized error so the frontend can show something actionable.
     if ((provider === "anthropic" || provider === "openai") && result.mockMode) {
       return NextResponse.json(
         {
@@ -106,12 +125,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 5b. Explicit mock mode (AI_PROVIDER=mock or unset) → 200 with mockMode ─
-    // This is intentional mock operation — return the draft normally.
+    // ── 5b. Intentional mock (AI_PROVIDER=mock or unset) → 200 ───────────
     return NextResponse.json(result);
   } catch (err) {
-    // Unexpected throw from generateCampaignDraft — should not happen in normal
-    // operation but provides actionable diagnostics if it does.
     console.error("[POST /api/ai/generate-campaign] Unexpected error:", err);
     return NextResponse.json(
       {

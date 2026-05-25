@@ -1492,11 +1492,16 @@ function AICampaignBuilderContent() {
             error?: string;
             sanitizedError?: string;
             missingEnvNames?: string[];
+            usingLegacyKeyName?: boolean;
           };
           if (res.status === 503 && errBody.missingEnvNames?.length) {
-            errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} is missing.`;
+            errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} is missing from your environment variables.`;
           } else if (res.status === 502 && errBody.sanitizedError) {
-            errMsg = `502:${errBody.sanitizedError}`;
+            // Append hint if Vercel has the key under the legacy misspelled name
+            const legacyHint = errBody.usingLegacyKeyName
+              ? " (key found under legacy name ANTHROPC_API_KEY — rename to ANTHROPIC_API_KEY in Vercel)"
+              : "";
+            errMsg = `502:AI provider call failed: ${errBody.sanitizedError}${legacyHint}`;
           } else if (errBody.error) {
             errMsg = `${res.status}:${errBody.error}`;
           }

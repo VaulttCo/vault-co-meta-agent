@@ -1336,12 +1336,9 @@ function AICampaignBuilderContent() {
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  // NEXT_PUBLIC_ vars are baked in at build time — read directly to avoid
-  // showing the mock banner when Anthropic/OpenAI is already configured.
-  const _aiProvider = process.env.NEXT_PUBLIC_AI_PROVIDER ?? "mock";
-  const [mockModeActive, setMockModeActive] = useState(
-    _aiProvider !== "anthropic" && _aiProvider !== "openai"
-  );
+  // mockModeActive is false until the first generation response sets it.
+  // Never derived from build-time env vars — the server's AI_PROVIDER is authoritative.
+  const [mockModeActive, setMockModeActive] = useState(false);
   const [mockModeNotice, setMockModeNotice] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<string>("mock");
 
@@ -1487,18 +1484,45 @@ function AICampaignBuilderContent() {
         }),
       });
 
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) {
+        // Parse the error body to surface a specific, actionable message.
+        let errMsg = `API error ${res.status}`;
+        try {
+          const errBody = await res.json() as {
+            error?: string;
+            sanitizedError?: string;
+            missingEnvNames?: string[];
+          };
+          if (res.status === 503 && errBody.missingEnvNames?.length) {
+            errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} is missing.`;
+          } else if (res.status === 502 && errBody.sanitizedError) {
+            errMsg = `502:${errBody.sanitizedError}`;
+          } else if (errBody.error) {
+            errMsg = `${res.status}:${errBody.error}`;
+          }
+        } catch { /* ignore parse errors */ }
+        throw new Error(errMsg);
+      }
 
       const { draft, mockMode, provider, notice } = await res.json();
       setCurrentPlan({
         ...draft,
         selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
-      setMockModeActive(mockMode ?? true);
+      setMockModeActive(mockMode ?? false);
       setMockModeNotice(notice ?? null);
       setAiProvider(provider ?? "mock");
     } catch (err) {
       console.error("Campaign generation failed:", err);
+      const rawMsg = err instanceof Error ? err.message : "";
+      let generateErrorMsg: string;
+      if (rawMsg.startsWith("503:")) {
+        generateErrorMsg = rawMsg.slice(4);
+      } else if (rawMsg.startsWith("502:")) {
+        generateErrorMsg = `Live AI provider call failed: ${rawMsg.slice(4)}`;
+      } else {
+        generateErrorMsg = "Could not reach the generation API — showing mock draft.";
+      }
       // Client-side fallback to local mock — build adVariations from selectedAssets directly
       const plan = generateMockPlan(selectedClient, goal, service, market, budget, creative);
       const fallbackVariations =
@@ -1528,7 +1552,7 @@ function AICampaignBuilderContent() {
         selectedCreativeAssetId: selectedAssets[0]?.id ?? null,
       });
       setMockModeActive(true);
-      setGenerateError("Could not reach the generation API — showing mock draft.");
+      setGenerateError(generateErrorMsg);
     } finally {
       setIsGenerating(false);
     }
@@ -1741,7 +1765,7 @@ function AICampaignBuilderContent() {
           <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
             <p className="text-[12px] text-[var(--t-muted)] leading-snug">
               <span className="text-[var(--t-text)] font-semibold">Veronica is running in mock mode. </span>
-              {mockModeNotice ?? "Add an API key and set AI_PROVIDER in .env.local to enable live generation."}
+              {mockModeNotice ?? "Set AI_PROVIDER=anthropic and ANTHROPIC_API_KEY in Vercel environment variables to enable live generation."}
             </p>
             <span className="flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3d4f6e]/40 text-[var(--t-muted)] border border-[#3d4f6e]/60 uppercase tracking-wider">
               Mock

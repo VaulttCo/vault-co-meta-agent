@@ -155,7 +155,7 @@ export default function RevenueDashboardPage() {
             {
               label: "Gross Setup Revenue",
               value: loading ? "—" : fmtCurrency(projectedSetupRevenue),
-              sub:   loading ? "" : `${activeClients.length + setupClients.length} clients in paid phases`,
+              sub:   loading ? "" : `${activeClients.length + setupClients.length} clients in billing phases`,
               icon: DollarSign, color: GOLD, bg: GOLD_BG, border: GOLD_BORDER, badge: "projection",
             },
             {

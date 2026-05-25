@@ -1336,7 +1336,8 @@ function AICampaignBuilderContent() {
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  // mockModeActive is false until the first generation response sets it.
+  // mockModeActive: set proactively from /api/ai/status on mount,
+  // then updated by each generation response.
   // Never derived from build-time env vars — the server's AI_PROVIDER is authoritative.
   const [mockModeActive, setMockModeActive] = useState(false);
   const [mockModeNotice, setMockModeNotice] = useState<string | null>(null);
@@ -1366,6 +1367,32 @@ function AICampaignBuilderContent() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, isConsoleLoading]);
+
+  // Check server AI provider status on mount so the mock banner shows immediately
+  // when AI_PROVIDER=mock or the API key is missing — before any generation attempt.
+  useEffect(() => {
+    fetch("/api/ai/status")
+      .then((r) => r.ok ? r.json() : null)
+      .then((status: { provider?: string; configured?: boolean; usingLegacyKeyName?: boolean } | null) => {
+        if (!status) return;
+        if (status.provider === "mock" || !status.configured) {
+          setMockModeActive(true);
+          if (status.provider !== "mock" && !status.configured && status.usingLegacyKeyName) {
+            setMockModeNotice(
+              "A Vercel env var for the Anthropic key has a misspelled name. Rename it to ANTHROPIC_API_KEY in Vercel settings to enable live generation."
+            );
+          } else if (status.provider !== "mock" && !status.configured) {
+            setMockModeNotice(
+              "ANTHROPIC_API_KEY is missing in Vercel — add it alongside AI_PROVIDER=anthropic to enable live generation."
+            );
+          } else {
+            // provider=mock: clear any stale notice so default text shows
+            setMockModeNotice(null);
+          }
+        }
+      })
+      .catch(() => {}); // silent — a status check failure must not break the page
+  }, []);
 
   // Load real clients from data provider so selectedClientId matches creative_assets.client_id
   useEffect(() => {
@@ -1497,9 +1524,9 @@ function AICampaignBuilderContent() {
           if (res.status === 503 && errBody.missingEnvNames?.length) {
             errMsg = `503:AI provider not configured in Vercel — ${errBody.missingEnvNames.join(", ")} is missing from your environment variables.`;
           } else if (res.status === 502 && errBody.sanitizedError) {
-            // Append hint if Vercel has the key under the legacy misspelled name
+            // Append hint if Vercel has the Anthropic key under a misspelled env var name
             const legacyHint = errBody.usingLegacyKeyName
-              ? " (key found under legacy name ANTHROPC_API_KEY — rename to ANTHROPIC_API_KEY in Vercel)"
+              ? " (Vercel has the key under a misspelled env var name — rename it to ANTHROPIC_API_KEY in Vercel settings)"
               : "";
             errMsg = `502:AI provider call failed: ${errBody.sanitizedError}${legacyHint}`;
           } else if (errBody.error) {

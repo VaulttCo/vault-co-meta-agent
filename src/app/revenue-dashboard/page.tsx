@@ -6,6 +6,7 @@ import {
   TrendingUp, DollarSign, Users, ChevronRight,
   Layers, BarChart3, Calculator, Trophy,
   Target, ArrowUpRight, Zap, RefreshCw,
+  Activity, CalendarCheck,
 } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
@@ -66,6 +67,18 @@ export default function RevenueDashboardPage() {
 
   const subPages = [
     {
+      href: "/revenue-dashboard/live-tracker",
+      icon: Activity, label: "Live Tracker",
+      desc: "Live GHL Closed Won Revenue · snapshot status · invoice readiness",
+      color: "#22c55e", bg: "rgba(34,197,94,0.08)", border: "rgba(34,197,94,0.18)",
+    },
+    {
+      href: "/revenue-dashboard/monthly-closeout",
+      icon: CalendarCheck, label: "Monthly Closeout",
+      desc: "Month-end checklist · lock billing basis · review snapshots",
+      color: "#0081f2", bg: "rgba(0,129,242,0.08)", border: "rgba(0,129,242,0.18)",
+    },
+    {
       href: "/revenue-dashboard/setup-pipeline",
       icon: Layers, label: "Setup Pipeline",
       desc: loading ? "Loading…" : `${revenueClients.length} clients · $${(SETUP_FEE / 1000).toFixed(0)}k per setup`,
@@ -98,7 +111,7 @@ export default function RevenueDashboardPage() {
     {
       href: "/revenue-dashboard/ghl-tracker",
       icon: RefreshCw, label: "GHL Revenue Tracker",
-      desc: "Recurring billing toggles · Phase 2 invoice prep",
+      desc: "Recurring billing toggles · snapshot review · draft invoice prep",
       color: "#f59e0b", bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.18)",
     },
   ] as const;

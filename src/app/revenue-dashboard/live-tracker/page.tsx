@@ -459,9 +459,12 @@ export default function LiveTrackerPage() {
 
                     {/* Client */}
                     <td className="px-3 py-2.5" style={{ borderBottom: "1px solid rgba(61,79,110,0.10)" }}>
-                      <div className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>
+                      <Link
+                        href={`/revenue-dashboard/clients/${client.id}`}
+                        className="text-[11px] font-semibold hover:underline"
+                        style={{ color: "var(--t-text)" }}>
                         {client.name}
-                      </div>
+                      </Link>
                       <div className="text-[9px]" style={{ color: "var(--t-dim)" }}>{client.status}</div>
                     </td>
 

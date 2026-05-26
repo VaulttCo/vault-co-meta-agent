@@ -608,9 +608,12 @@ export default function MonthlyCloseoutPage() {
 
                       {/* Client */}
                       <td className="px-4 py-3.5">
-                        <div className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>
+                        <Link
+                          href={`/revenue-dashboard/clients/${client.id}`}
+                          className="text-[13px] font-semibold hover:underline"
+                          style={{ color: "var(--t-text)" }}>
                           {client.name}
-                        </div>
+                        </Link>
                         <div className="text-[10px]" style={{ color: "var(--t-dim)" }}>{client.market}</div>
                       </td>
 

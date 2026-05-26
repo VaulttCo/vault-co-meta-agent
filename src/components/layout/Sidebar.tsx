@@ -29,6 +29,7 @@ import {
   BookOpen,
   Repeat2,
   CalendarCheck,
+  Activity,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -231,13 +232,14 @@ export function Sidebar({ onClose }: SidebarProps) {
             <NavLink label="Revenue Overview"    href="/revenue-dashboard"                  icon={TrendingUp} />
 
             <SectionLabel label="Revenue Portal" />
-            <NavLink label="Setup Pipeline"      href="/revenue-dashboard/setup-pipeline"   icon={Layers}     />
-            <NavLink label="Partner Earnings"    href="/revenue-dashboard/partner-earnings" icon={Users}      />
-            <NavLink label="Leaderboard"         href="/revenue-dashboard/leaderboard"      icon={Trophy}     />
-            <NavLink label="Forecast Calculator" href="/revenue-dashboard/forecast"         icon={Calculator} />
-            <NavLink label="Scenario Modeling"   href="/revenue-dashboard/scenarios"        icon={BarChart3}  />
-            <NavLink label="GHL Revenue Tracker"  href="/revenue-dashboard/ghl-tracker"        icon={RefreshCw}      />
-            <NavLink label="Monthly Closeout"    href="/revenue-dashboard/monthly-closeout"   icon={CalendarCheck}  />
+            <NavLink label="Live Tracker"        href="/revenue-dashboard/live-tracker"     icon={Activity}      />
+            <NavLink label="Monthly Closeout"    href="/revenue-dashboard/monthly-closeout" icon={CalendarCheck} />
+            <NavLink label="Setup Pipeline"      href="/revenue-dashboard/setup-pipeline"   icon={Layers}        />
+            <NavLink label="Partner Earnings"    href="/revenue-dashboard/partner-earnings" icon={Users}         />
+            <NavLink label="Leaderboard"         href="/revenue-dashboard/leaderboard"      icon={Trophy}        />
+            <NavLink label="Forecast Calculator" href="/revenue-dashboard/forecast"         icon={Calculator}    />
+            <NavLink label="Scenario Modeling"   href="/revenue-dashboard/scenarios"        icon={BarChart3}     />
+            <NavLink label="GHL Revenue Tracker" href="/revenue-dashboard/ghl-tracker"      icon={RefreshCw}     />
           </>
         )}
 

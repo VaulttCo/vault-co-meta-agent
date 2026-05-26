@@ -117,7 +117,7 @@ const CAMPAIGN_DRAFT_SCHEMA = `{
 // User prompt builder
 // ─────────────────────────────────────────────────────────────
 
-export function buildCampaignPrompt(input: CampaignGenerationInput): string {
+export function buildCampaignPrompt(input: CampaignGenerationInput, toolMode = false): string {
   const budgetNum = parseInt(input.budget.replace(/[^0-9]/g, "")) || 1500;
   const intel = input.clientIntelligence;
   const asset = input.selectedAsset ?? null;
@@ -216,10 +216,10 @@ ${intelligenceSection}${creativeSection}
 Generate a complete, production-ready campaign draft. Be specific to this client, market, and service.
 
 ${intel ? `IMPORTANT: Use the full client intelligence above. This campaign must:
-- Address the primary objection: "${intel.buyerProfile.commonObjections[0] ?? "price comparison"}"
-- Lead with trust triggers: ${intel.buyerProfile.trustTriggers.slice(0, 2).join(", ")}
-- Target: ${intel.targetMarket.householdIncome} homeowners in ${intel.serviceArea.cities.slice(0, 3).join(", ")}
-- Avoid: ${intel.brandIntelligence.whatNotToSay[0] ?? "price-first positioning"}
+- Address the primary objection: "${(intel.buyerProfile.commonObjections ?? [])[0] ?? "price comparison"}"
+- Lead with trust triggers: ${(intel.buyerProfile.trustTriggers ?? []).slice(0, 2).join(", ")}
+- Target: ${intel.targetMarket.householdIncome} homeowners in ${(intel.serviceArea.cities ?? []).slice(0, 3).join(", ")}
+- Avoid: ${(intel.brandIntelligence.whatNotToSay ?? [])[0] ?? "price-first positioning"}
 - Use lead form questions from Campaign Implications section
 - Add a lost lead recovery sequence (currently missing per sales audit)
 - Fill in all intelligence fields (buyerPsychologyUsed, marketResearchUsed, clientIntelligenceUsed, strategicRationale)
@@ -229,9 +229,10 @@ For compliance: Be thorough. Flag any copy or targeting that could trigger Meta 
 
 For optimization: Use industry benchmarks: roofing CPL target $50–$80, remodeling CPL target $100–$150.
 
-Return ONLY the following JSON object with no additional text:
-
-${CAMPAIGN_DRAFT_SCHEMA}`;
+${toolMode
+  ? "Use the generate_campaign_draft tool to return the campaign draft. Populate every field completely based on the client, intelligence, and campaign parameters above. Keep all string values concise and free of special characters."
+  : `Return ONLY the following JSON object with no additional text:\n\n${CAMPAIGN_DRAFT_SCHEMA}`
+}`;
 }
 
 // ─────────────────────────────────────────────────────────────

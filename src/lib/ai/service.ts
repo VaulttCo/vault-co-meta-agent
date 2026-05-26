@@ -101,8 +101,22 @@ function classifyStage(err: unknown): GenerationFailureStage {
   if (err instanceof StagedError) return err.stage;
   const msg = err instanceof Error ? err.message : String(err);
   if (msg.includes("abort") || msg.includes("timeout") || msg.includes("AbortError")) return "timeout";
-  if (msg.includes("SyntaxError") || msg.includes("Unexpected token") || msg.includes("Unexpected end")) return "json_parse";
-  if (msg.includes("empty content") || msg.includes("response_shape")) return "response_shape";
+  // JSON parse errors — covers multiple V8/Node.js format variants:
+  //   Node <20:  "SyntaxError: Unexpected token , in JSON..."
+  //   Node 20+:  "Expected ',' or '}' after property value in JSON at position N"
+  //   Node 20+:  "Unterminated string in JSON at position N"
+  //   Our own:   "JSON parse failed: ..." (thrown by parseAIJson for OpenAI path)
+  if (
+    msg.includes("SyntaxError") ||
+    msg.includes("Unexpected token") ||
+    msg.includes("Unexpected end") ||
+    msg.includes("Expected '") ||
+    msg.includes("Unterminated string") ||
+    msg.includes("JSON at position") ||
+    msg.includes("json_parse") ||
+    msg.includes("JSON parse failed")
+  ) return "json_parse";
+  if (msg.includes("empty content") || msg.includes("response_shape") || msg.includes("truncated")) return "response_shape";
   if (msg.includes("asset_mapping") || msg.includes("adVariations")) return "asset_mapping";
   return "provider_call";
 }
@@ -270,22 +284,34 @@ function mockExtractionFallback(clientId: string, summary: string, notice?: stri
 }
 
 // ─────────────────────────────────────────────────────────────
-// JSON parser — handles both raw JSON and ```json code blocks
+// JSON repair — strips common LLM formatting issues before JSON.parse
+// Used only for text-based providers (OpenAI). Anthropic uses tool calling.
 // ─────────────────────────────────────────────────────────────
 
-function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraft {
-  let jsonStr = text.trim();
+function repairJson(raw: string): string {
+  let s = raw.trim();
+  // Strip markdown code fences (```json ... ``` or ``` ... ```)
+  const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) s = fenced[1].trim();
+  // Extract the outermost JSON object
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first !== -1 && last !== -1) s = s.slice(first, last + 1);
+  // Remove trailing commas before } or ] (common LLM error)
+  s = s.replace(/,(\s*[}\]])/g, "$1");
+  return s;
+}
 
-  const fenced = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) jsonStr = fenced[1].trim();
+// ─────────────────────────────────────────────────────────────
+// Draft builder — shared between tool-call path and text-parse path.
+// Takes any already-parsed object and maps it to a CampaignDraft.
+// Never calls JSON.parse — caller is responsible for parsing.
+// ─────────────────────────────────────────────────────────────
 
-  const firstBrace = jsonStr.indexOf("{");
-  const lastBrace = jsonStr.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1) {
-    jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
-  }
-
-  const parsed = JSON.parse(jsonStr);
+function buildDraftFromParsed(
+  parsed: Record<string, unknown>,
+  input: CampaignGenerationInput
+): CampaignDraft {
   const now = mockTimestamp();
   const budgetStr = input.budget.startsWith("$")
     ? input.budget
@@ -295,7 +321,7 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
     id: `plan-${Date.now()}`,
     clientId: input.client.id,
     clientName: input.client.name,
-    campaignName: parsed.campaignName ?? `${input.service} — ${input.goal} — ${input.market}`,
+    campaignName: (parsed.campaignName as string) ?? `${input.service} — ${input.goal} — ${input.market}`,
     market: input.market,
     service: input.service,
     goal: input.goal,
@@ -306,23 +332,21 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
     createdAt: now,
     updatedAt: now,
     createdBy: "Veronica",
-    metaStructure: parsed.metaStructure,
-    adCopy: parsed.adCopy,
-    leadForm: parsed.leadForm,
-    ghlWorkflow: parsed.ghlWorkflow,
-    creativeDirection: parsed.creativeDirection,
-    compliance: parsed.compliance,
-    optimization: parsed.optimization,
-    buyerPsychologyUsed: parsed.buyerPsychologyUsed,
-    marketResearchUsed: parsed.marketResearchUsed,
-    clientIntelligenceUsed: parsed.clientIntelligenceUsed,
-    strategicRationale: parsed.strategicRationale,
-    creativeIntelligenceUsed: parsed.creativeIntelligenceUsed,
-    // Build per-asset variations from the input assets — the AI response never
-    // includes these because they're generated deterministically server-side.
-    // Wrapped in try-catch: asset mapping is best-effort.
-    // If buildAssetAdVariation throws (e.g. malformed stored analysis), adVariations
-    // is omitted rather than crashing the entire generation response.
+    metaStructure: parsed.metaStructure as CampaignDraft["metaStructure"],
+    adCopy: parsed.adCopy as CampaignDraft["adCopy"],
+    leadForm: parsed.leadForm as CampaignDraft["leadForm"],
+    ghlWorkflow: parsed.ghlWorkflow as CampaignDraft["ghlWorkflow"],
+    creativeDirection: parsed.creativeDirection as CampaignDraft["creativeDirection"],
+    compliance: parsed.compliance as CampaignDraft["compliance"],
+    optimization: parsed.optimization as CampaignDraft["optimization"],
+    buyerPsychologyUsed: parsed.buyerPsychologyUsed as CampaignDraft["buyerPsychologyUsed"],
+    marketResearchUsed: parsed.marketResearchUsed as CampaignDraft["marketResearchUsed"],
+    clientIntelligenceUsed: parsed.clientIntelligenceUsed as CampaignDraft["clientIntelligenceUsed"],
+    strategicRationale: parsed.strategicRationale as CampaignDraft["strategicRationale"],
+    creativeIntelligenceUsed: parsed.creativeIntelligenceUsed as CampaignDraft["creativeIntelligenceUsed"],
+    // Ad variations are always built server-side from input assets — never from AI output.
+    // Wrapped in try-catch: mapping is best-effort; failure omits variations rather than
+    // crashing the entire generation response.
     adVariations: (() => {
       try {
         const assets =
@@ -333,8 +357,7 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
             : [];
         if (assets.length === 0) return undefined;
         return assets.map((a, i) => {
-          const storedAnalysis: StoredAssetAnalysis | null =
-            input.assetAnalyses?.[a.id] ?? null;
+          const storedAnalysis: StoredAssetAnalysis | null = input.assetAnalyses?.[a.id] ?? null;
           const operatorNote = input.assetNotes?.[a.id];
           return buildAssetAdVariation(
             {
@@ -352,11 +375,33 @@ function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraf
           );
         });
       } catch (assetErr) {
-        console.error("[AI Service] adVariations mapping failed — omitting:", assetErr instanceof Error ? assetErr.message : assetErr);
+        console.error(
+          "[AI Service] adVariations mapping failed — omitting:",
+          assetErr instanceof Error ? assetErr.message : assetErr
+        );
         return undefined;
       }
     })(),
   };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Text-based JSON parser (OpenAI path only).
+// For Anthropic, tool calling is used instead — see callAnthropic().
+// ─────────────────────────────────────────────────────────────
+
+function parseAIJson(text: string, input: CampaignGenerationInput): CampaignDraft {
+  const repaired = repairJson(text);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(repaired) as Record<string, unknown>;
+  } catch (firstErr) {
+    throw new StagedError(
+      `JSON parse failed: ${firstErr instanceof Error ? firstErr.message.slice(0, 300) : String(firstErr).slice(0, 300)}`,
+      "json_parse"
+    );
+  }
+  return buildDraftFromParsed(parsed, input);
 }
 
 function parseExtractionJson(text: string, clientId: string): ClientIntelligence {
@@ -376,12 +421,10 @@ function parseExtractionJson(text: string, clientId: string): ClientIntelligence
 }
 
 // ─────────────────────────────────────────────────────────────
-// Anthropic (Claude Haiku) — campaign generation
-// max_tokens 4096 — campaign schema requires ~3000+ tokens to fill completely
-// Haiku is fast enough to complete 4096 tokens within 50s on Vercel Hobby
+// Tagged error class — lets generateCampaignDraft classify stage without
+// string-matching on error messages.
 // ─────────────────────────────────────────────────────────────
 
-// Tagged error class — lets generateCampaignDraft classify stage without string-matching.
 class StagedError extends Error {
   stage: GenerationFailureStage;
   constructor(message: string, stage: GenerationFailureStage) {
@@ -389,6 +432,139 @@ class StagedError extends Error {
     this.stage = stage;
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Anthropic tool schema — defines the campaign draft structure for tool calling.
+// Tool calling forces Anthropic to return a validated JSON object internally,
+// completely eliminating the "Expected ',' or '}'" class of JSON parse failures.
+// The tool input is already parsed by Anthropic before being returned to us —
+// we never call JSON.parse on the campaign output when using this path.
+// ─────────────────────────────────────────────────────────────
+
+const CAMPAIGN_TOOL_SCHEMA = {
+  type: "object",
+  description: "Complete Meta advertising campaign draft. Populate every field.",
+  properties: {
+    campaignName: { type: "string", description: "Descriptive name: [service] — [goal] — [market]" },
+    metaStructure: {
+      type: "object",
+      properties: {
+        campaignObjective: { type: "string" },
+        campaignType: { type: "string" },
+        adSetNames: { type: "array", items: { type: "string" } },
+        audience: { type: "string" },
+        locationTargeting: { type: "string" },
+        placements: { type: "array", items: { type: "string" } },
+        budgetSplit: { type: "string" },
+        optimizationEvent: { type: "string" },
+      },
+      required: ["campaignObjective", "campaignType", "adSetNames", "audience", "locationTargeting", "placements", "budgetSplit", "optimizationEvent"],
+    },
+    adCopy: {
+      type: "object",
+      properties: {
+        primaryTexts: { type: "array", items: { type: "string" }, description: "3 variants, 200-300 chars each, no inner quotes" },
+        headlines: { type: "array", items: { type: "string" }, description: "3 variants, 40 chars max each" },
+        descriptions: { type: "array", items: { type: "string" }, description: "3 variants, 30 chars max each" },
+        cta: { type: "string" },
+      },
+      required: ["primaryTexts", "headlines", "descriptions", "cta"],
+    },
+    leadForm: {
+      type: "object",
+      properties: {
+        formName: { type: "string" },
+        introCopy: { type: "string" },
+        qualificationQuestions: { type: "array", items: { type: "string" } },
+        contactFields: { type: "array", items: { type: "string" } },
+        consentLanguage: { type: "string", description: "TCPA-compliant with STOP opt-out" },
+        thankYouCopy: { type: "string" },
+      },
+      required: ["formName", "introCopy", "qualificationQuestions", "contactFields", "consentLanguage", "thankYouCopy"],
+    },
+    ghlWorkflow: {
+      type: "object",
+      properties: {
+        tags: { type: "array", items: { type: "string" } },
+        pipelineStage: { type: "string" },
+        immediateSms: { type: "string" },
+        immediateEmail: {
+          type: "object",
+          properties: { subject: { type: "string" }, body: { type: "string" } },
+          required: ["subject", "body"],
+        },
+        internalNotification: { type: "string" },
+        setterTask: { type: "string" },
+        aiVoiceTrigger: { type: "string" },
+        bookedStopCondition: { type: "string" },
+        steps: { type: "array", items: { type: "string" } },
+      },
+      required: ["tags", "pipelineStage", "immediateSms", "immediateEmail", "internalNotification", "setterTask", "steps"],
+    },
+    creativeDirection: {
+      type: "object",
+      properties: {
+        angle: { type: "string" },
+        hook: { type: "string" },
+        shotList: { type: "array", items: { type: "string" }, description: "4-6 shots" },
+        textOverlays: { type: "array", items: { type: "string" }, description: "3-4 overlays" },
+        voiceoverScript: { type: "string", description: "30-second script" },
+        recommendedFormat: { type: "string" },
+        recommendedPlacements: { type: "array", items: { type: "string" } },
+      },
+      required: ["angle", "hook", "shotList", "textOverlays", "voiceoverScript", "recommendedFormat", "recommendedPlacements"],
+    },
+    compliance: {
+      type: "object",
+      properties: {
+        metaRisk: { type: "string", description: "LOW | MEDIUM | HIGH — reason" },
+        smsCompliance: { type: "string" },
+        insuranceRisk: { type: "string" },
+        disallowedPhrases: { type: "array", items: { type: "string" } },
+        approvalWarnings: { type: "array", items: { type: "string" } },
+      },
+      required: ["metaRisk", "smsCompliance", "insuranceRisk", "disallowedPhrases", "approvalWarnings"],
+    },
+    optimization: {
+      type: "object",
+      properties: {
+        cplThreshold: { type: "string" },
+        cpbaThreshold: { type: "string" },
+        bookingRateFloor: { type: "string" },
+        creativeFatigueTrigger: { type: "string" },
+        budgetScalingRule: { type: "string" },
+        pauseRule: { type: "string" },
+        humanApprovalTriggers: { type: "array", items: { type: "string" } },
+      },
+      required: ["cplThreshold", "cpbaThreshold", "bookingRateFloor", "creativeFatigueTrigger", "budgetScalingRule", "pauseRule", "humanApprovalTriggers"],
+    },
+    strategicRationale: {
+      type: "object",
+      properties: {
+        whyThisCampaign: { type: "string" },
+        audienceRationale: { type: "string" },
+        offerAngleUsed: { type: "string" },
+        creativeAngleUsed: { type: "string" },
+      },
+      required: ["whyThisCampaign", "audienceRationale", "offerAngleUsed", "creativeAngleUsed"],
+    },
+    buyerPsychologyUsed: { type: "object", description: "Optional — populate if client intelligence was used" },
+    marketResearchUsed: { type: "object", description: "Optional — populate if market research was used" },
+    clientIntelligenceUsed: { type: "object", description: "Optional — populate if onboarding intelligence was used" },
+    creativeIntelligenceUsed: { type: "object", description: "Optional — populate if creative asset intelligence was used" },
+  },
+  required: ["campaignName", "metaStructure", "adCopy", "leadForm", "ghlWorkflow", "creativeDirection", "compliance", "optimization", "strategicRationale"],
+};
+
+// ─────────────────────────────────────────────────────────────
+// Anthropic (Claude Haiku) — campaign generation via tool calling.
+//
+// Tool calling forces Anthropic to return a pre-parsed JSON object in
+// content[0].input — eliminating all JSON.parse failures caused by
+// unescaped quotes or newlines in ad copy strings.
+//
+// Response shape: content[0].type === "tool_use", content[0].input is the draft.
+// ─────────────────────────────────────────────────────────────
 
 async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
   const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
@@ -400,9 +576,24 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
+      // Slightly reduced from 4096 — campaign draft fits in ~3000 tokens;
+      // extra headroom caused truncation which broke JSON parsing.
+      max_tokens: 3500,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildCampaignPrompt(input) }],
+      // Tool calling: Anthropic parses the output JSON internally.
+      // content[0].input is already a plain object — no JSON.parse needed.
+      tools: [
+        {
+          name: "generate_campaign_draft",
+          description:
+            "Generate a complete, production-ready Meta advertising campaign draft. " +
+            "Populate every field completely based on the campaign parameters and client intelligence. " +
+            "Keep all string values concise and avoid special characters inside strings.",
+          input_schema: CAMPAIGN_TOOL_SCHEMA,
+        },
+      ],
+      tool_choice: { type: "tool", name: "generate_campaign_draft" },
+      messages: [{ role: "user", content: buildCampaignPrompt(input, true) }],
     }),
   });
 
@@ -415,18 +606,38 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
   try {
     data = await response.json();
   } catch {
-    throw new StagedError("Anthropic response was not valid JSON", "response_shape");
+    throw new StagedError("Anthropic outer response was not valid JSON", "response_shape");
   }
 
-  const text: string = (data as { content?: { text?: string }[] })?.content?.[0]?.text ?? "";
-  if (!text) {
+  // Detect max_tokens truncation before inspecting content
+  const stopReason = (data as { stop_reason?: string })?.stop_reason;
+  if (stopReason === "max_tokens") {
     throw new StagedError(
-      `Anthropic returned empty content. Response shape: ${JSON.stringify(Object.keys(data as object ?? {})).slice(0, 100)}`,
+      "Anthropic response truncated — campaign draft exceeded max_tokens budget. Tool input may be incomplete.",
       "response_shape"
     );
   }
 
-  return parseAIJson(text, input);
+  // Extract the tool_use block from content
+  const content = (data as { content?: { type: string; input?: unknown; name?: string }[] })?.content ?? [];
+  const toolUse = content.find((c) => c.type === "tool_use" && c.name === "generate_campaign_draft");
+
+  if (!toolUse || typeof toolUse.input !== "object" || toolUse.input === null) {
+    // Fall back to text extraction if tool_use block is absent (e.g. model returned text instead)
+    const textBlock = content.find((c) => c.type === "text");
+    const fallbackText = (textBlock as { text?: string } | undefined)?.text ?? "";
+    if (fallbackText) {
+      // Attempt text-based parse as last resort
+      return parseAIJson(fallbackText, input);
+    }
+    throw new StagedError(
+      `Anthropic tool call returned no valid input. stop_reason=${stopReason}, content types=${content.map((c) => c.type).join(",")}`,
+      "response_shape"
+    );
+  }
+
+  // toolUse.input is already a plain JS object — no JSON.parse needed.
+  return buildDraftFromParsed(toolUse.input as Record<string, unknown>, input);
 }
 
 // ─────────────────────────────────────────────────────────────

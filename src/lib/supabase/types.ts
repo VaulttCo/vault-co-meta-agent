@@ -330,6 +330,225 @@ export interface Database {
         Insert: Omit<GHLOpportunitySnapshotRow, "id" | "created_at">;
         Update: Partial<Omit<GHLOpportunitySnapshotRow, "id" | "created_at">>;
       };
+      // ── Victoria AI Sales Coach tables ─────────────────
+      victoria_calls: {
+        Row: {
+          id: string;
+          prospect_id: string | null;
+          rep_id: string | null;
+          status: string;
+          phase: string;
+          is_test_call: boolean;
+          outcome: string | null;
+          close_probability_final: number | null;
+          session_state: Record<string, unknown> | null;
+          started_at: string;
+          ended_at: string | null;
+          duration_seconds: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          prospect_id?: string | null;
+          rep_id?: string | null;
+          status?: string;
+          phase?: string;
+          is_test_call?: boolean;
+          outcome?: string | null;
+          close_probability_final?: number | null;
+          session_state?: Record<string, unknown> | null;
+          started_at?: string;
+          ended_at?: string | null;
+          duration_seconds?: number | null;
+        };
+        Update: {
+          status?: string;
+          phase?: string;
+          outcome?: string | null;
+          close_probability_final?: number | null;
+          session_state?: Record<string, unknown> | null;
+          ended_at?: string | null;
+          duration_seconds?: number | null;
+        };
+      };
+      victoria_transcript_chunks: {
+        Row: {
+          id: string;
+          call_id: string;
+          chunk_index: number;
+          speaker: string;
+          text: string;
+          started_at_seconds: number | null;
+          ended_at_seconds: number | null;
+          contains_objection: boolean;
+          contains_buying_signal: boolean;
+          contains_emotional_shift: boolean;
+          created_at: string;
+        };
+        Insert: {
+          call_id: string;
+          chunk_index: number;
+          speaker: string;
+          text: string;
+          started_at_seconds?: number | null;
+          ended_at_seconds?: number | null;
+          contains_objection?: boolean;
+          contains_buying_signal?: boolean;
+          contains_emotional_shift?: boolean;
+        };
+        Update: Partial<{
+          contains_objection: boolean;
+          contains_buying_signal: boolean;
+          contains_emotional_shift: boolean;
+        }>;
+      };
+      victoria_coaching_events: {
+        Row: {
+          id: string;
+          call_id: string;
+          chunk_index: number | null;
+          coaching_type: string;
+          priority: string;
+          headline: string;
+          primary_action: string;
+          why: string | null;
+          suggested_language: string | null;
+          what_not_to_do: string | null;
+          context_tags: string[];
+          confidence: number | null;
+          source_agent: string;
+          acknowledged: boolean;
+          rep_rating: number | null;
+          created_at: string;
+        };
+        Insert: {
+          call_id: string;
+          chunk_index?: number | null;
+          coaching_type: string;
+          priority: string;
+          headline: string;
+          primary_action: string;
+          why?: string | null;
+          suggested_language?: string | null;
+          what_not_to_do?: string | null;
+          context_tags?: string[];
+          confidence?: number | null;
+          source_agent: string;
+        };
+        Update: Partial<{
+          acknowledged: boolean;
+          rep_rating: number | null;
+        }>;
+      };
+      victoria_objection_events: {
+        Row: {
+          id: string;
+          call_id: string;
+          prospect_id: string | null;
+          chunk_index: number | null;
+          raw_text: string;
+          category: string;
+          hidden_meaning: string | null;
+          emotional_driver: string | null;
+          reframe_recommended: string | null;
+          follow_up_question: string | null;
+          resolution: string | null;
+          created_at: string;
+        };
+        Insert: {
+          call_id: string;
+          prospect_id?: string | null;
+          chunk_index?: number | null;
+          raw_text: string;
+          category: string;
+          hidden_meaning?: string | null;
+          emotional_driver?: string | null;
+          reframe_recommended?: string | null;
+          follow_up_question?: string | null;
+          resolution?: string | null;
+        };
+        Update: Partial<{ resolution: string | null }>;
+      };
+      victoria_agent_outputs: {
+        Row: {
+          id: string;
+          call_id: string;
+          agent_name: string;
+          chunk_index: number | null;
+          input_tokens: number | null;
+          output_tokens: number | null;
+          latency_ms: number | null;
+          model_used: string | null;
+          output: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          call_id: string;
+          agent_name: string;
+          chunk_index?: number | null;
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          latency_ms?: number | null;
+          model_used?: string | null;
+          output: Record<string, unknown>;
+        };
+        Update: never;
+      };
+      victoria_prospects: {
+        Row: {
+          id: string;
+          name: string;
+          company: string | null;
+          email: string | null;
+          phone: string | null;
+          vertical: string | null;
+          location_city: string | null;
+          location_state: string | null;
+          business_size: string | null;
+          years_in_business: number | null;
+          personality_type: string | null;
+          communication_style: string | null;
+          known_pain_points: string[];
+          known_objections: string[];
+          known_triggers: string[];
+          known_resistances: string[];
+          primary_fear: string | null;
+          primary_desire: string | null;
+          deal_stage: string;
+          last_contact: string | null;
+          next_step: string | null;
+          urgency_level: string;
+          total_calls: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          name: string;
+          company?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          vertical?: string | null;
+          location_city?: string | null;
+          location_state?: string | null;
+        };
+        Update: Partial<{
+          name: string;
+          company: string | null;
+          email: string | null;
+          phone: string | null;
+          vertical: string | null;
+          deal_stage: string;
+          last_contact: string | null;
+          next_step: string | null;
+          urgency_level: string;
+          total_calls: number;
+          known_pain_points: string[];
+          known_objections: string[];
+          known_triggers: string[];
+          known_resistances: string[];
+          updated_at: string;
+        }>;
+      };
     };
   };
 }

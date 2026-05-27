@@ -6,7 +6,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(_req: NextRequest) {
-  const apiKey = process.env.NEXT_PUBLIC_ASSEMBLYAI_API_KEY?.trim();
+  // IMPORTANT: Use ASSEMBLYAI_API_KEY (no NEXT_PUBLIC_ prefix).
+  // This is a server-side route — the key must never reach the browser.
+  // Only the short-lived token is returned to the client.
+  const apiKey = process.env.ASSEMBLYAI_API_KEY?.trim();
 
   // If no AssemblyAI key, indicate fallback to Web Speech API
   if (!apiKey) {

@@ -12,6 +12,10 @@ import {
 import { preprocessChunk, buildRecentTranscriptContext } from "../../signals/chunk-preprocessor";
 import { runDiscoveryAgent, updateDiscoveryState } from "../discovery";
 import { runObjectionIntelAgent } from "../objection-intel";
+import { runDealRiskAgent } from "../deal-risk";
+import { runEmotionalAgent } from "../emotional";
+import { getKBContextForCall, getObjectionKBContext } from "../../kb/search";
+import { getProspectContextForSession } from "../prospect-memory";
 import { getSession, saveSession, saveLatestCoachingCard } from "../../memory/session-store";
 import {
   insertTranscriptChunk,
@@ -39,6 +43,8 @@ import type {
 const CONFIG = {
   // How often to run discovery agent (every N chunks)
   DISCOVERY_EVERY_N_CHUNKS: 1,
+  // How often to run deal risk agent (every N chunks — slower, Haiku)
+  DEAL_RISK_EVERY_N_CHUNKS: 3,
   // Minimum confidence threshold to emit a coaching card
   MIN_CONFIDENCE_TO_EMIT: 0.55,
   // Max coaching history to keep in session state
@@ -143,6 +149,143 @@ function buildBuyingSignalCard(
     current_phase: session.phase,
     source_agent: "buying_signal",
   };
+}
+
+function buildDealRiskCard(
+  session: LiveCallSession,
+  chunk: TranscriptChunk,
+  drOutput: import("../../types").DealRiskOutput
+): CoachingCard | null {
+  // Only emit a card for high-signal recommendations
+  const { recommendation, overall_score, rep_tactical_advice, biggest_risk } = drOutput;
+
+  if (recommendation === "attempt_close") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "critical",
+      coaching_type: "close_attempt",
+      headline: `🎯 Close readiness: ${overall_score}/100 — ask for the business`,
+      primary_action: rep_tactical_advice,
+      why: `All close conditions met. ${biggest_risk}`,
+      suggested_language: "It sounds like you can see how this could work — what would need to be true for you to feel confident moving forward?",
+      context_tags: ["close", "deal_risk", "attempt_close"],
+      confidence: 0.85,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  if (recommendation === "rescue_call") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "critical",
+      coaching_type: "danger_warning",
+      headline: "🚨 Rescue needed — prospect is disengaging",
+      primary_action: rep_tactical_advice,
+      why: biggest_risk,
+      what_not_to_do: "Do not continue with your current approach — it is not working",
+      context_tags: ["rescue", "deal_risk", "danger"],
+      confidence: 0.8,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  if (recommendation === "position_now" && session.phase !== "positioning") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "high",
+      coaching_type: "positioning_angle",
+      headline: `Discovery complete (${overall_score}/100) — ready to position`,
+      primary_action: rep_tactical_advice,
+      why: `Close readiness score: ${overall_score}/100. ${biggest_risk}`,
+      context_tags: ["positioning", "deal_risk", "transition"],
+      confidence: 0.75,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  return null; // Other recommendations handled by discovery/objection agents
+}
+
+function buildEmotionalCard(
+  session: LiveCallSession,
+  chunk: TranscriptChunk,
+  emOutput: import("../../types").EmotionalOutput
+): CoachingCard | null {
+  // Only emit if there's an alert or a high-intensity shift
+  if (!emOutput.alert && (emOutput.intensity !== "high" || !emOutput.detected_shift)) {
+    return null;
+  }
+
+  if (emOutput.alert?.type === "shutdown") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "critical",
+      coaching_type: "danger_warning",
+      headline: "⚠️ Prospect shutting down — change approach now",
+      primary_action: emOutput.alert.action,
+      why: emOutput.signal_evidence,
+      what_not_to_do: "Do not continue with the same approach or ask another question",
+      context_tags: ["emotional", "shutdown", "rescue"],
+      confidence: 0.82,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  if (emOutput.alert?.type === "breakthrough") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "high",
+      coaching_type: "probe_deeper",
+      headline: "💡 Emotional breakthrough — go deeper now",
+      primary_action: emOutput.alert.action,
+      why: emOutput.signal_evidence,
+      suggested_language: emOutput.rep_recommendation,
+      context_tags: ["emotional", "breakthrough", "pain"],
+      confidence: 0.78,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  // High-intensity declining shift
+  if (emOutput.detected_shift && emOutput.direction === "declining" && emOutput.intensity === "high") {
+    return {
+      id: generateCardId(),
+      call_id: session.call_id,
+      chunk_index: chunk.chunk_index,
+      timestamp_ms: Date.now(),
+      priority: "high",
+      coaching_type: "rep_warning",
+      headline: `Prospect mood shifting — ${emOutput.emotional_state.replace(/_/g, " ")}`,
+      primary_action: emOutput.rep_recommendation,
+      why: emOutput.signal_evidence,
+      context_tags: ["emotional", emOutput.emotional_state, "shift"],
+      confidence: 0.72,
+      current_phase: session.phase,
+      source_agent: "deal_risk",
+    };
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -333,14 +476,42 @@ export async function processTranscriptChunk(
     candidateCards.push(bsCard);
   }
 
-  // 7b. Run Discovery Agent + Objection Agent in parallel
-  const [discoveryResult, objectionResult] = await Promise.allSettled([
-    // Always run discovery
-    runDiscoveryAgent(session),
-    // Run objection agent only if objection detected
+  // 7b. Pre-fetch KB context + prospect memory in parallel BEFORE agents
+  //     Both are fast DB reads (< 20ms). Done before the agent batch so
+  //     context is ready to inject without adding to agent latency.
+  const [kbContext, objectionKBContext, prospectMemory] = await Promise.all([
+    getKBContextForCall(session),
     preprocessed.should_trigger_objection_agent
-      ? runObjectionIntelAgent(session, chunk.text, [])
+      ? getObjectionKBContext(chunk.text, session.prospect.vertical)
+      : Promise.resolve(""),
+    session.prospect_id
+      ? getProspectContextForSession(session.prospect_id)
       : Promise.resolve(null),
+  ]);
+
+  // 7c. Run all agents in parallel — fast path (Haiku) + reasoning path (Sonnet)
+  const shouldRunDealRisk = chunk.chunk_index % CONFIG.DEAL_RISK_EVERY_N_CHUNKS === 0;
+  const hasProspectSpeech = chunk.speaker === "prospect";
+
+  const agentOptions = {
+    kb_context: kbContext || undefined,
+    prospect_memory: prospectMemory || undefined,
+  };
+
+  const [discoveryResult, objectionResult, dealRiskResult, emotionalResult] = await Promise.allSettled([
+    // Discovery: always (every chunk) — with KB + prospect memory context
+    runDiscoveryAgent(session, agentOptions),
+    // Objection Intel: only when objection keywords detected — with targeted objection KB
+    preprocessed.should_trigger_objection_agent
+      ? runObjectionIntelAgent(session, chunk.text, [], {
+          kb_context: objectionKBContext || kbContext || undefined,
+          prospect_memory: prospectMemory || undefined,
+        })
+      : Promise.resolve(null),
+    // Deal Risk: every 3rd chunk
+    shouldRunDealRisk ? runDealRiskAgent(session) : Promise.resolve(null),
+    // Emotional: every chunk with prospect speech
+    hasProspectSpeech ? runEmotionalAgent(session) : Promise.resolve(null),
   ]);
 
   // Process discovery result
@@ -379,6 +550,56 @@ export async function processTranscriptChunk(
         session.call_id, "objection_intel", chunk.chunk_index,
         or.output as unknown as Record<string, unknown>,
         or.latency_ms, or.model, or.input_tokens, or.output_tokens
+      ).catch(console.error);
+    }
+  }
+
+  // Process deal risk result — update scores + optionally emit a card
+  if (dealRiskResult.status === "fulfilled" && dealRiskResult.value !== null) {
+    const dr = dealRiskResult.value;
+    if (dr) {
+      session.agent_outputs.deal_risk = dr.output;
+
+      // Update session scores from deal risk breakdown (Haiku-scored, refreshed every 3 chunks)
+      const b = dr.output.scoring_breakdown;
+      session.scores = {
+        trust: b.trust.score,
+        urgency: b.urgency.score,
+        pain_depth: b.pain_clarity.score,
+        authority: b.authority.score,
+        budget_fit: b.budget_fit.score,
+        emotional_engagement: b.engagement.score,
+        close_readiness: dr.output.overall_score,
+        deal_risk: Math.max(0, 100 - dr.output.overall_score),
+      };
+
+      const drCard = buildDealRiskCard(session, chunk, dr.output);
+      if (drCard) candidateCards.push(drCard);
+
+      persistAgentOutput(
+        session.call_id, "deal_risk", chunk.chunk_index,
+        dr.output as unknown as Record<string, unknown>,
+        dr.latency_ms, dr.model, dr.input_tokens, dr.output_tokens
+      ).catch(console.error);
+    }
+  }
+
+  // Process emotional result — update prospect state + optionally emit a card
+  if (emotionalResult.status === "fulfilled" && emotionalResult.value !== null) {
+    const er = emotionalResult.value;
+    if (er) {
+      session.agent_outputs.emotional_signals = er.output;
+
+      // Update prospect emotional state
+      session.prospect.emotional_state = er.output.emotional_state;
+
+      const emCard = buildEmotionalCard(session, chunk, er.output);
+      if (emCard) candidateCards.push(emCard);
+
+      persistAgentOutput(
+        session.call_id, "emotional", chunk.chunk_index,
+        er.output as unknown as Record<string, unknown>,
+        er.latency_ms, er.model, er.input_tokens, er.output_tokens
       ).catch(console.error);
     }
   }

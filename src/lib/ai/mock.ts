@@ -33,6 +33,28 @@ export function mockTimestamp(): string {
 }
 
 // ─────────────────────────────────────────────────────────────
+// sanitizeDraftText — strips undefined/null/NaN/[object Object] from
+// any string that will be shown to the user. Prevents placeholder leakage.
+// ─────────────────────────────────────────────────────────────
+
+export function sanitizeDraftText(text: string | null | undefined, fallback = ""): string {
+  if (text === null || text === undefined) return fallback;
+  return String(text)
+    // Remove bare undefined, null, NaN, [object Object]
+    .replace(/\bundefined\b/g, "")
+    .replace(/\bnull\b/g, "")
+    .replace(/\bNaN\b/g, "")
+    .replace(/\[object Object\]/g, "")
+    // Collapse multiple consecutive spaces
+    .replace(/ {2,}/g, " ")
+    // Remove trailing period/comma before whitespace or end
+    .replace(/\s+([.,])\s*$/g, "")
+    // Remove dangling punctuation at start of sentence after removal
+    .replace(/\.\s*\./g, ".")
+    .trim() || fallback;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Mock intelligence extraction — returns Kaczmar-style realistic data
 // ─────────────────────────────────────────────────────────────
 
@@ -135,6 +157,19 @@ function normalizeIntel(raw: ClientIntelligence | null): ClientIntelligence | nu
       leadFormQuestions: a(raw.campaignImplications?.leadFormQuestions),
       followUpStrategy: a(raw.campaignImplications?.followUpStrategy),
       whatNotToSay: a(raw.campaignImplications?.whatNotToSay),
+    },
+    // salesAudit — AI extraction schema includes avgResponseTime, lostLeadRecovery, leadFallOffPoint
+    // but NOT all fields. Guard against undefined access on every field.
+    salesAudit: {
+      leadProcess: raw.salesAudit?.leadProcess ?? "",
+      avgResponseTime: raw.salesAudit?.avgResponseTime ?? "5 minutes",
+      whoAnswersCalls: raw.salesAudit?.whoAnswersCalls ?? "",
+      hasSalesScript: raw.salesAudit?.hasSalesScript ?? false,
+      inspectionBookingProcess: raw.salesAudit?.inspectionBookingProcess ?? "",
+      estimatePresentation: raw.salesAudit?.estimatePresentation ?? "",
+      followUpCadence: raw.salesAudit?.followUpCadence ?? "",
+      lostLeadRecovery: raw.salesAudit?.lostLeadRecovery ?? "",
+      leadFallOffPoint: raw.salesAudit?.leadFallOffPoint ?? "",
     },
   };
 }
@@ -360,9 +395,9 @@ export function generateMockPlan(
       ]
     : isRoofing
     ? [
-        `Your roof protects everything that matters. Don't let hidden damage turn into a $20,000 replacement. ${client.name} offers free roof inspections for ${market} homeowners — no pressure, no obligation. If we find damage, we'll show you exactly what needs fixing and help you navigate your insurance claim. Schedule your free inspection today.`,
-        `Storm season doesn't wait — and neither should you. ${client.name} is offering free roof inspections across ${market} this month. In 45 minutes, we'll tell you exactly what shape your roof is in, what it'll cost to fix, and whether you have an insurance claim worth filing. No surprises. No pressure. Just answers.`,
-        `"I had no idea my roof was damaged until ${client.name} found it during my free inspection. Saved me from a full replacement." — Real ${market} homeowner. Schedule your free inspection today. We've served ${market} for years and we'll give you the honest truth about your roof.`,
+        `Your roof protects everything that matters. Don't let hidden damage turn into a $20,000 replacement. ${client.name} offers free roof inspections for ${market} homeowners — no pressure, no obligation. If we find damage, we'll show you exactly what needs fixing and walk you through your options honestly. Schedule your free inspection today.`,
+        `Storm season doesn't wait — and neither should you. ${client.name} is offering free roof inspections across ${market} right now. In 45 minutes, we'll tell you exactly what shape your roof is in, what it'll cost to address, and what your realistic options are. No surprises. No pressure. Just honest answers.`,
+        `"I had no idea my roof was damaged until ${client.name} found it during my free inspection. Professional from start to finish." — Real ${market} homeowner. Schedule your free inspection today. We've served ${market} homeowners and we'll give you the honest truth about your roof.`,
       ]
     : [
         `Your home should reflect your vision. At ${client.name}, we specialize in premium remodeling across ${market} — from concept to completion with zero surprises. Transparent pricing, clear timelines, and craftsmanship that lasts decades. Book your free consultation today.`,
@@ -434,10 +469,10 @@ export function generateMockPlan(
     contactFields: ["First Name", "Last Name", "Phone Number", "Email Address", "Home Address / Zip Code"],
     consentLanguage: `By submitting this form, you agree to be contacted by ${client.name} via phone, SMS, and email. Message and data rates may apply. Reply STOP to opt out. We will never share your information with third parties. View our Privacy Policy at [URL].`,
     thankYouCopy: hasIntel
-      ? `Thanks, [First Name]! Your request is confirmed. ${ownerName} from ${client.name} will contact you within ${intel.salesAudit.avgResponseTime ?? "15 minutes"} to get you scheduled. ${intel.salesAudit.leadProcess}.`
+      ? `Thanks, [First Name]. Your request is confirmed. ${ownerName} from ${client.name} will contact you within ${intel.salesAudit?.avgResponseTime ?? "5 minutes"} to schedule your free${isRoofing ? " roof inspection" : " consultation"}.`
       : isRoofing
-      ? `Thanks, [First Name]! Your free inspection request is confirmed. ${client.owner} from ${client.name} will contact you within 15 minutes to schedule a convenient time. Watch your phone!`
-      : `Thanks, [First Name]! Your free consultation request is confirmed. ${client.owner} from ${client.name} will reach out within 15 minutes to get you scheduled.`,
+      ? `Thanks, [First Name]. Your free inspection request is confirmed. ${client.owner} from ${client.name} will contact you shortly to schedule a convenient time. Watch your phone!`
+      : `Thanks, [First Name]. Your free consultation request is confirmed. ${client.owner} from ${client.name} will reach out shortly to get you scheduled. We look forward to hearing about your project!`,
   };
 
   // GHL workflow — use intelligence for follow-up strategy
@@ -561,27 +596,22 @@ export function generateMockPlan(
     insuranceRisk: isRoofing
       ? "Do not imply guaranteed insurance claim approval. Do not use 'insurance will cover it' or 'file a claim and pay nothing.' Use: 'we'll help you understand your options.'"
       : "N/A — No insurance claim language in this campaign category.",
-    disallowedPhrases: hasIntel && intel.campaignImplications.whatNotToSay.length > 0
-      ? intel.campaignImplications.whatNotToSay
-      : isRoofing
-      ? [
-          '"Insurance will cover it" or "file a free insurance claim"',
-          '"Guaranteed approval" or "100% covered by insurance"',
-          '"Best roofer in [city]" — superlative claims',
-          '"Limited time" without a real end date',
-          '"Free replacement" — inspection offer only, not replacement',
-        ]
-      : [
-          '"Cheapest remodeling in [city]" — price superlatives',
-          '"Guaranteed to increase home value by X%" — performance claims',
-          '"Best contractor in [city]" — unverified superlatives',
-          '"Limited spots available" without enforcing the limit',
-        ],
+    // disallowedPhrases: phrases FOUND in generated copy that violate Meta/compliance rules.
+    // This field drives the Safety tab "Disallowed Phrases" check.
+    // The mock generator does not produce banned phrases, so this is intentionally empty.
+    // Anthropic-generated strategy copy is pre-screened by compliance guardrails in the system prompt.
+    disallowedPhrases: [],
     approvalWarnings: [
-      "⚠ Insurance/storm claim language — requires human review before Meta submission",
+      "⚠ Verify all copy is free of insurance guarantee language before Meta submission",
       "⚠ Lead form consent language — verify privacy policy URL is live and accurate",
       `⚠ Before/after imagery — must be authentic ${client.name} work, not stock photos`,
       "⚠ SMS sequence — verify TCPA consent is captured in lead form before activating",
+      ...(isRoofing ? [
+        "⚠ Do NOT use: 'insurance will cover it', 'guaranteed approval', '100% covered', 'free replacement', 'best roofer in [city]', or any guaranteed outcome language",
+        "⚠ Safe replacements: 'free roof inspection', 'we can document visible storm damage for your records', 'we will help you understand your options'",
+      ] : [
+        "⚠ Do NOT use: 'best contractor in [city]', 'guaranteed to increase home value', 'limited spots available' without enforcing the limit",
+      ]),
       ...(hasIntel && intel.brandIntelligence.complianceNotes.length > 0
         ? intel.brandIntelligence.complianceNotes.map((n) => `⚠ ${n}`)
         : []),

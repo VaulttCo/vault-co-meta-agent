@@ -143,7 +143,7 @@ export default function RevenueDashboardPage() {
             </div>
             <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>
               Setup revenue · partner earnings · recurring projections · scenario modeling.
-              All figures are projections until Stripe or Square is connected.
+              All figures are projections until Stripe is connected.
             </p>
           </div>
           <Link href="/" className="flex items-center gap-1 text-[11px] flex-shrink-0"

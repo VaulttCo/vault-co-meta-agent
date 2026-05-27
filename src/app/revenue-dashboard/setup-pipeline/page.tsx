@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { Layers, Info } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
@@ -56,7 +57,7 @@ export default function SetupPipelinePage() {
         <SectionHeader
           icon={Layers}
           title="Client Pipeline"
-          subtitle="Payment status inferred from pipeline stage — connect Stripe or Square for actual collections"
+          subtitle="Payment status inferred from pipeline stage — connect Stripe to track confirmed invoice status"
           badge={<ProjectionBadge label="BILLING REQ. FOR ACTUALS" />}
         />
         <div className="overflow-x-auto">
@@ -83,7 +84,11 @@ export default function SetupPipelinePage() {
                       className="border-b transition-colors hover:bg-white/[0.01]"
                       style={{ borderColor: "var(--t-border-nav)" }}>
                       <td className="px-4 py-3.5">
-                        <div className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>{client.name}</div>
+                        <Link href={`/revenue-dashboard/clients/${client.id}`}
+                          className="text-[13px] font-semibold hover:underline"
+                          style={{ color: "var(--t-text)" }}>
+                          {client.name}
+                        </Link>
                         <div className="text-[10px]" style={{ color: "var(--t-dim)" }}>{client.market}</div>
                       </td>
                       <td className="px-4 py-3.5">
@@ -129,7 +134,7 @@ export default function SetupPipelinePage() {
         <div className="px-5 py-3 border-t flex items-center gap-2" style={{ borderColor: "var(--t-border-nav)" }}>
           <Info size={11} className="flex-shrink-0" style={{ color: "var(--t-dim)" }} />
           <p className="text-[11px]" style={{ color: "var(--t-dim)" }}>
-            M1/M2 status is inferred from pipeline stage, not confirmed payment data. Connect Stripe or Square to track actual collections.
+            M1/M2 status is inferred from pipeline stage, not confirmed invoice data. Connect Stripe to track confirmed invoice status.
           </p>
         </div>
       </SectionCard>

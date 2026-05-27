@@ -198,7 +198,8 @@ export interface DiscoveryAgentResult {
 }
 
 export async function runDiscoveryAgent(
-  session: LiveCallSession
+  session: LiveCallSession,
+  options: { kb_context?: string; prospect_memory?: string } = {}
 ): Promise<DiscoveryAgentResult> {
   const start = Date.now();
 
@@ -232,6 +233,8 @@ export async function runDiscoveryAgent(
     current_phase: session.phase,
     transcript_context: transcriptContext,
     discovery_state: updatedDiscovery,
+    kb_context: options.kb_context,
+    prospect_memory: options.prospect_memory,
   });
 
   try {

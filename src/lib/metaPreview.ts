@@ -270,20 +270,72 @@ export function buildMetaPreviewPayload(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const metaMeta = asObj((metaConn ?? metaConnAny)?.metadata as any);
 
+  // Pixel ID — check all known field name variants across integration metadata
+  const rawPixelId =
+    metaMeta.pixel_id ||
+    metaMeta.pixelId ||
+    metaMeta.meta_pixel_id ||
+    metaMeta.metaPixelId ||
+    null;
+  // Page ID — check all known field name variants
+  const rawPageId =
+    metaMeta.page_id ||
+    metaMeta.pageId ||
+    metaMeta.facebook_page_id ||
+    metaMeta.facebookPageId ||
+    null;
+
   const tracking: MetaTrackingPreview = {
     adAccountConnected: metaConn?.connection_status === "connected",
     adAccountId: metaConn?.provider_account_id ?? null,
-    pixelConnected: !!(metaMeta.pixel_id || metaMeta.pixelId),
-    pixelId: asStr(metaMeta.pixel_id || metaMeta.pixelId) || null,
-    facebookPageConnected: !!(metaMeta.page_id || metaMeta.pageId),
-    facebookPageId: asStr(metaMeta.page_id || metaMeta.pageId) || null,
+    pixelConnected: !!rawPixelId,
+    pixelId: asStr(rawPixelId) || null,
+    facebookPageConnected: !!rawPageId,
+    facebookPageId: asStr(rawPageId) || null,
     lastSyncedAt: metaConn?.last_synced_at ?? null,
   };
 
   // ── Safety Checklist ──────────────────────────────────────────────
   const metaRisk = asStr(compliance.metaRisk, "UNKNOWN");
-  const disallowedPhrases: string[] = asArr(compliance.disallowedPhrases).map((p) => asStr(p)).filter(Boolean);
   const approvalWarnings: string[] = asArr(compliance.approvalWarnings).map((w) => asStr(w)).filter(Boolean);
+
+  // Banned phrase scan — scan actual ad copy for known compliance violations.
+  // disallowedPhrases in the compliance field should be FOUND violations, not a "to avoid" list.
+  // We also scan copy directly to catch any phrases missed by the generator.
+  const BANNED_PHRASE_PATTERNS: { phrase: string; pattern: RegExp }[] = [
+    { phrase: "insurance will cover it", pattern: /insurance will cover it/i },
+    { phrase: "file a free insurance claim", pattern: /file a free insurance claim/i },
+    { phrase: "file.*insurance claim", pattern: /file.{0,20}insurance claim/i },
+    { phrase: "guaranteed approval", pattern: /guaranteed approval/i },
+    { phrase: "pre-approved", pattern: /pre-approved/i },
+    { phrase: "100% covered by insurance", pattern: /100%?\s*covered by insurance/i },
+    { phrase: "best roofer in [city]", pattern: /best roofer in/i },
+    { phrase: "free replacement", pattern: /free replacement/i },
+    { phrase: "guaranteed outcome", pattern: /we guarantee.{0,40}(claim|approval|coverage)/i },
+  ];
+
+  // Gather all copy text to scan
+  const allCopyText = [
+    ...ads.flatMap((a) => [...a.primaryTexts, a.headline, a.description]),
+    leadForm.introCopy,
+    leadForm.thankYouCopy,
+  ].filter(Boolean).join(" ");
+
+  // Phrases from compliance field — filter out advisory "to avoid" entries (they start with '"')
+  const complianceFieldPhrases: string[] = asArr(compliance.disallowedPhrases)
+    .map((p) => asStr(p))
+    .filter(Boolean)
+    .filter((p) => !(p.startsWith('"') && p.length > 50));
+
+  // Scan actual copy for banned patterns
+  const scannedViolations: string[] = BANNED_PHRASE_PATTERNS
+    .filter(({ pattern }) => pattern.test(allCopyText))
+    .map(({ phrase }) => phrase);
+
+  // Merge: compliance field violations + scanned violations, deduplicated
+  const disallowedPhrases: string[] = [
+    ...new Set([...complianceFieldPhrases, ...scannedViolations]),
+  ];
 
   const riskStatus: SafetyCheckItem["status"] = metaRisk.startsWith("LOW")
     ? "pass"
@@ -345,26 +397,31 @@ export function buildMetaPreviewPayload(
       status: tracking.adAccountConnected ? "pass" : "fail",
       detail: tracking.adAccountConnected
         ? `Connected: ${tracking.adAccountId}`
-        : "No connected Meta ad account",
+        : "No connected Meta ad account. Connect in Client → Integrations → Meta.",
     },
     {
-      label: "Meta Pixel",
+      // Pixel is WARN (not FAIL) for instant-form lead campaigns.
+      // Pixel is only required for retargeting and website event optimization.
+      // If retargeting ad set is present and pixel missing, that is handled in the Retargeting check.
+      label: "Meta Pixel Confirmed",
       status: tracking.pixelConnected ? "pass" : "warn",
       detail: tracking.pixelConnected
-        ? `Pixel ID: ${tracking.pixelId}`
-        : "No pixel detected in integration metadata",
+        ? `Pixel ID: ${tracking.pixelId} — website event tracking active.`
+        : "Meta Pixel ID not found in integration metadata. Add it in Client → Integrations → Meta. Required for retargeting and website event tracking. Instant-form prospecting ad sets can still launch without Pixel.",
     },
     {
-      label: "Facebook Page",
+      // Facebook Page is WARN (not FAIL) for instant-form campaigns.
+      // Page connection is required for retargeting and social proof ad sets.
+      label: "Facebook Page Connected",
       status: tracking.facebookPageConnected ? "pass" : "warn",
       detail: tracking.facebookPageConnected
-        ? `Page ID: ${tracking.facebookPageId}`
-        : "No Facebook page ID in integration metadata",
+        ? `Page ID: ${tracking.facebookPageId} — Facebook Page connected.`
+        : "Facebook Page ID not found in integration metadata. Add it in Client → Integrations → Meta. Required for retargeting ad set and social proof placement. Prospecting ad sets can run without it.",
     },
     {
       label: "SMS Compliance",
       status: asStr(compliance.smsCompliance).startsWith("COMPLIANT") ? "pass" : "warn",
-      detail: asStr(compliance.smsCompliance, "Not assessed"),
+      detail: asStr(compliance.smsCompliance, "Not assessed — verify TCPA consent is captured in the lead form before activating SMS sequences."),
     },
     ...(retargetingAdSets.length > 0
       ? [
@@ -372,22 +429,24 @@ export function buildMetaPreviewPayload(
             label: "Retargeting Ad Set",
             status: retargetingBlocked ? ("warn" as const) : ("pass" as const),
             detail: retargetingBlocked
-              ? `Blocked — connect Meta Pixel + Facebook Page to enable: ${retargetingAdSets.map((s) => s.name).join(", ")}`
-              : `Ready — Pixel + Page connected for: ${retargetingAdSets.map((s) => s.name).join(", ")}`,
+              ? `Paused / Blocked — retargeting requires Meta Pixel + Facebook Page. Missing: ${[!tracking.pixelConnected && "Pixel ID", !tracking.facebookPageConnected && "Facebook Page ID"].filter(Boolean).join(", ")}. Fix in Client → Integrations → Meta. Prospecting ad sets are unaffected.`
+              : `Ready — Pixel + Page connected. Retargeting ad set${retargetingAdSets.length > 1 ? "s" : ""}: ${retargetingAdSets.map((s) => s.name).join(", ")}`,
           },
         ]
       : []),
   ];
 
   // ── Missing Requirements ──────────────────────────────────────────
+  // Only hard blockers go here — Pixel and Page are warnings, not blockers for instant-form campaigns.
   const missingRequirements: string[] = [];
-  if (!tracking.adAccountConnected) missingRequirements.push("Connect Meta ad account");
-  if (!tracking.pixelConnected) missingRequirements.push("Add Meta Pixel ID to integration settings");
-  if (!tracking.facebookPageConnected) missingRequirements.push("Add Facebook Page ID to integration settings");
-  if (!allCreativesApproved) missingRequirements.push("Approve all creative assets for Meta ads");
-  if (!hasLeadForm) missingRequirements.push("Complete lead form configuration");
-  if (disallowedPhrases.length > 0) missingRequirements.push(`Remove disallowed phrases: ${disallowedPhrases.join(", ")}`);
-  if (riskStatus === "fail") missingRequirements.push("Resolve HIGH meta policy risk before launch");
+  if (!tracking.adAccountConnected) missingRequirements.push("Connect Meta ad account in Client → Integrations");
+  if (!allCreativesApproved) missingRequirements.push("Approve all creative assets for Meta ads in Creative Library");
+  if (!hasLeadForm) missingRequirements.push("Complete lead form configuration in Campaign Builder");
+  if (disallowedPhrases.length > 0) missingRequirements.push(`Remove compliance violations found in copy: ${disallowedPhrases.join(", ")}`);
+  if (riskStatus === "fail") missingRequirements.push("Resolve HIGH meta policy risk before launch — see Safety tab");
+  // Pixel and Page are advisory warnings, added separately from hard blockers
+  if (!tracking.pixelConnected) missingRequirements.push("⚠ Add Meta Pixel ID to enable retargeting and website event tracking (not required for instant-form prospecting)");
+  if (!tracking.facebookPageConnected) missingRequirements.push("⚠ Add Facebook Page ID to enable retargeting ad set (not required for prospecting-only launch)");
 
   return {
     previewOnly: true,

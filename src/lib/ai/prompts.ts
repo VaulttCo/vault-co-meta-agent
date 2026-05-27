@@ -39,6 +39,20 @@ Core rules:
 
 Return ONLY valid JSON. No markdown, no explanation. Follow the schema exactly.`;
 
+// System prompt for the compact strategy call (tool-calling path).
+// Claude generates a compact strategy only — deterministic code builds the full CampaignDraft.
+export const COMPACT_STRATEGY_SYSTEM_PROMPT = `You are a Meta advertising strategist for Vault Co, a premium growth partner for roofing and construction companies. Generate compact campaign strategy for human review.
+
+Core rules:
+- Measure success in booked appointments and revenue, not just leads
+- Buyers are homeowners making $10K–$50K decisions — copy must reflect this
+- Never use "cheapest" language for premium clients
+- NEVER imply guaranteed insurance coverage or ROI
+- ALL SMS requires TCPA opt-in consent in the lead form
+- This is a DRAFT only — no live actions without human approval
+
+Your output is STRATEGY ONLY. Deterministic code builds the full campaign draft (ad sets, budgets, lead form, GHL workflow, compliance section, optimization rules, ad copy, asset variations) from your strategic direction. Be specific and concise — 1-2 sentences per field, max 3 items per array.`;
+
 // ─────────────────────────────────────────────────────────────
 // JSON schema
 // ─────────────────────────────────────────────────────────────
@@ -121,6 +135,13 @@ export function buildCampaignPrompt(input: CampaignGenerationInput, toolMode = f
   const budgetNum = parseInt(input.budget.replace(/[^0-9]/g, "")) || 1500;
   const intel = input.clientIntelligence;
   const asset = input.selectedAsset ?? null;
+  // All selected assets (used for per-asset copy directions in tool mode)
+  const assets =
+    input.selectedAssets && input.selectedAssets.length > 0
+      ? input.selectedAssets
+      : asset
+      ? [asset]
+      : [];
 
   const creativeSection = asset ? `
 ## Creative Asset Selected
@@ -230,7 +251,22 @@ For compliance: Be thorough. Flag any copy or targeting that could trigger Meta 
 For optimization: Use industry benchmarks: roofing CPL target $50–$80, remodeling CPL target $100–$150.
 
 ${toolMode
-  ? "Use the generate_campaign_draft tool to return the campaign draft. Populate every field completely based on the client, intelligence, and campaign parameters above. Keep all string values concise and free of special characters."
+  ? `Use the generate_campaign_strategy tool to return ONLY the compact strategy object.
+
+DO NOT output a full campaign draft. The system builds all campaign sections deterministically from your strategy — ad sets, budgets, lead form, GHL workflow, compliance, optimization rules, and asset variations are all code-generated.
+
+Your job: provide strategic direction only.
+- Campaign angle and positioning (specific to this client, market, service)
+- Up to 3 recommended hooks (opening lines for ad copy, 10-15 words each, ready to use)
+- Up to 3 primary objections this campaign must address
+- Audience strategy rationale (who to target and why, specific to this client)
+- Compliance risk level (LOW / MEDIUM / HIGH) and the top 1-2 specific risks
+- Lead form qualification intent (what a quality lead looks like)
+- Why this campaign approach (2-3 sentences, specific to this client — not generic)${assets.length > 0 ? `
+- Per-asset copy directions for each selected asset:
+${assets.map((a) => `  • Asset ID: ${a.id} — ${a.fileName} (${a.assetType})`).join("\n")}` : ""}
+
+Be concise: 1-2 sentences per field. No boilerplate. This campaign is for a real client spending real money.`
   : `Return ONLY the following JSON object with no additional text:\n\n${CAMPAIGN_DRAFT_SCHEMA}`
 }`;
 }

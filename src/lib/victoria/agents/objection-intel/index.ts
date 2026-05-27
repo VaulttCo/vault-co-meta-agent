@@ -156,7 +156,8 @@ export interface ObjectionAgentResult {
 export async function runObjectionIntelAgent(
   session: LiveCallSession,
   triggering_chunk_text: string,
-  detected_categories: ObjectionCategory[]
+  detected_categories: ObjectionCategory[],
+  options: { kb_context?: string; prospect_memory?: string } = {}
 ): Promise<ObjectionAgentResult> {
   const start = Date.now();
 
@@ -178,6 +179,8 @@ export async function runObjectionIntelAgent(
     objection_text: triggering_chunk_text,
     transcript_context: transcriptContext,
     prior_objections: priorObjections,
+    kb_context: options.kb_context,
+    prospect_memory: options.prospect_memory,
   });
 
   try {

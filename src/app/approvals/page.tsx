@@ -578,10 +578,10 @@ function MetaPayloadPreviewModal({
                   !!payload.leadForm.consentLanguage;
                 const noComplianceBlockers =
                   !payload.missingRequirements.some((r) =>
-                    r.toLowerCase().includes("policy risk") || r.toLowerCase().includes("disallowed phrase")
+                    !r.startsWith("⚠") && (r.toLowerCase().includes("policy risk") || r.toLowerCase().includes("compliance violation"))
                   );
                 const noHighRisk = !payload.safetyChecklist.some(
-                  (c) => c.status === "fail" && c.label.toLowerCase().includes("risk")
+                  (c) => c.status === "fail" && (c.label.toLowerCase().includes("risk") || c.label.toLowerCase().includes("disallowed"))
                 );
                 const previewExists = true; // We are inside the modal — preview was built.
 
@@ -593,69 +593,94 @@ function MetaPayloadPreviewModal({
                   manualOnly?: boolean;
                 }
 
+                // Check for actual disallowed phrase violations in safety checklist
+                const disallowedItem = payload.safetyChecklist.find((c) => c.label === "Disallowed Phrases");
+                const hasActualViolations = disallowedItem?.status === "fail";
+                const hasHighPolicyRisk = payload.safetyChecklist.some(
+                  (c) => c.status === "fail" && (c.label === "Meta Policy Risk" || c.label === "Disallowed Phrases")
+                );
+
+                // Retargeting blocked specifically
+                const retargetingItem = payload.safetyChecklist.find((c) => c.label === "Retargeting Ad Set");
+                const retargetingBlocked = retargetingItem?.status === "warn";
+
                 const checks: GateCheck[] = [
                   {
                     label: "Campaign Draft Approved",
                     status: draftApproved ? "pass" : "fail",
                     detail: draftApproved
-                      ? `Status: ${payload.draftStatus}`
-                      : `Draft must be approved before push. Current status: ${payload.draftStatus}`,
+                      ? `Status: ${payload.draftStatus} — draft has been approved for Meta push review.`
+                      : `Draft must be approved before push. Current status: ${payload.draftStatus}. Submit for approval in the Campaign Builder.`,
                   },
                   {
                     label: "All Creative Assets Approved for Ads",
                     status: !hasAds ? "warn" : allCreativesApproved ? "pass" : "fail",
                     detail: !hasAds
-                      ? "No ad variations found in draft — add creatives first."
+                      ? "No ad variations found in draft — add creatives in Campaign Builder first."
                       : allCreativesApproved
                       ? `${payload.ads.length} ad variation${payload.ads.length !== 1 ? "s" : ""} — all approved for Meta ads.`
-                      : `${payload.ads.filter((a) => !a.approvedForAds).length} of ${payload.ads.length} creative(s) not yet approved. Review in Creative Library.`,
+                      : `${payload.ads.filter((a) => !a.approvedForAds).length} of ${payload.ads.length} creative(s) not yet approved. Approve in Creative Library → mark as Approved for Ads.`,
                   },
                   {
                     label: "Meta Ad Account Connected",
                     status: adAccountConnected ? "pass" : "fail",
                     detail: adAccountConnected
-                      ? `Ad Account: ${payload.tracking.adAccountId ?? "connected"}`
-                      : "Connect Meta Ad Account in Integrations settings.",
+                      ? `Ad Account: ${payload.tracking.adAccountId ?? "connected"} — Meta ad account is active.`
+                      : "No connected Meta ad account. Connect in Client → Integrations → Meta. Required for all campaign launches.",
                   },
                   {
+                    // Pixel is a WARNING (not a hard blocker) for instant-form lead campaigns.
+                    // Hard blocker only when retargeting ad set is included.
                     label: "Meta Pixel Confirmed",
-                    status: pixelConnected ? "pass" : "fail",
+                    status: pixelConnected ? "pass" : retargetingBlocked ? "warn" : "warn",
                     detail: pixelConnected
-                      ? `Pixel ID: ${payload.tracking.pixelId ?? "confirmed"}`
-                      : "Add Meta Pixel ID to the Meta integration settings.",
+                      ? `Pixel ID: ${payload.tracking.pixelId ?? "confirmed"} — website event tracking active.`
+                      : "Meta Pixel ID missing. Add in Client → Integrations → Meta. Required for retargeting and website event optimization. Instant-form prospecting ad sets can launch without Pixel.",
                   },
                   {
+                    // Facebook Page is a WARNING (not a hard blocker) for prospecting-only campaigns.
                     label: "Facebook Page Connected",
-                    status: pageConnected ? "pass" : "fail",
+                    status: pageConnected ? "pass" : "warn",
                     detail: pageConnected
-                      ? `Page ID: ${payload.tracking.facebookPageId ?? "connected"}`
-                      : "Add Facebook Page ID to the Meta integration settings.",
+                      ? `Page ID: ${payload.tracking.facebookPageId ?? "connected"} — Facebook Page confirmed.`
+                      : "Facebook Page ID missing. Add in Client → Integrations → Meta. Required for retargeting ad set and social proof placement. Prospecting ad sets can run without it.",
                   },
                   {
                     label: "Lead Form Configured",
                     status: leadFormComplete ? "pass" : "fail",
                     detail: leadFormComplete
                       ? `${payload.leadForm.qualificationQuestions.length} qualification question(s) — consent language present.`
-                      : "Lead form missing qualification questions or consent language. Complete in Campaign Builder.",
+                      : "Lead form missing qualification questions or consent language. Complete in Campaign Builder → Lead Form section.",
                   },
                   {
+                    // Only fail if actual violations were found in copy, not just if the compliance
+                    // section has a "phrases to avoid" advisory list.
                     label: "No Compliance Blockers",
-                    status: noComplianceBlockers ? "pass" : "fail",
-                    detail: noComplianceBlockers
-                      ? "No compliance or policy-risk blockers detected."
-                      : "Compliance blocker detected. Review the Safety tab and resolve all HIGH-risk flags.",
+                    status: hasActualViolations || hasHighPolicyRisk ? "fail" : noComplianceBlockers ? "pass" : "warn",
+                    detail: hasActualViolations
+                      ? `Compliance violation detected in ad copy. Review the Safety tab → Disallowed Phrases. Resolve before Meta push.`
+                      : hasHighPolicyRisk
+                      ? "HIGH policy risk detected. Review Safety tab and resolve all HIGH-risk flags before launch."
+                      : noComplianceBlockers
+                      ? "No compliance or policy-risk blockers detected in generated copy."
+                      : "Review approval warnings in Safety tab before launching.",
                   },
                   {
                     label: "No HIGH Policy Risk Phrases",
                     status: noHighRisk ? "pass" : "warn",
                     detail: noHighRisk
-                      ? "Ad copy passed policy phrase scan."
-                      : "One or more ad copy items flagged. Review Safety tab.",
+                      ? "Ad copy passed policy phrase scan — no HIGH-risk patterns detected."
+                      : "One or more policy patterns flagged. Review Safety tab → Meta Policy Risk for details.",
                   },
+                  ...(retargetingBlocked ? [{
+                    label: "Retargeting Ad Set Status",
+                    status: "warn" as GateStatus,
+                    detail: `Retargeting ad set is paused — Pixel and/or Facebook Page missing. Prospecting ad sets are unaffected and can launch. To enable retargeting: add Pixel ID + Facebook Page ID in Client → Integrations → Meta.`,
+                  }] : []),
                   {
                     label: "Meta Payload Preview Generated",
                     status: previewExists ? "pass" : "fail",
-                    detail: "Preview payload built successfully — campaign structure, ad sets, ads, lead form, and tracking are all defined.",
+                    detail: "Preview payload built successfully — campaign structure, ad sets, ads, lead form, and tracking are all defined. No Meta API write has occurred.",
                   },
                   {
                     label: "GHL Follow-up Sequence Verified",
@@ -666,7 +691,7 @@ function MetaPayloadPreviewModal({
                   {
                     label: "Human Operator Confirmation",
                     status: "unknown",
-                    detail: "An authorized operator must manually unlock push actions. This cannot be automated.",
+                    detail: "An authorized operator must manually unlock push actions. This cannot be automated. No campaign, ad set, ad, or budget has been created in Meta.",
                     manualOnly: true,
                   },
                 ];

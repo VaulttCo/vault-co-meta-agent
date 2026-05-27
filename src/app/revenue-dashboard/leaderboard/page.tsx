@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { Trophy } from "lucide-react";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
@@ -68,7 +69,7 @@ export default function LeaderboardPage() {
         />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px]">
-            <TableHead cols={["#", "Client", "Phase", "Avg Job Value", "Est. Jobs/Mo", "Est. Client Rev/Mo", "Vault Co 5%", "Setup Paid (Proj.)", "12mo Total Value", "Nick Recurring"]} />
+            <TableHead cols={["#", "Client", "Phase", "Avg Job Value", "Est. Jobs/Mo", "Est. Client Rev/Mo", "Vault Co 5%", "Est. Setup Earnings", "12mo Total Value", "Nick Recurring"]} />
             <tbody>
               {loading ? (
                 <TableEmpty colSpan={10} message="" loading />
@@ -99,7 +100,11 @@ export default function LeaderboardPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <div className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>{client.name}</div>
+                        <Link href={`/revenue-dashboard/clients/${client.id}`}
+                          className="text-[13px] font-semibold hover:underline"
+                          style={{ color: "var(--t-text)" }}>
+                          {client.name}
+                        </Link>
                         <div className="text-[10px]" style={{ color: "var(--t-dim)" }}>{client.market}</div>
                       </td>
                       <td className="px-4 py-3.5">

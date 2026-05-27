@@ -153,10 +153,17 @@ export interface AssetAdVariation {
   adSetAssignment?: string;
   adSetAudienceTemperature?: "cold" | "warm" | "hot";
   whyThisCopyMatchesCreative?: string;
-  // Vision analysis fields
-  visualSummary?: string;
-  analysisSource?: "vision" | "metadata_only";
+  // Intelligence source fields
+  // "vision" = image vision analysis completed
+  // "video_notes" = video with operator notes or transcript
+  // "operator_notes" = image/video with operator notes (no vision)
+  // "metadata_only" = asset type, file name, creative type only
+  analysisSource?: "vision" | "video_notes" | "operator_notes" | "metadata_only";
   visualConfidence?: "high" | "medium" | "low";
+  // Vision-specific fields (only populated when analysisSource === "vision")
+  visualSummary?: string;
+  // Source disclosure — clearly states what intelligence was used to generate copy
+  sourceDisclosure?: string;
   // Video-only fields
   firstThreeSecondHook?: string;
   suggestedOpeningFrame?: string;

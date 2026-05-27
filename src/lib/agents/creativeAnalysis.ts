@@ -8,7 +8,7 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 export interface StoredAssetAnalysis {
   visual_summary?: string;
   visible_subjects?: string[];
-  analysis_source?: "vision" | "metadata_only";
+  analysis_source?: "vision" | "video_notes" | "operator_notes" | "metadata_only";
   visual_confidence?: "high" | "medium" | "low";
   bestCampaignAngle?: string;
   trustSignals?: string[];
@@ -560,10 +560,25 @@ function buildWhyThisCopyMatchesCreative(
   assetType: string,
   isRoofing: boolean,
   hasIntel: boolean,
+  effectiveSource: "vision" | "video_notes" | "operator_notes" | "metadata_only",
 ): string {
-  const note = hasIntel
-    ? "Copy generated from asset type, creative metadata, operator notes, and full client intelligence. Visual analysis not yet available — no physical asset inspection was performed."
-    : "Copy generated from asset type and service context. Visual analysis not available. Connect client intelligence for richer, client-specific copy.";
+  // Build source note based on what intelligence was actually used
+  let sourceNote: string;
+  switch (effectiveSource) {
+    case "vision":
+      sourceNote = "Copy is grounded in the visual analysis of this specific image — seen content, verified subjects, and visual context were used.";
+      break;
+    case "video_notes":
+      sourceNote = "Copy direction uses provided video notes and operator context. Veronica has not viewed the video — copy is recommended direction based on notes, not observed content.";
+      break;
+    case "operator_notes":
+      sourceNote = "Copy uses operator notes and asset type context. No visual analysis was performed — copy is recommended direction, not observed content.";
+      break;
+    default:
+      sourceNote = hasIntel
+        ? "Copy generated from asset type, selected creative type, and client intelligence only. No visual analysis was performed — copy is recommended direction based on creative format, not observed content."
+        : "Copy generated from asset type and service context only. No visual analysis available — copy is generic direction for this creative format.";
+  }
 
   const reasonMap: Record<string, string> = {
     "Owner On Camera": "Owner-face format demands trust-first copy that establishes personal credibility before making any offer. Copy leads with identity and warranty proof, not price.",
@@ -577,7 +592,30 @@ function buildWhyThisCopyMatchesCreative(
   };
 
   const reason = reasonMap[assetType] ?? "Creative type informs copy angle — copy is matched to the expected viewer intent and emotional state at the moment this creative is encountered.";
-  return `${reason} ${note}`;
+  return `${reason} ${sourceNote}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// buildSourceDisclosure — generates a clear disclosure string for the Asset Matrix
+// ─────────────────────────────────────────────────────────────
+
+function buildSourceDisclosure(
+  effectiveSource: "vision" | "video_notes" | "operator_notes" | "metadata_only",
+  fileType: "image" | "video",
+  hasNotes: boolean,
+): string {
+  switch (effectiveSource) {
+    case "vision":
+      return "Copy grounded in image vision analysis. Veronica analyzed the actual image content.";
+    case "video_notes":
+      return "Copy direction based on video notes / operator notes. Veronica has not viewed the video — these are recommended angles, not observed content.";
+    case "operator_notes":
+      return "Copy direction uses operator notes and asset type. No visual analysis performed — recommended direction only.";
+    default:
+      return fileType === "video"
+        ? `Metadata-based direction only. Add video notes or a transcript so Veronica can write accurate asset-specific copy.`
+        : `Metadata-based direction only — asset type, file name, and creative type used. Run visual analysis for image-grounded copy.`;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -657,22 +695,54 @@ export function buildAssetAdVariation(
 
   const hasRealVision =
     !!storedAnalysis?.visual_summary &&
-    storedAnalysis.visual_summary !== "Image not available for analysis";
+    storedAnalysis.visual_summary !== "Image not available for analysis" &&
+    storedAnalysis.analysis_source === "vision";
 
+  const hasOperatorNotes = !!(asset.notes?.trim());
+
+  // ── Determine effective intelligence source ───────────────────
+  // Hierarchy: vision > video_notes > operator_notes > metadata_only
+  let effectiveSource: "vision" | "video_notes" | "operator_notes" | "metadata_only";
+  if (hasRealVision && !isVideo) {
+    effectiveSource = "vision";
+  } else if (isVideo && hasOperatorNotes) {
+    effectiveSource = "video_notes";
+  } else if (!isVideo && hasOperatorNotes) {
+    effectiveSource = "operator_notes";
+  } else {
+    effectiveSource = "metadata_only";
+  }
+
+  // ── visualConfidence — based on source ────────────────────────
+  const effectiveConfidence: "high" | "medium" | "low" =
+    effectiveSource === "vision"
+      ? (storedAnalysis?.visual_confidence ?? "medium")
+      : effectiveSource === "video_notes" || effectiveSource === "operator_notes"
+      ? "medium"
+      : "low";
+
+  // ── visualAssumption — what to show in the Asset Matrix ───────
   const visualAssumption = hasRealVision
     ? storedAnalysis!.visual_summary!
-    : asset.notes?.trim()
-    ? asset.notes.trim()
-    : "Copy generated from asset metadata, selected creative type, and client intelligence. Visual analysis not yet available.";
+    : hasOperatorNotes
+    ? asset.notes!.trim()
+    : isVideo
+    ? "No video notes provided. Add a transcript or notes so Veronica can write accurate copy for this video."
+    : "No visual analysis available. Analyze this image so Veronica can write copy grounded in what is actually shown.";
 
   // ── Ad set assignment ─────────────────────────────────────────
   const { adSetAssignment, adSetAudienceTemperature } = assignToAdSet(asset.assetType, isRoofing);
 
   // ── Copy generation ───────────────────────────────────────────
+  // For metadata_only and video without transcript: copy is directional, not observational.
+  // Do NOT write "This image shows..." or "The video opens with..." or "The homeowner says..."
+  // unless that content was actually analyzed or provided.
   let primaryText1: string;
   let primaryText2: string;
 
   if (hasIntel && isRoofing) {
+    // Intel-powered copy — specific to this client and market.
+    // Note: even with intel, metadata-only copy should not claim to describe the creative visually.
     primaryText1 = buildIntelPrimaryText1(
       asset.assetType, isRoofing, ownerFirst, ownerName ? ownerName.split(" ").slice(-1)[0] + " Builders" : service,
       mainOffer, warranty, uniqueMechanism, locationDesc
@@ -681,12 +751,22 @@ export function buildAssetAdVariation(
       asset.assetType, isRoofing, objection, bestSalesAngle, mainOffer, ownerFirst,
       ownerName ? ownerName.split(" ").slice(-1)[0] + " Builders" : service, locationDesc
     );
+  } else if (effectiveSource === "metadata_only") {
+    // Conservative metadata-only direction — use conditional framing
+    primaryText1 = hasIntel
+      ? `Use this ${asset.assetType.toLowerCase()} creative to position ${ownerName ? ownerName.split(" ").slice(-1)[0] + " Builders" : service} as the trusted, quality choice in ${locationDesc}. ${mainOffer}.`
+      : `Recommended angle for this ${asset.assetType.toLowerCase()} format: lead with trust and quality, not price. ${mainOffer}.`;
+    primaryText2 = objection
+      ? `Assumption based on selected creative type: address the concern — "${objection}" — by leading with ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
+      : `Recommended direction for ${asset.assetType.toLowerCase()} format: ${analysis.bestCampaignAngle}. ${mainOffer}.`;
   } else if (isVideo) {
+    // Video with notes — use notes-based direction (still recommended, not observed)
     primaryText1 = [analysis.recommendedCopyAngle, uniqueMechanism ? `— ${uniqueMechanism}.` : "", mainOffer + "."].filter(Boolean).join(" ").trim();
     primaryText2 = objection
-      ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
+      ? `Based on video context: "${objection}" — ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
       : `${analysis.bestCampaignAngle}. ${mainOffer}.`;
   } else {
+    // Image with operator notes or vision
     primaryText1 = [trustTrigger1, `— this is what ${service} looks like when done right.`, warranty ? `Backed by ${warranty}.` : "", mainOffer + "."].filter(Boolean).join(" ").trim();
     primaryText2 = objection
       ? `Most homeowners ask: "${objection}" — the answer is ${bestSalesAngle.charAt(0).toLowerCase() + bestSalesAngle.slice(1)}. ${mainOffer}.`
@@ -704,7 +784,8 @@ export function buildAssetAdVariation(
     ? `First 3 sec: ${analysis.recommendedCopyAngle.split(".")[0]}. Hook must land immediately.`
     : `${analysis.trustSignals[0] ?? analysis.bestCampaignAngle} — ${asset.assetType} format.`;
 
-  const whyThisCopyMatchesCreative = buildWhyThisCopyMatchesCreative(asset.assetType, isRoofing, hasIntel);
+  const whyThisCopyMatchesCreative = buildWhyThisCopyMatchesCreative(asset.assetType, isRoofing, hasIntel, effectiveSource);
+  const sourceDisclosure = buildSourceDisclosure(effectiveSource, asset.fileType, hasOperatorNotes);
 
   const variation: AssetAdVariation = {
     assetId: asset.id,
@@ -730,8 +811,9 @@ export function buildAssetAdVariation(
     adSetAudienceTemperature,
     whyThisCopyMatchesCreative,
     visualSummary: hasRealVision ? storedAnalysis!.visual_summary : undefined,
-    analysisSource: storedAnalysis?.analysis_source ?? "metadata_only",
-    visualConfidence: storedAnalysis?.visual_confidence ?? "low",
+    analysisSource: effectiveSource,
+    visualConfidence: effectiveConfidence,
+    sourceDisclosure,
   };
 
   if (isVideo) {

@@ -53,13 +53,15 @@ export async function POST(req: NextRequest) {
   try {
     const result = await processTranscriptChunk(body);
 
-    // Return minimal response for low-latency — frontend only needs the card
     return NextResponse.json({
       call_id: result.call_id,
       chunk_index: result.chunk_index,
       coaching_card: result.coaching_card,
       session_phase: result.session_phase,
+      session_scores: result.session_scores,
       discovery_depth: result.agent_outputs.discovery?.depth_score ?? 0,
+      deal_risk: result.agent_outputs.deal_risk ?? null,
+      emotional_signals: result.agent_outputs.emotional_signals ?? null,
       processing_time_ms: result.processing_time_ms,
     });
   } catch (err) {

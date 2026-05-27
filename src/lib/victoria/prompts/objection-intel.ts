@@ -186,18 +186,22 @@ export function buildObjectionUserMessage(params: {
   objection_text: string;
   transcript_context: string;
   prior_objections: string[];
+  kb_context?: string;      // Vault Co-specific objection handling knowledge
+  prospect_memory?: string; // Prior objection history for this prospect
 }): string {
-  const { prospect_name, prospect_vertical, objection_text, transcript_context, prior_objections } = params;
+  const { prospect_name, prospect_vertical, objection_text, transcript_context, prior_objections, kb_context, prospect_memory } = params;
 
   return `
 PROSPECT: ${prospect_name} — ${prospect_vertical} business owner
 PRIOR OBJECTIONS IN THIS CALL: ${prior_objections.length > 0 ? prior_objections.join("; ") : "None"}
+${prospect_memory ? `PRIOR OBJECTION HISTORY (from previous calls): ${prospect_memory}` : ""}
 
 OBJECTION JUST RAISED:
 "${objection_text}"
 
 CALL CONTEXT (recent transcript):
 ${transcript_context}
+${kb_context ? `\nRELEVANT VAULT CO OBJECTION HANDLING KNOWLEDGE:\n${kb_context}` : ""}
 
 TASK: Analyze this objection. What does it REALLY mean? What is the emotional driver? What should the rep say (and NOT say) right now?
 `.trim();

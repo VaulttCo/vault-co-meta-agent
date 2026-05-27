@@ -773,13 +773,13 @@ function MetaPayloadPreviewModal({
                         <span
                           className="text-[10px] font-semibold px-2 py-1 rounded-lg border flex items-center gap-1"
                           style={{
-                            color: hardBlocked || retargetingBlocked ? "#f59e0b" : "#22c55e",
-                            backgroundColor: hardBlocked || retargetingBlocked ? "rgba(245,158,11,0.07)" : "rgba(34,197,94,0.07)",
-                            borderColor: hardBlocked || retargetingBlocked ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)",
+                            color: hardBlocked || !pixelConnected || !pageConnected ? "#f59e0b" : "#22c55e",
+                            backgroundColor: hardBlocked || !pixelConnected || !pageConnected ? "rgba(245,158,11,0.07)" : "rgba(34,197,94,0.07)",
+                            borderColor: hardBlocked || !pixelConnected || !pageConnected ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)",
                           }}
                         >
-                          {hardBlocked || retargetingBlocked ? <AlertTriangle size={9} /> : <CheckCircle size={9} />}
-                          Retargeting {hardBlocked || retargetingBlocked ? "blocked" : "ready"}
+                          {hardBlocked || !pixelConnected || !pageConnected ? <AlertTriangle size={9} /> : <CheckCircle size={9} />}
+                          Retargeting {hardBlocked || !pixelConnected || !pageConnected ? "blocked" : "ready"}
                         </span>
                         {trackingWarnings > 0 && (
                           <span

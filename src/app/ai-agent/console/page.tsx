@@ -2221,9 +2221,13 @@ function AICampaignBuilderContent() {
                               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 flex-shrink-0">
                                 Vision {visualConfidence === "high" ? "✓" : "~"}
                               </span>
-                            ) : analysisSource === "metadata_only" ? (
+                            ) : asset.fileType === "video" && (assetNotes[asset.id]?.trim() || asset.notes?.trim()) ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0081f2]/10 text-[#0081f2] border border-[#0081f2]/20 flex-shrink-0">
+                                Video notes
+                              </span>
+                            ) : analysisSource === "metadata_only" || !analysisSource ? (
                               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#6b7a99]/10 text-[#6b7a99] border border-[#6b7a99]/20 flex-shrink-0">
-                                Metadata
+                                {asset.fileType === "video" ? "No notes" : "Metadata"}
                               </span>
                             ) : null}
                             {/* Analyze button */}
@@ -2256,7 +2260,10 @@ function AICampaignBuilderContent() {
                             <textarea
                               value={assetNotes[asset.id] ?? ""}
                               onChange={(e) => setAssetNotes((prev) => ({ ...prev, [asset.id]: e.target.value }))}
-                              placeholder="Operator notes for this asset (optional)…"
+                              placeholder={asset.fileType === "video"
+                                ? "Add video notes or transcript so Veronica can write accurate copy for this video…"
+                                : "Operator notes for this asset (optional)…"
+                              }
                               rows={2}
                               className="w-full mt-1.5 bg-[var(--t-surface)] border border-[var(--t-border)] rounded px-2 py-1.5 text-[10px] text-[var(--t-text)] placeholder-[var(--t-dim)] resize-none focus:outline-none focus:border-[#c9a84c]/40"
                             />
@@ -2379,6 +2386,34 @@ function AICampaignBuilderContent() {
                   className="w-full bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg px-3 py-2.5 text-[13px] text-[var(--t-text)] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2]/50 transition-colors"
                 />
               </div>
+
+              {/* Pre-generation creative intelligence warning */}
+              {selectedAssets.length > 0 && (() => {
+                const unanalyzedImages = selectedAssets.filter(
+                  (a) => a.fileType !== "video" && !assetAnalyses[a.id]
+                );
+                const videosMissingNotes = selectedAssets.filter(
+                  (a) => a.fileType === "video" && !(assetNotes[a.id]?.trim()) && !(a.notes?.trim())
+                );
+                if (unanalyzedImages.length === 0 && videosMissingNotes.length === 0) return null;
+                return (
+                  <div className="rounded-lg px-3 py-2.5 text-[10px] leading-snug space-y-1" style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}>
+                    <div className="font-semibold flex items-center gap-1.5">
+                      <AlertCircle size={10} />Creative Intelligence Notice
+                    </div>
+                    {unanalyzedImages.length > 0 && (
+                      <p style={{ color: "var(--t-muted)" }}>
+                        {unanalyzedImages.length} image{unanalyzedImages.length > 1 ? "s" : ""} not yet visually analyzed. Veronica will use asset type and notes only — copy will be directional, not image-grounded. Click Analyze on each image for vision-based copy.
+                      </p>
+                    )}
+                    {videosMissingNotes.length > 0 && (
+                      <p style={{ color: "var(--t-muted)" }}>
+                        {videosMissingNotes.length} video{videosMissingNotes.length > 1 ? "s" : ""} have no notes or transcript. Add video notes so Veronica can write accurate asset-specific copy — otherwise copy will be metadata-based direction only.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               <button
                 onClick={handleGenerate}
@@ -3030,25 +3065,44 @@ function AICampaignBuilderContent() {
                                     <p className="text-[10px] text-[var(--t-muted)] leading-snug">{v.complianceNotes}</p>
                                   </div>
                                 </div>
-                                {/* Visual assumption / Vision summary */}
+                                {/* Intelligence source / Asset summary */}
                                 <div className="p-2.5 bg-[var(--t-surface-2)] border border-[var(--t-border)] rounded-lg">
                                   <div className="flex items-center gap-2 mb-0.5">
                                     <div className="text-[10px] font-semibold text-[var(--t-dim)] uppercase tracking-wider">
-                                      {v.analysisSource === "vision" ? "Vision Summary" : "Visual Assumption"}
+                                      {v.analysisSource === "vision"
+                                        ? "Vision Summary"
+                                        : v.analysisSource === "video_notes"
+                                        ? "Video Notes Summary"
+                                        : v.analysisSource === "operator_notes"
+                                        ? "Operator Notes"
+                                        : "Metadata-Based Direction"}
                                     </div>
                                     {v.analysisSource && (
                                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
                                         v.analysisSource === "vision"
                                           ? "bg-[#22c55e]/10 text-[#22c55e] border-[#22c55e]/20"
+                                          : v.analysisSource === "video_notes"
+                                          ? "bg-[#0081f2]/10 text-[#0081f2] border-[#0081f2]/20"
+                                          : v.analysisSource === "operator_notes"
+                                          ? "bg-[#c9a84c]/10 text-[#c9a84c] border-[#c9a84c]/20"
                                           : "bg-[#6b7a99]/10 text-[#6b7a99] border-[#6b7a99]/20"
                                       }`}>
                                         {v.analysisSource === "vision"
                                           ? `Vision · ${v.visualConfidence ?? "medium"} confidence`
+                                          : v.analysisSource === "video_notes"
+                                          ? "Video notes"
+                                          : v.analysisSource === "operator_notes"
+                                          ? "Operator notes"
                                           : "Metadata only"}
                                       </span>
                                     )}
                                   </div>
                                   <p className="text-[10px] text-[var(--t-dim)] leading-snug italic">{v.visualAssumption}</p>
+                                  {v.sourceDisclosure && (
+                                    <p className="text-[9px] mt-1 leading-snug" style={{ color: "var(--t-dim)", opacity: 0.7 }}>
+                                      {v.sourceDisclosure}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                             </div>

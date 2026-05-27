@@ -7,6 +7,7 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import { generateMockPlan, mockTimestamp, mockExtractIntelligence, mockAnalyzeCreative, mockGenerateReport } from "@/lib/ai/mock";
 import {
   SYSTEM_PROMPT,
+  COMPACT_STRATEGY_SYSTEM_PROMPT,
   EXTRACTION_SYSTEM_PROMPT,
   CREATIVE_ANALYSIS_SYSTEM_PROMPT,
   REPORT_SYSTEM_PROMPT,
@@ -72,6 +73,29 @@ export interface GenerateReportResult {
   mockMode: boolean;
   provider: string;
   notice?: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// CompactCampaignStrategy — what Claude actually generates.
+// ~600-800 tokens of pure strategy; deterministic code builds
+// the full CampaignDraft on top of this via buildDraftFromStrategy().
+// ─────────────────────────────────────────────────────────────
+interface CompactCampaignStrategy {
+  campaignAngle: string;
+  offerAngle: string;
+  audienceStrategy: string;
+  servicePositioning: string;
+  primaryObjections: string[];        // max 3
+  recommendedHooks: string[];         // max 3 opening lines for ad copy
+  leadFormIntent: string;
+  complianceNotes: string;
+  creativeStrategyNotes: string;
+  whyThisCampaign: string;
+  perAssetCopyDirections?: Array<{
+    assetId: string;
+    copyDirection: string;
+    hookVariant: string;
+  }>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -386,6 +410,199 @@ function buildDraftFromParsed(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Compact strategy overlay helpers.
+// These take Claude's CompactCampaignStrategy and apply it on top of the
+// full structural backbone produced by generateMockPlan().
+// ─────────────────────────────────────────────────────────────
+
+// Replace the opening line of each primary text variant with Claude's recommended hooks.
+// The value proposition body (paragraphs 2+) from the mock is preserved intact.
+function buildStrategyAdCopy(
+  strategy: CompactCampaignStrategy,
+  baseCopy: CampaignDraft["adCopy"]
+): CampaignDraft["adCopy"] {
+  const hooks = strategy.recommendedHooks;
+  if (hooks.length === 0) return baseCopy;
+
+  const primaryTexts = baseCopy.primaryTexts.map((baseText, i) => {
+    const hook = hooks[i] ?? hooks[hooks.length - 1];
+    const newOpening = hook.startsWith('"') ? hook : `"${hook}"`;
+    // Split on double-newline (paragraph break). Replace first paragraph with Claude's hook.
+    const paragraphs = baseText.split("\n\n");
+    const firstParagraph = paragraphs[0] ?? "";
+    // If the first paragraph is short (standalone hook), swap it; otherwise prepend.
+    if (firstParagraph.length <= 150 && paragraphs.length > 1) {
+      return [newOpening, ...paragraphs.slice(1)].join("\n\n");
+    }
+    return [newOpening, ...paragraphs].join("\n\n");
+  });
+
+  return { ...baseCopy, primaryTexts };
+}
+
+// Overlay Claude's strategic narrative on the base strategic rationale.
+// When no base exists (no client intelligence loaded), builds the full object from strategy alone.
+function buildStrategyRationale(
+  strategy: CompactCampaignStrategy,
+  baseRationale: CampaignDraft["strategicRationale"]
+): CampaignDraft["strategicRationale"] {
+  if (!baseRationale) {
+    // No intelligence-powered rationale — build entirely from compact strategy
+    return {
+      whyThisCampaign: strategy.whyThisCampaign,
+      buyerInsightUsed: strategy.primaryObjections.length > 0
+        ? `Primary objections addressed: ${strategy.primaryObjections.join("; ")}`
+        : strategy.servicePositioning,
+      marketInsightUsed: strategy.audienceStrategy,
+      offerAngleUsed: strategy.offerAngle,
+      creativeAngleUsed: strategy.campaignAngle,
+      trustTriggerUsed: strategy.servicePositioning,
+      objectionAddressed: strategy.primaryObjections[0] ?? "",
+      audienceRationale: strategy.audienceStrategy,
+      leadFormRationale: strategy.leadFormIntent,
+      followUpRationale: strategy.creativeStrategyNotes,
+    };
+  }
+
+  // Intelligence-powered base exists — overlay Claude's strategic fields
+  return {
+    ...baseRationale,
+    whyThisCampaign: strategy.whyThisCampaign,
+    offerAngleUsed: strategy.offerAngle,
+    creativeAngleUsed: strategy.campaignAngle,
+    audienceRationale: strategy.audienceStrategy,
+    leadFormRationale: strategy.leadFormIntent,
+    objectionAddressed: strategy.primaryObjections[0] ?? baseRationale.objectionAddressed,
+  };
+}
+
+// Rebuild asset variations using Claude's per-asset copy directions as enhanced notes.
+// If no per-asset directions, returns the base variations unchanged (preserves visualSummary
+// and analysisSource from the original buildAssetAdVariation output).
+function buildStrategyAssetVariations(
+  strategy: CompactCampaignStrategy,
+  input: CampaignGenerationInput,
+  baseVariations: CampaignDraft["adVariations"]
+): CampaignDraft["adVariations"] {
+  if (!strategy.perAssetCopyDirections || strategy.perAssetCopyDirections.length === 0) {
+    return baseVariations;
+  }
+
+  const directionMap = new Map(
+    strategy.perAssetCopyDirections.map((d) => [d.assetId, d])
+  );
+
+  const assets =
+    input.selectedAssets && input.selectedAssets.length > 0
+      ? input.selectedAssets
+      : input.selectedAsset
+      ? [input.selectedAsset]
+      : [];
+
+  if (assets.length === 0) return baseVariations;
+
+  try {
+    return assets.map((a, i) => {
+      const direction = directionMap.get(a.id);
+      const operatorNote = input.assetNotes?.[a.id];
+      const storedAnalysis: StoredAssetAnalysis | null = input.assetAnalyses?.[a.id] ?? null;
+      // Merge Claude's copy direction with operator note — builds richer context for the variation
+      const enhancedNote = direction
+        ? `[AI Strategy: ${direction.copyDirection}] Hook: ${direction.hookVariant}${operatorNote ? ` | Operator: ${operatorNote}` : ""}`
+        : operatorNote || a.notes || undefined;
+
+      return buildAssetAdVariation(
+        {
+          id: a.id,
+          fileName: a.fileName,
+          assetType: a.assetType,
+          fileType: a.fileType as "image" | "video",
+          approvedForAds: a.approvedForAds,
+          notes: enhancedNote,
+        },
+        input.service,
+        input.clientIntelligence ?? null,
+        i === 0,
+        storedAnalysis
+      );
+    });
+  } catch (assetErr) {
+    console.error(
+      "[AI Service] buildStrategyAssetVariations failed — using base variations:",
+      assetErr instanceof Error ? assetErr.message : String(assetErr).slice(0, 200)
+    );
+    return baseVariations;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// buildDraftFromStrategy — primary entry point for the compact live generation path.
+//
+// 1. Calls generateMockPlan() to produce a complete CampaignDraft structural backbone
+//    (all 9 sections, all nested fields, proper types, correct asset matrix).
+// 2. Overlays Claude's strategic intelligence on high-value fields:
+//    - creativeDirection.angle → strategy.campaignAngle
+//    - creativeDirection.hook  → strategy.recommendedHooks[0]
+//    - adCopy.primaryTexts     → hooks injected as opening lines
+//    - compliance.metaRisk     → strategy.complianceNotes
+//    - strategicRationale      → full overlay from strategy
+//    - adVariations            → rebuilt with per-asset copy directions (if provided)
+// ─────────────────────────────────────────────────────────────
+
+function buildDraftFromStrategy(
+  strategy: CompactCampaignStrategy,
+  input: CampaignGenerationInput
+): CampaignDraft {
+  // Step 1: build full structural backbone from the deterministic mock generator.
+  // This produces all 9 campaign sections with correct data shapes, budget splits,
+  // canonical 3-ad-set structure, and intelligence-powered content when intel is available.
+  const base = generateMockPlan(
+    input.client,
+    input.goal,
+    input.service,
+    input.market,
+    input.budget,
+    input.creativeType ?? "",
+    input.clientIntelligence ?? null,
+    input.selectedAsset ?? null,
+    input.selectedAssets,
+    input.assetNotes,
+    input.assetAnalyses
+  );
+
+  // Step 2: overlay Claude's strategic intelligence on high-value fields.
+  const now = mockTimestamp();
+
+  const enhancedCreativeDirection: CampaignDraft["creativeDirection"] = {
+    ...base.creativeDirection,
+    angle: strategy.campaignAngle,
+    hook: strategy.recommendedHooks[0] ?? base.creativeDirection.hook,
+  };
+
+  const enhancedAdCopy = buildStrategyAdCopy(strategy, base.adCopy);
+
+  const enhancedCompliance: CampaignDraft["compliance"] = {
+    ...base.compliance,
+    metaRisk: strategy.complianceNotes || base.compliance.metaRisk,
+  };
+
+  const enhancedStrategicRationale = buildStrategyRationale(strategy, base.strategicRationale);
+
+  const enhancedAdVariations = buildStrategyAssetVariations(strategy, input, base.adVariations);
+
+  return {
+    ...base,
+    updatedAt: now,
+    createdBy: "Veronica (Live AI)",
+    creativeDirection: enhancedCreativeDirection,
+    adCopy: enhancedAdCopy,
+    compliance: enhancedCompliance,
+    strategicRationale: enhancedStrategicRationale,
+    adVariations: enhancedAdVariations,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Text-based JSON parser (OpenAI path only).
 // For Anthropic, tool calling is used instead — see callAnthropic().
 // ─────────────────────────────────────────────────────────────
@@ -434,136 +651,113 @@ class StagedError extends Error {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Anthropic tool schema — defines the campaign draft structure for tool calling.
-// Tool calling forces Anthropic to return a validated JSON object internally,
-// completely eliminating the "Expected ',' or '}'" class of JSON parse failures.
-// The tool input is already parsed by Anthropic before being returned to us —
-// we never call JSON.parse on the campaign output when using this path.
+// Compact strategy tool schema — Claude generates ONLY strategic direction.
+// ~600-800 token output, well within the 1500 max_tokens budget.
+// Deterministic code in buildDraftFromStrategy() builds all campaign sections
+// on top of this. No more max_tokens truncation.
 // ─────────────────────────────────────────────────────────────
 
-const CAMPAIGN_TOOL_SCHEMA = {
+const COMPACT_STRATEGY_SCHEMA = {
   type: "object",
-  description: "Complete Meta advertising campaign draft. Populate every field.",
+  description:
+    "Compact campaign strategy. Return ONLY these fields — deterministic code builds all campaign sections (ad sets, budgets, lead form, GHL workflow, compliance, optimization, ad copy, asset variations) from your strategic direction.",
   properties: {
-    campaignName: { type: "string", description: "Descriptive name: [service] — [goal] — [market]" },
-    metaStructure: {
-      type: "object",
-      properties: {
-        campaignObjective: { type: "string" },
-        campaignType: { type: "string" },
-        adSetNames: { type: "array", items: { type: "string" } },
-        audience: { type: "string" },
-        locationTargeting: { type: "string" },
-        placements: { type: "array", items: { type: "string" } },
-        budgetSplit: { type: "string" },
-        optimizationEvent: { type: "string" },
-      },
-      required: ["campaignObjective", "campaignType", "adSetNames", "audience", "locationTargeting", "placements", "budgetSplit", "optimizationEvent"],
+    campaignAngle: {
+      type: "string",
+      description: "Core creative/messaging angle for this campaign (1-2 sentences, 20-40 words)",
     },
-    adCopy: {
-      type: "object",
-      properties: {
-        primaryTexts: { type: "array", items: { type: "string" }, description: "3 variants, 200-300 chars each, no inner quotes" },
-        headlines: { type: "array", items: { type: "string" }, description: "3 variants, 40 chars max each" },
-        descriptions: { type: "array", items: { type: "string" }, description: "3 variants, 30 chars max each" },
-        cta: { type: "string" },
-      },
-      required: ["primaryTexts", "headlines", "descriptions", "cta"],
+    offerAngle: {
+      type: "string",
+      description: "How the offer is positioned to the target audience (1-2 sentences, 20-40 words)",
     },
-    leadForm: {
-      type: "object",
-      properties: {
-        formName: { type: "string" },
-        introCopy: { type: "string" },
-        qualificationQuestions: { type: "array", items: { type: "string" } },
-        contactFields: { type: "array", items: { type: "string" } },
-        consentLanguage: { type: "string", description: "TCPA-compliant with STOP opt-out" },
-        thankYouCopy: { type: "string" },
-      },
-      required: ["formName", "introCopy", "qualificationQuestions", "contactFields", "consentLanguage", "thankYouCopy"],
+    audienceStrategy: {
+      type: "string",
+      description: "Who to target and why — specific to this client, market, and service (1-2 sentences)",
     },
-    ghlWorkflow: {
-      type: "object",
-      properties: {
-        tags: { type: "array", items: { type: "string" } },
-        pipelineStage: { type: "string" },
-        immediateSms: { type: "string" },
-        immediateEmail: {
-          type: "object",
-          properties: { subject: { type: "string" }, body: { type: "string" } },
-          required: ["subject", "body"],
+    servicePositioning: {
+      type: "string",
+      description: "How to position this service vs. competitors in this specific market (1-2 sentences)",
+    },
+    primaryObjections: {
+      type: "array",
+      items: { type: "string", description: "One specific objection, max 15 words" },
+      description: "Up to 3 primary objections this campaign must address",
+      maxItems: 3,
+    },
+    recommendedHooks: {
+      type: "array",
+      items: {
+        type: "string",
+        description: "One opening hook line for ad copy — 10-15 words, ready to use as the first sentence",
+      },
+      description: "Up to 3 opening hook lines for ad copy",
+      maxItems: 3,
+    },
+    leadFormIntent: {
+      type: "string",
+      description: "What the lead form should qualify for and what a quality lead looks like (1 sentence)",
+    },
+    complianceNotes: {
+      type: "string",
+      description:
+        "Risk level (LOW / MEDIUM / HIGH) followed by the top 1-2 specific compliance risks for this campaign (1-2 sentences)",
+    },
+    creativeStrategyNotes: {
+      type: "string",
+      description: "Key creative direction — format, tone, visual approach (1-2 sentences)",
+    },
+    whyThisCampaign: {
+      type: "string",
+      description:
+        "Strategic rationale: why this angle, audience, and offer — specific to this client and market, not generic (2-3 sentences)",
+    },
+    perAssetCopyDirections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          assetId: { type: "string", description: "The exact asset ID from the selected assets list" },
+          copyDirection: {
+            type: "string",
+            description: "Specific copy angle for this asset (1 sentence, max 20 words)",
+          },
+          hookVariant: {
+            type: "string",
+            description: "Specific opening hook for this asset (10-15 words, ready to use)",
+          },
         },
-        internalNotification: { type: "string" },
-        setterTask: { type: "string" },
-        aiVoiceTrigger: { type: "string" },
-        bookedStopCondition: { type: "string" },
-        steps: { type: "array", items: { type: "string" } },
+        required: ["assetId", "copyDirection", "hookVariant"],
       },
-      required: ["tags", "pipelineStage", "immediateSms", "immediateEmail", "internalNotification", "setterTask", "steps"],
+      description:
+        "Only include when specific assets are listed in the prompt. One entry per selected asset ID.",
     },
-    creativeDirection: {
-      type: "object",
-      properties: {
-        angle: { type: "string" },
-        hook: { type: "string" },
-        shotList: { type: "array", items: { type: "string" }, description: "4-6 shots" },
-        textOverlays: { type: "array", items: { type: "string" }, description: "3-4 overlays" },
-        voiceoverScript: { type: "string", description: "30-second script" },
-        recommendedFormat: { type: "string" },
-        recommendedPlacements: { type: "array", items: { type: "string" } },
-      },
-      required: ["angle", "hook", "shotList", "textOverlays", "voiceoverScript", "recommendedFormat", "recommendedPlacements"],
-    },
-    compliance: {
-      type: "object",
-      properties: {
-        metaRisk: { type: "string", description: "LOW | MEDIUM | HIGH — reason" },
-        smsCompliance: { type: "string" },
-        insuranceRisk: { type: "string" },
-        disallowedPhrases: { type: "array", items: { type: "string" } },
-        approvalWarnings: { type: "array", items: { type: "string" } },
-      },
-      required: ["metaRisk", "smsCompliance", "insuranceRisk", "disallowedPhrases", "approvalWarnings"],
-    },
-    optimization: {
-      type: "object",
-      properties: {
-        cplThreshold: { type: "string" },
-        cpbaThreshold: { type: "string" },
-        bookingRateFloor: { type: "string" },
-        creativeFatigueTrigger: { type: "string" },
-        budgetScalingRule: { type: "string" },
-        pauseRule: { type: "string" },
-        humanApprovalTriggers: { type: "array", items: { type: "string" } },
-      },
-      required: ["cplThreshold", "cpbaThreshold", "bookingRateFloor", "creativeFatigueTrigger", "budgetScalingRule", "pauseRule", "humanApprovalTriggers"],
-    },
-    strategicRationale: {
-      type: "object",
-      properties: {
-        whyThisCampaign: { type: "string" },
-        audienceRationale: { type: "string" },
-        offerAngleUsed: { type: "string" },
-        creativeAngleUsed: { type: "string" },
-      },
-      required: ["whyThisCampaign", "audienceRationale", "offerAngleUsed", "creativeAngleUsed"],
-    },
-    buyerPsychologyUsed: { type: "object", description: "Optional — populate if client intelligence was used" },
-    marketResearchUsed: { type: "object", description: "Optional — populate if market research was used" },
-    clientIntelligenceUsed: { type: "object", description: "Optional — populate if onboarding intelligence was used" },
-    creativeIntelligenceUsed: { type: "object", description: "Optional — populate if creative asset intelligence was used" },
   },
-  required: ["campaignName", "metaStructure", "adCopy", "leadForm", "ghlWorkflow", "creativeDirection", "compliance", "optimization", "strategicRationale"],
+  required: [
+    "campaignAngle",
+    "offerAngle",
+    "audienceStrategy",
+    "servicePositioning",
+    "primaryObjections",
+    "recommendedHooks",
+    "leadFormIntent",
+    "complianceNotes",
+    "creativeStrategyNotes",
+    "whyThisCampaign",
+  ],
 };
 
 // ─────────────────────────────────────────────────────────────
-// Anthropic (Claude Haiku) — campaign generation via tool calling.
+// Anthropic (Claude Haiku) — compact strategy generation via tool calling.
 //
-// Tool calling forces Anthropic to return a pre-parsed JSON object in
-// content[0].input — eliminating all JSON.parse failures caused by
-// unescaped quotes or newlines in ad copy strings.
+// Architecture change: Claude generates ONLY a compact strategy (~600-800 tokens).
+// buildDraftFromStrategy() then calls generateMockPlan() to build the full
+// CampaignDraft structurally and overlays Claude's strategic intelligence on top.
 //
-// Response shape: content[0].type === "tool_use", content[0].input is the draft.
+// This eliminates max_tokens truncation — compact strategy fits in 1500 tokens
+// with headroom to spare. Tool calling still eliminates JSON parse failures.
+//
+// Response shape: content[0].type === "tool_use", content[0].name === "generate_campaign_strategy",
+//   content[0].input is the already-parsed CompactCampaignStrategy object.
 // ─────────────────────────────────────────────────────────────
 
 async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Promise<CampaignDraft> {
@@ -576,23 +770,22 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      // Slightly reduced from 4096 — campaign draft fits in ~3000 tokens;
-      // extra headroom caused truncation which broke JSON parsing.
-      max_tokens: 3500,
-      system: SYSTEM_PROMPT,
-      // Tool calling: Anthropic parses the output JSON internally.
-      // content[0].input is already a plain object — no JSON.parse needed.
+      // Compact strategy output is ~600-800 tokens; 1500 gives comfortable headroom
+      // without any risk of truncation. Previous 3500 budget caused max_tokens errors.
+      max_tokens: 1500,
+      system: COMPACT_STRATEGY_SYSTEM_PROMPT,
       tools: [
         {
-          name: "generate_campaign_draft",
+          name: "generate_campaign_strategy",
           description:
-            "Generate a complete, production-ready Meta advertising campaign draft. " +
-            "Populate every field completely based on the campaign parameters and client intelligence. " +
-            "Keep all string values concise and avoid special characters inside strings.",
-          input_schema: CAMPAIGN_TOOL_SCHEMA,
+            "Generate a compact campaign strategy. Return ONLY the 10 strategy fields — " +
+            "deterministic code builds the full campaign draft (ad sets, lead form, GHL workflow, " +
+            "compliance, optimization, ad copy, asset variations) from your strategic output. " +
+            "Be concise: 1-2 sentences per field, max 3 items per array.",
+          input_schema: COMPACT_STRATEGY_SCHEMA,
         },
       ],
-      tool_choice: { type: "tool", name: "generate_campaign_draft" },
+      tool_choice: { type: "tool", name: "generate_campaign_strategy" },
       messages: [{ role: "user", content: buildCampaignPrompt(input, true) }],
     }),
   });
@@ -609,35 +802,43 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
     throw new StagedError("Anthropic outer response was not valid JSON", "response_shape");
   }
 
-  // Detect max_tokens truncation before inspecting content
+  // Detect max_tokens truncation — should not occur at 1500 tokens with compact schema,
+  // but guard defensively in case of unexpectedly large intelligence payloads.
   const stopReason = (data as { stop_reason?: string })?.stop_reason;
   if (stopReason === "max_tokens") {
     throw new StagedError(
-      "Anthropic response truncated — campaign draft exceeded max_tokens budget. Tool input may be incomplete.",
+      "Anthropic compact strategy response truncated — strategy output exceeded 1500 token budget. " +
+        "Input payload may be too large.",
       "response_shape"
     );
   }
 
-  // Extract the tool_use block from content
+  // Extract the tool_use block
   const content = (data as { content?: { type: string; input?: unknown; name?: string }[] })?.content ?? [];
-  const toolUse = content.find((c) => c.type === "tool_use" && c.name === "generate_campaign_draft");
+  const toolUse = content.find((c) => c.type === "tool_use" && c.name === "generate_campaign_strategy");
 
   if (!toolUse || typeof toolUse.input !== "object" || toolUse.input === null) {
-    // Fall back to text extraction if tool_use block is absent (e.g. model returned text instead)
+    // Fall back to text extraction if tool_use block is absent (model returned text instead)
     const textBlock = content.find((c) => c.type === "text");
     const fallbackText = (textBlock as { text?: string } | undefined)?.text ?? "";
     if (fallbackText) {
-      // Attempt text-based parse as last resort
-      return parseAIJson(fallbackText, input);
+      // Try to parse the text as a compact strategy object and build from it
+      try {
+        const parsed = JSON.parse(repairJson(fallbackText)) as CompactCampaignStrategy;
+        return buildDraftFromStrategy(parsed, input);
+      } catch {
+        // Text parse failed — fall through to throw
+      }
     }
     throw new StagedError(
-      `Anthropic tool call returned no valid input. stop_reason=${stopReason}, content types=${content.map((c) => c.type).join(",")}`,
+      `Anthropic strategy tool call returned no valid input. stop_reason=${stopReason}, content types=${content.map((c) => c.type).join(",")}`,
       "response_shape"
     );
   }
 
   // toolUse.input is already a plain JS object — no JSON.parse needed.
-  return buildDraftFromParsed(toolUse.input as Record<string, unknown>, input);
+  // Pass it to buildDraftFromStrategy which runs generateMockPlan() + applies overlays.
+  return buildDraftFromStrategy(toolUse.input as CompactCampaignStrategy, input);
 }
 
 // ─────────────────────────────────────────────────────────────

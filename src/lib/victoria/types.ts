@@ -369,6 +369,7 @@ export type VictoriaEvent = ChunkEvent | CoachingEvent | SessionEvent;
 // ─────────────────────────────────────────────────────────────
 
 export interface StartCallRequest {
+  prospect_id?: string;  // Link to existing prospect record for cross-call memory
   prospect: {
     name: string;
     company: string;
@@ -555,4 +556,116 @@ export interface VictoriaAgentOutputRow {
   model_used: string | null;
   output: Record<string, unknown>;
   created_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Prospect — persistent cross-call intelligence
+// ─────────────────────────────────────────────────────────────
+
+export interface VictoriaProspectRow {
+  id: string;
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  vertical: string | null;
+  location_city: string | null;
+  location_state: string | null;
+  business_size: string | null;
+  years_in_business: number | null;
+  personality_type: string | null;
+  communication_style: string | null;
+  known_pain_points: string[];
+  known_objections: string[];
+  known_triggers: string[];
+  known_resistances: string[];
+  primary_fear: string | null;
+  primary_desire: string | null;
+  deal_stage: string;
+  last_contact: string | null;
+  next_step: string | null;
+  urgency_level: string;
+  total_calls: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Knowledge Base — Vault Co sales intelligence store
+// ─────────────────────────────────────────────────────────────
+
+export const KB_DOMAINS = [
+  { value: "vault_co_offer",         label: "Vault Co Offer" },
+  { value: "60_day_system",          label: "60-Day Revenue System" },
+  { value: "objection_handling",     label: "Objection Handling" },
+  { value: "contractor_psychology",  label: "Contractor Psychology" },
+  { value: "pricing_roi",            label: "Pricing & ROI" },
+  { value: "sales_scripts",          label: "Sales Scripts" },
+  { value: "case_studies",           label: "Case Studies" },
+  { value: "follow_up",              label: "Follow-Up Sequences" },
+  { value: "competitor_comparison",  label: "Competitor Comparisons" },
+  { value: "failed_agency_stories",  label: "Failed Agency Experiences" },
+] as const;
+
+export type KBDomain = (typeof KB_DOMAINS)[number]["value"];
+
+export interface VictoriaKBEntryRow {
+  id: string;
+  domain: string;
+  category: string | null;
+  tags: string[];
+  title: string;
+  content: string;
+  vertical_relevance: string[];
+  objection_type: string | null;
+  call_phase: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KBSearchResult {
+  id: string;
+  domain: string;
+  category: string | null;
+  title: string;
+  content: string;
+  tags: string[];
+  vertical_relevance: string[];
+  call_phase: string[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Prospect Memory — rich context loaded before/after calls
+// ─────────────────────────────────────────────────────────────
+
+export interface ProspectMemory {
+  prospect: VictoriaProspectRow;
+  recent_calls_summary: string;   // Formatted text of last 3 calls
+  last_call_snapshot: Record<string, unknown> | null;
+}
+
+export interface PreCallBriefing {
+  prospect_summary: string;
+  key_pain_points: string[];
+  known_objections: string[];
+  recommended_approach: string;
+  opening_question: string;
+  things_to_avoid: string[];
+  prior_call_context: string | null;
+  urgency_assessment: string;
+}
+
+export interface PostCallExtraction {
+  new_pain_points: string[];
+  new_objections: string[];
+  buying_signals_detected: string[];
+  emotional_journey: string;
+  personality_notes: string;
+  decision_process_learned: string | null;
+  urgency_level: "low" | "medium" | "high" | "urgent";
+  deal_stage: string;
+  next_step: string;
+  next_call_briefing: string;
+  crm_notes: string;
 }

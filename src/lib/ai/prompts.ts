@@ -37,6 +37,19 @@ Core rules:
 - ALL SMS requires TCPA opt-in consent in the lead form
 - This is a DRAFT only — no live actions without human approval
 
+COMPLIANCE — NEVER generate ANY of the following phrases anywhere in the output:
+- "insurance will cover it" or any variant
+- "file a free insurance claim" or any variant
+- "guaranteed approval" or "pre-approved"
+- "100% covered by insurance" or any percentage insurance guarantee
+- "best roofer in [city]" or any unverifiable superlative
+- "limited time offer" unless a real, enforced end date exists
+- "free replacement" (inspections are free, not replacements)
+- "free roof" unless clearly meaning inspection/estimate only
+- Any language guaranteeing insurance payment
+
+The disallowedPhrases array in the compliance section must ONLY contain phrases that actually appear in the generated output — not a general "do not use" list. If the generated copy is clean, disallowedPhrases must be an empty array [].
+
 Return ONLY valid JSON. No markdown, no explanation. Follow the schema exactly.`;
 
 // System prompt for the compact strategy call (tool-calling path).
@@ -50,6 +63,27 @@ Core rules:
 - NEVER imply guaranteed insurance coverage or ROI
 - ALL SMS requires TCPA opt-in consent in the lead form
 - This is a DRAFT only — no live actions without human approval
+
+COMPLIANCE — NEVER generate or suggest ANY of the following phrases:
+- "insurance will cover it" or any variant
+- "file a free insurance claim" or any variant
+- "guaranteed approval" or "pre-approved"
+- "100% covered by insurance" or any percentage insurance guarantee
+- "best roofer in [city]" or any unverifiable superlative
+- "limited time offer" unless a real, enforced end date exists
+- "free replacement" — inspections are free, not replacements
+- "free roof" (unless clearly an inspection/estimate, not a full replacement)
+- Any language guaranteeing that insurance will pay for the work
+- Any guaranteed outcome ("we guarantee your claim will be approved")
+
+Safe replacements to use instead:
+- "free roof inspection" or "no-cost roof assessment"
+- "we can document visible storm damage for your records"
+- "we will help you understand your options"
+- "no-pressure assessment"
+- "GAF Certified Plus contractor"
+- "50-year manufacturer warranty available on qualifying systems"
+- "financing options may be available, subject to approval"
 
 Your output is STRATEGY ONLY. Deterministic code builds the full campaign draft (ad sets, budgets, lead form, GHL workflow, compliance section, optimization rules, ad copy, asset variations) from your strategic direction. Be specific and concise — 1-2 sentences per field, max 3 items per array.`;
 

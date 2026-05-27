@@ -180,8 +180,10 @@ export function buildDiscoveryUserMessage(params: {
   current_phase: ConversationPhase;
   transcript_context: string; // Built by buildFullTranscriptContext()
   discovery_state: DiscoveryState;
+  kb_context?: string;          // Relevant Vault Co knowledge snippets
+  prospect_memory?: string;     // Prior call intelligence for returning prospects
 }): string {
-  const { prospect_name, prospect_company, prospect_vertical, current_phase, transcript_context, discovery_state } = params;
+  const { prospect_name, prospect_company, prospect_vertical, current_phase, transcript_context, discovery_state, kb_context, prospect_memory } = params;
 
   const discoveredFacts = [
     discovery_state.current_marketing_spend_known && "Current marketing spend: known",
@@ -220,5 +222,6 @@ TRANSCRIPT:
 ${transcript_context}
 
 TASK: Analyze the conversation above. What is the single best question the rep should ask next? Is discovery deep enough? What's missing?
-`.trim();
+${prospect_memory ? `\nPRIOR PROSPECT INTELLIGENCE (from previous calls):\n${prospect_memory}` : ""}
+${kb_context ? `\nRELEVANT VAULT CO KNOWLEDGE:\n${kb_context}` : ""}`.trim();
 }

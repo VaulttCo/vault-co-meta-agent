@@ -334,7 +334,7 @@ export function BillingEmptyState() {
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-bold mb-1"
             style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}>
-            Actual Revenue Tracking Requires Connected Billing Data
+            Invoice Tracking Requires Connected Billing Data
           </div>
           <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-dim)" }}>
             Connect Stripe or manual invoice records to activate invoiced amounts, outstanding balances, and payout reporting.

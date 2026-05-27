@@ -1,11 +1,14 @@
 // /api/victoria/session
 // POST: Create a new live call session (used by live audio mode)
 // GET:  Retrieve session state by call_id
+// PATCH: End a session (status: completed | abandoned)
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, saveSession } from "@/lib/victoria/memory/session-store";
 import { createDefaultSession } from "@/lib/victoria/types";
 import { insertVictoriaCall, updateVictoriaCall } from "@/lib/victoria/db";
+import { getProspectContextForSession } from "@/lib/victoria/agents/prospect-memory";
+import { extractPostCallMemory } from "@/lib/victoria/agents/prospect-memory";
 import type { StartCallRequest } from "@/lib/victoria/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -36,12 +39,27 @@ export async function POST(req: NextRequest) {
     body.is_test_call ?? false
   );
 
+  // Link prospect and pre-load memory context if prospect_id provided
+  if (body.prospect_id) {
+    session.prospect_id = body.prospect_id;
+
+    // Load prior call context into prospect state (non-blocking on failure)
+    try {
+      const priorContext = await getProspectContextForSession(body.prospect_id);
+      if (priorContext) {
+        session.prospect.prior_call_summary = priorContext;
+      }
+    } catch (e) {
+      console.error("[Victoria:Session] Prospect memory load failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
   await saveSession(session);
 
   // Persist to Supabase (non-blocking — Redis is live source of truth)
   insertVictoriaCall({
     id: call_id,
-    prospect_id: null,
+    prospect_id: body.prospect_id ?? null,
     rep_id: body.rep_id ?? null,
     status: "active",
     phase: "rapport",
@@ -142,6 +160,13 @@ export async function PATCH(req: NextRequest) {
     duration_seconds: durationSecs,
     session_state: session as unknown as Record<string, unknown>,
   }).catch(console.error);
+
+  // Trigger post-call memory extraction non-blocking when call completes
+  if (body.status === "completed" && session.prospect_id) {
+    extractPostCallMemory(session, session.prospect_id).catch((e: unknown) => {
+      console.error("[Victoria:Session] Post-call extraction failed:", e instanceof Error ? e.message : e);
+    });
+  }
 
   return NextResponse.json({ success: true, call_id: body.call_id, status: body.status });
 }

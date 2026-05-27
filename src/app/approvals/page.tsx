@@ -697,8 +697,29 @@ function MetaPayloadPreviewModal({
                 ];
 
                 const passCount = checks.filter((c) => c.status === "pass").length;
-                const failCount = checks.filter((c) => c.status === "fail").length;
-                const allCriticalPass = failCount === 0;
+                const warnCount = checks.filter((c) => c.status === "warn").length;
+
+                // Segment-level readiness — hard blockers stop all push; Pixel/Page only block retargeting
+                const draftBlocker = !draftApproved;
+                const accountBlocker = !adAccountConnected;
+                const assetBlocker = !allCreativesApproved && hasAds;
+                const complianceBlocker = hasActualViolations || hasHighPolicyRisk;
+                const hardBlocked = draftBlocker || accountBlocker || assetBlocker || complianceBlocker;
+                const trackingWarnings = (!pixelConnected ? 1 : 0) + (!pageConnected ? 1 : 0);
+
+                const summaryLine = hardBlocked
+                  ? complianceBlocker
+                    ? "Push blocked · Resolve compliance violations before Meta submission"
+                    : draftBlocker
+                    ? "Push blocked · Campaign draft requires human approval"
+                    : accountBlocker
+                    ? "Push blocked · Meta ad account required for all campaign launches"
+                    : assetBlocker
+                    ? "Push blocked · Creative assets require approval before Meta submission"
+                    : "Push blocked · Resolve all issues before Meta submission"
+                  : trackingWarnings > 0
+                  ? `Prospecting eligible · Intent eligible · Retargeting blocked · ${trackingWarnings} tracking warning${trackingWarnings > 1 ? "s" : ""}`
+                  : "Ready for paused Meta push · Human approval required";
 
                 return (
                   <div className="space-y-3">
@@ -708,7 +729,7 @@ function MetaPayloadPreviewModal({
                       className="rounded-xl p-4"
                       style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
                     >
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-3">
                         <Lock size={12} className="text-[#c9a84c]" />
                         <span className="text-[11px] font-bold uppercase tracking-widest text-[#c9a84c]">
                           Meta Push Readiness Gate
@@ -716,17 +737,73 @@ function MetaPayloadPreviewModal({
                         <span
                           className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full border"
                           style={{
-                            color: allCriticalPass ? "#22c55e" : "#ef4444",
-                            backgroundColor: allCriticalPass ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
-                            borderColor: allCriticalPass ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)",
+                            color: hardBlocked ? "#ef4444" : warnCount > 0 ? "#f59e0b" : "#22c55e",
+                            backgroundColor: hardBlocked ? "rgba(239,68,68,0.08)" : warnCount > 0 ? "rgba(245,158,11,0.08)" : "rgba(34,197,94,0.08)",
+                            borderColor: hardBlocked ? "rgba(239,68,68,0.25)" : warnCount > 0 ? "rgba(245,158,11,0.25)" : "rgba(34,197,94,0.25)",
                           }}
                         >
-                          {passCount}/{checks.length} pass
+                          {hardBlocked ? "Push Blocked" : warnCount > 0 ? "Warnings Present" : "Ready for Paused Push"}
                         </span>
                       </div>
+
+                      {/* Segment-level readiness pills */}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <span
+                          className="text-[10px] font-semibold px-2 py-1 rounded-lg border flex items-center gap-1"
+                          style={{
+                            color: hardBlocked ? "#ef4444" : "#22c55e",
+                            backgroundColor: hardBlocked ? "rgba(239,68,68,0.07)" : "rgba(34,197,94,0.07)",
+                            borderColor: hardBlocked ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)",
+                          }}
+                        >
+                          {hardBlocked ? <XCircle size={9} /> : <CheckCircle size={9} />}
+                          Prospecting {hardBlocked ? "blocked" : "eligible"}
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold px-2 py-1 rounded-lg border flex items-center gap-1"
+                          style={{
+                            color: hardBlocked ? "#ef4444" : "#22c55e",
+                            backgroundColor: hardBlocked ? "rgba(239,68,68,0.07)" : "rgba(34,197,94,0.07)",
+                            borderColor: hardBlocked ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)",
+                          }}
+                        >
+                          {hardBlocked ? <XCircle size={9} /> : <CheckCircle size={9} />}
+                          Intent {hardBlocked ? "blocked" : "eligible"}
+                        </span>
+                        <span
+                          className="text-[10px] font-semibold px-2 py-1 rounded-lg border flex items-center gap-1"
+                          style={{
+                            color: hardBlocked || retargetingBlocked ? "#f59e0b" : "#22c55e",
+                            backgroundColor: hardBlocked || retargetingBlocked ? "rgba(245,158,11,0.07)" : "rgba(34,197,94,0.07)",
+                            borderColor: hardBlocked || retargetingBlocked ? "rgba(245,158,11,0.2)" : "rgba(34,197,94,0.2)",
+                          }}
+                        >
+                          {hardBlocked || retargetingBlocked ? <AlertTriangle size={9} /> : <CheckCircle size={9} />}
+                          Retargeting {hardBlocked || retargetingBlocked ? "blocked" : "ready"}
+                        </span>
+                        {trackingWarnings > 0 && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-1 rounded-lg border flex items-center gap-1"
+                            style={{ color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.07)", borderColor: "rgba(245,158,11,0.2)" }}
+                          >
+                            <AlertTriangle size={9} />
+                            {trackingWarnings} tracking warning{trackingWarnings > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Operational summary line */}
+                      <p
+                        className="text-[11px] font-medium mb-2 leading-snug"
+                        style={{ color: hardBlocked ? "#ef4444" : trackingWarnings > 0 ? "#f59e0b" : "#22c55e" }}
+                      >
+                        {summaryLine}
+                      </p>
+
                       <p className="text-[11px] leading-relaxed" style={{ color: "var(--t-muted)" }}>
-                        All conditions below must be confirmed before Meta push is available.
-                        This gate is <span className="font-semibold text-[#c9a84c]">read-only</span> — it validates the current state without making any API calls or writes.
+                        This gate is{" "}
+                        <span className="font-semibold text-[#c9a84c]">read-only</span> — it validates
+                        the current state without making any API calls or writes.
                       </p>
                     </div>
 

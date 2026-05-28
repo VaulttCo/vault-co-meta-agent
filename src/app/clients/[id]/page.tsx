@@ -63,6 +63,7 @@ import {
   mimeToFileType,
   formatFileSize,
 } from "@/lib/storage/types";
+import { ClientIntelligenceMetricCard } from "@/components/ui/ClientIntelligenceMetricCard";
 
 const tabs = [
   { id: "overview", label: "Overview", icon: BarChart3 },
@@ -1475,6 +1476,7 @@ interface MetaSnapshotAggregated {
 export default function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: clientId } = use(params);
   const { can } = useAuth();
+  const { getIntelligence } = useIntelligence();
   const [activeTab, setActiveTab] = useState("overview");
   const [editOpen, setEditOpen] = useState(false);
   // Start with mock data (fast); fall back to data provider for Supabase-added clients
@@ -1628,6 +1630,23 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
               </div>
             ))}
           </div>
+
+          <ClientIntelligenceMetricCard
+            clientName={client.name}
+            vertical={client.services[0] ?? "—"}
+            metrics={[
+              { label: "ROAS",    value: "—" },
+              { label: "Spend",   value: client.stats.spend },
+              { label: "Revenue", value: client.stats.revenue },
+              { label: "CPL",     value: client.stats.cpl },
+            ]}
+            status={
+              client.status === "active"  ? "live"   :
+              client.status === "paused"  ? "paused" :
+              "review"
+            }
+            lastUpdated={getIntelligence(clientId)?.extractedAt ?? "—"}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl p-5 space-y-4">

@@ -617,6 +617,39 @@ create policy "Authenticated update operator tasks"
 
 ---
 
+## 13. veronica_hermes_runs
+
+Immutable audit log for every Hermes Operator execution. Written server-side by
+`/api/veronica/hermes` using the service role key. No `updated_at` — runs are never mutated.
+
+```sql
+create table public.veronica_hermes_runs (
+  id         text        primary key default gen_random_uuid()::text,
+  prompt     text        not null,
+  output     text,
+  error      text,
+  status     text        not null default 'success'
+               check (status in ('success', 'error', 'unreachable')),
+  created_by text,
+  created_at timestamptz not null default now()
+);
+
+create index veronica_hermes_runs_created_at_idx
+  on public.veronica_hermes_runs(created_at desc);
+
+alter table public.veronica_hermes_runs enable row level security;
+
+create policy "Authenticated read hermes runs"
+  on public.veronica_hermes_runs for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert hermes runs"
+  on public.veronica_hermes_runs for insert
+  with check (auth.role() = 'authenticated');
+```
+
+---
+
 ## Run Order
 
 Execute the SQL blocks in this order:
@@ -635,6 +668,7 @@ Execute the SQL blocks in this order:
 12. `ghl_pipeline_snapshots` table
 13. `veronica_drafts` table
 14. `operator_tasks` table
+15. `veronica_hermes_runs` table
 
 ## Seed Data — 4 Demo Clients
 

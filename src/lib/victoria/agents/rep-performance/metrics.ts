@@ -12,11 +12,15 @@ import {
   detectPrematurePitching,
   detectQuestionStacking,
   detectOverexplaining,
+  detectBuyingSignalIgnore,
+  detectFeatureVsOutcome,
   detectPositives,
   type OvertalkingEvent,
   type PrematurePitchEvent,
-  type QuestionStackingEvent,
+  type QuestionStackEvent as QuestionStackingEvent,
   type OverexplainingEvent,
+  type BuyingSignalIgnoreEvent,
+  type FeatureVsOutcomeEvent,
 } from "./detectors";
 
 export interface RuleBasedMetrics {
@@ -27,6 +31,8 @@ export interface RuleBasedMetrics {
   premature_pitches: PrematurePitchEvent[];
   question_stacking: QuestionStackingEvent[];
   overexplaining: OverexplainingEvent[];
+  buying_signal_ignores: BuyingSignalIgnoreEvent[];
+  feature_vs_outcome: FeatureVsOutcomeEvent[];
   warnings: RepWarning[];
   positive_observations: string[];
   // Counts for quick access
@@ -35,6 +41,8 @@ export interface RuleBasedMetrics {
   premature_pitch_events: number;
   question_stacking_events: number;
   overexplaining_events: number;
+  buying_signal_ignore_count: number;
+  feature_vs_outcome_count: number;
 }
 
 /**
@@ -53,6 +61,8 @@ export function computeRepMetrics(session: LiveCallSession): RuleBasedMetrics {
   const prematurePitches = detectPrematurePitching(transcript, depthScore);
   const questionStacking = detectQuestionStacking(transcript);
   const overexplaining = detectOverexplaining(transcript);
+  const buyingSignalIgnores = detectBuyingSignalIgnore(transcript);
+  const featureVsOutcome = detectFeatureVsOutcome(transcript);
   const positives = detectPositives(transcript, session);
 
   // Build warnings list from all detected issues
@@ -150,6 +160,32 @@ export function computeRepMetrics(session: LiveCallSession): RuleBasedMetrics {
     });
   }
 
+  // --- Buying signal ignored ---
+  if (buyingSignalIgnores.length > 0) {
+    const latest = buyingSignalIgnores[buyingSignalIgnores.length - 1];
+    warnings.push({
+      type: "buying_signal_ignored" as RepWarningType,
+      severity: "critical",
+      message: "Rep pitched features after prospect showed a buying signal",
+      evidence: `Prospect signaled: "${latest.prospect_signal.slice(0, 50)}…"`,
+      chunk_index: latest.chunk_index,
+      suggested_fix: "Slow down. Ask: 'It sounds like you're seeing how this could work — what would need to happen to move forward?'",
+    });
+  }
+
+  // --- Feature vs outcome ---
+  if (featureVsOutcome.length > 0) {
+    const latest = featureVsOutcome[featureVsOutcome.length - 1];
+    warnings.push({
+      type: "feature_vs_outcome" as RepWarningType,
+      severity: "medium",
+      message: "Rep describing features — connect them to outcomes the prospect cares about",
+      evidence: `"${latest.feature_phrase.slice(0, 55)}" — no outcome link`,
+      chunk_index: latest.chunk_index,
+      suggested_fix: "Add: 'What that means for you is [specific outcome] — more [revenue/leads/time].'",
+    });
+  }
+
   // Sort by severity — critical first
   const severityRank = { critical: 3, high: 2, medium: 1 };
   warnings.sort((a, b) => (severityRank[b.severity] ?? 0) - (severityRank[a.severity] ?? 0));
@@ -162,6 +198,8 @@ export function computeRepMetrics(session: LiveCallSession): RuleBasedMetrics {
     premature_pitches: prematurePitches,
     question_stacking: questionStacking,
     overexplaining,
+    buying_signal_ignores: buyingSignalIgnores,
+    feature_vs_outcome: featureVsOutcome,
     warnings: warnings.slice(0, 4), // Max 4 warnings — don't overwhelm
     positive_observations: positives,
     // Counts
@@ -170,5 +208,7 @@ export function computeRepMetrics(session: LiveCallSession): RuleBasedMetrics {
     premature_pitch_events: prematurePitches.length,
     question_stacking_events: questionStacking.length,
     overexplaining_events: overexplaining.length,
+    buying_signal_ignore_count: buyingSignalIgnores.length,
+    feature_vs_outcome_count: featureVsOutcome.length,
   };
 }

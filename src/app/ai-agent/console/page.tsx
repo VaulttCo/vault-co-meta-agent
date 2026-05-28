@@ -2355,6 +2355,11 @@ function AICampaignBuilderContent() {
 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [pipelinePhase, setPipelinePhase] = useState("");
+  const [councilIntelligence, setCouncilIntelligence] = useState<CouncilResponse | null>(null);
+  const [councilWarning, setCouncilWarning] = useState<string | null>(null);
+  const [showCouncilDebate, setShowCouncilDebate] = useState(false);
+  const [showHermesAssist, setShowHermesAssist] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<CampaignDraft | null>(null);
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
@@ -2540,6 +2545,211 @@ function AICampaignBuilderContent() {
     }
   }
 
+  // ─── Full Veronica Build Pipeline ──────────────────────────────────────────
+  // Called by "Build with Veronica" button.
+  // Phases: Veronica draft → asset analysis → Council → apply improvements.
+  // Each phase fails gracefully — earlier-phase result is preserved on later failure.
+  async function runVeronicaBuildPipeline() {
+    if (!selectedClient || !goal || !service || !market || !budget) return;
+
+    const attemptId = ++generationAttemptIdRef.current;
+    setIsGenerating(true);
+    setCurrentPlan(null);
+    setLatestGenerationFailed(false);
+    setLatestGenerationError(null);
+    setMockModeActive(false);
+    setMockModeNotice(null);
+    setGenerationSource(null);
+    setActiveSection("overview");
+    setPipelinePhase("Building initial campaign…");
+    setCouncilIntelligence(null);
+    setCouncilWarning(null);
+
+    let initialPlan: CampaignDraft | null = null;
+
+    try {
+      // ── Phase 1: Veronica initial draft generation ────────────────────────
+      try {
+        const res = await fetch("/api/ai/generate-campaign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client: selectedClient,
+            service, market, budget, goal,
+            creativeType: creative,
+            creativeNotes,
+            clientIntelligence,
+            selectedAsset: selectedAssets[0] ?? null,
+            selectedAssets,
+            assetNotes: Object.keys(assetNotes).length > 0 ? assetNotes : undefined,
+            assetAnalyses: Object.keys(assetAnalyses).length > 0 ? assetAnalyses : undefined,
+          }),
+        });
+
+        if (!res.ok) {
+          let errMsg = `HTTP ${res.status}`;
+          try {
+            const eb = await res.json() as { error?: string; sanitizedError?: string };
+            errMsg = eb.error ?? eb.sanitizedError ?? errMsg;
+          } catch { /* ignore */ }
+          throw new Error(errMsg);
+        }
+
+        const { draft, mockMode, provider, notice } = await res.json();
+        initialPlan = { ...draft, selectedCreativeAssetId: selectedAssets[0]?.id ?? null };
+        setCurrentPlan(initialPlan);
+        setMockModeActive(mockMode ?? false);
+        setMockModeNotice(notice ?? null);
+        setGenerationSource(provider ?? "mock");
+        setLatestGenerationFailed(false);
+        setLatestGenerationError(null);
+      } catch (genErr) {
+        // Veronica failed — use client-side mock, abort Council phase
+        const rawMsg = genErr instanceof Error ? genErr.message : String(genErr);
+        const fallbackPlan = generateMockPlan(selectedClient, goal, service, market, budget, creative);
+        const fallbackVariations = selectedAssets.length > 0
+          ? selectedAssets.map((a, i) => {
+              const storedAnalysis = assetAnalyses[a.id] ?? null;
+              return buildAssetAdVariation(
+                { id: a.id, fileName: a.fileName, assetType: a.assetType, fileType: a.fileType as "image" | "video", approvedForAds: a.approvedForAds, notes: assetNotes[a.id] || a.notes || undefined },
+                service, clientIntelligence, i === 0, storedAnalysis
+              );
+            })
+          : undefined;
+        initialPlan = { ...fallbackPlan, adVariations: fallbackVariations, selectedCreativeAssetId: selectedAssets[0]?.id ?? null };
+        if (generationAttemptIdRef.current === attemptId) {
+          setCurrentPlan(initialPlan);
+          setGenerationSource("fallback");
+          setLatestGenerationFailed(true);
+          setLatestGenerationError(rawMsg.slice(0, 240));
+        }
+        return; // don't run Council on a failed/fallback draft
+      }
+
+      if (generationAttemptIdRef.current !== attemptId || !initialPlan) return;
+
+      // ── Phase 2: Pre-analyze creative assets ─────────────────────────────
+      const missingAssets = selectedAssets.filter((a) => !assetAnalyses[a.id]);
+      let mergedAnalyses = { ...assetAnalyses };
+
+      if (missingAssets.length > 0) {
+        setPipelinePhase("Analyzing creative assets…");
+        try {
+          const analysisRes = await fetch("/api/creatives/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assets: missingAssets.slice(0, 10).map((a) => ({
+                id: a.id,
+                assetType: a.assetType,
+                service: service || String(a.assetType),
+                market: market || undefined,
+                notes: assetNotes[a.id] || a.notes || undefined,
+                approvedForAds: a.approvedForAds,
+                fileName: a.fileName,
+                clientName: selectedClient.name,
+              })),
+            }),
+          });
+          if (analysisRes.ok) {
+            const analysisData = await analysisRes.json() as {
+              results?: Array<{ assetId: string; analysis: StoredAssetAnalysis }>;
+            };
+            const fresh: Record<string, StoredAssetAnalysis> = {};
+            for (const r of analysisData.results ?? []) {
+              if (r.assetId && r.analysis) fresh[r.assetId] = r.analysis;
+            }
+            if (Object.keys(fresh).length > 0) {
+              setAssetAnalyses((prev) => ({ ...prev, ...fresh }));
+              mergedAnalyses = { ...mergedAnalyses, ...fresh };
+            }
+          }
+        } catch {
+          // Non-blocking — continue with metadata fallback
+          setCouncilWarning("Some creative assets used metadata fallback — visual analysis failed.");
+        }
+      }
+
+      if (generationAttemptIdRef.current !== attemptId) return;
+
+      // ── Phase 3: The Council deliberation ────────────────────────────────
+      setPipelinePhase("Convening The Council…");
+
+      const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
+      for (const [id, a] of Object.entries(mergedAnalyses)) {
+        mappedAnalyses[id] = { visualSummary: a.visual_summary, analysisSource: a.analysis_source };
+      }
+
+      const councilPrompt = buildCouncilPrompt(
+        {
+          client: {
+            id: selectedClient.id,
+            name: selectedClient.name,
+            market: (selectedClient as { market?: string }).market,
+            monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
+            services: (selectedClient as { services?: string[] }).services,
+          },
+          goal, service, market, budget,
+          displayPlan: initialPlan,
+          selectedAssets,
+          assetNotes,
+          assetAnalyses: mappedAnalyses,
+        },
+        "improve_and_apply_draft"
+      );
+
+      let rawCouncilOutput = "";
+      try {
+        const hermesRes = await fetch("/api/veronica/hermes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: councilPrompt }),
+        });
+        const hermesData = await hermesRes.json();
+        if (!hermesRes.ok || hermesData.error) {
+          throw new Error(hermesData.error ?? `Hermes HTTP ${hermesRes.status}`);
+        }
+        rawCouncilOutput = (hermesData.output as string) ?? "";
+      } catch (hermesErr) {
+        const msg = hermesErr instanceof Error ? hermesErr.message : String(hermesErr);
+        if (generationAttemptIdRef.current === attemptId) {
+          setCouncilWarning(`Council improvement failed — original Veronica draft was preserved. (${msg.slice(0, 120)})`);
+        }
+        return; // keep initialPlan
+      }
+
+      if (generationAttemptIdRef.current !== attemptId) return;
+
+      // ── Phase 4: Parse Council JSON + apply improved draft ────────────────
+      setPipelinePhase("Applying Council improvements…");
+
+      let councilResult: CouncilResponse | null = null;
+      try {
+        const clean = rawCouncilOutput.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
+        councilResult = JSON.parse(clean) as CouncilResponse;
+      } catch {
+        if (generationAttemptIdRef.current === attemptId) {
+          setCouncilWarning("Council returned non-structured output — original Veronica draft was preserved.");
+        }
+        return;
+      }
+
+      if (generationAttemptIdRef.current !== attemptId) return;
+
+      setPipelinePhase("Finalizing draft…");
+      if (councilResult?.improvedDraft) {
+        const improved = applyCouncilToDraft(initialPlan, councilResult);
+        setCurrentPlan(improved);
+      }
+      setCouncilIntelligence(councilResult);
+
+    } finally {
+      setIsGenerating(false);
+      setPipelinePhase("");
+    }
+  }
+
+  // ─── Legacy manual generation (kept for backward compat) ───────────────────
   async function handleGenerate() {
     if (!selectedClient || !goal || !service || !market || !budget) return;
     // Increment attempt ID first so any in-flight catch block from a prior
@@ -3445,12 +3655,12 @@ function AICampaignBuilderContent() {
               })()}
 
               <button
-                onClick={handleGenerate}
+                onClick={runVeronicaBuildPipeline}
                 disabled={!canGenerate}
                 className="w-full flex items-center justify-center gap-2 py-3 vc-orange-gradient text-white text-[13px] font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isGenerating ? (
-                  <><Loader2 size={14} className="animate-spin" />Veronica is building…</>
+                  <><Loader2 size={14} className="animate-spin" />{pipelinePhase || "Building…"}</>
                 ) : (
                   <><Sparkles size={14} />Build with Veronica</>
                 )}

@@ -4272,6 +4272,9 @@ function AICampaignBuilderContent() {
                 assetNotes={assetNotes}
                 assetAnalyses={assetAnalyses}
                 onApplyImprovedDraft={handleApplyCouncilDraft}
+                onAnalysesUpdated={(updates) =>
+                  setAssetAnalyses((prev) => ({ ...prev, ...updates }))
+                }
               />
             )}
           </div>

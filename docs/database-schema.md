@@ -650,6 +650,61 @@ create policy "Authenticated insert hermes runs"
 
 ---
 
+## 14. veronica_hermes_skills
+
+Reusable skills/SOPs auto-saved from Hermes outputs. `source_run_id` links back to the
+originating Hermes run. `usage_count` and `last_used_at` are updated each time the skill
+is re-run via the Hermes Operator UI.
+
+```sql
+create table public.veronica_hermes_skills (
+  id            text        primary key default gen_random_uuid()::text,
+  name          text        not null,
+  description   text,
+  category      text,
+  instructions  text        not null,
+  source_run_id text        references public.veronica_hermes_runs(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  created_by    text,
+  last_used_at  timestamptz,
+  usage_count   int         not null default 0,
+  auto_created  boolean     not null default true
+);
+
+create index veronica_hermes_skills_created_at_idx
+  on public.veronica_hermes_skills(created_at desc);
+create index veronica_hermes_skills_category_idx
+  on public.veronica_hermes_skills(category);
+
+alter table public.veronica_hermes_skills enable row level security;
+
+create policy "Authenticated read hermes skills"
+  on public.veronica_hermes_skills for select
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated insert hermes skills"
+  on public.veronica_hermes_skills for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated update hermes skills"
+  on public.veronica_hermes_skills for update
+  using (auth.role() = 'authenticated');
+```
+
+---
+
+### Hermes Skills Phase — Add skill columns to veronica_hermes_runs
+
+Run **after** `veronica_hermes_skills` table exists.
+
+```sql
+alter table public.veronica_hermes_runs
+  add column if not exists auto_skill_created boolean not null default false,
+  add column if not exists skill_id text references public.veronica_hermes_skills(id) on delete set null;
+```
+
+---
+
 ## Run Order
 
 Execute the SQL blocks in this order:
@@ -669,6 +724,8 @@ Execute the SQL blocks in this order:
 13. `veronica_drafts` table
 14. `operator_tasks` table
 15. `veronica_hermes_runs` table
+16. `veronica_hermes_skills` table
+17. Add `auto_skill_created` + `skill_id` columns to `veronica_hermes_runs`
 
 ## Seed Data — 4 Demo Clients
 

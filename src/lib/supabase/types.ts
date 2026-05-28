@@ -257,6 +257,22 @@ export interface VeronicaHermesRunRow {
   status: HermesRunStatus;
   created_by: string | null;
   created_at: string;
+  auto_skill_created: boolean;
+  skill_id: string | null;
+}
+
+export interface VeronicaHermesSkillRow {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  instructions: string;
+  source_run_id: string | null;
+  created_at: string;
+  created_by: string | null;
+  last_used_at: string | null;
+  usage_count: number;
+  auto_created: boolean;
 }
 
 export interface MetaCampaignSnapshotRow {
@@ -352,8 +368,35 @@ export interface Database {
           status?: HermesRunStatus;
           created_by?: string | null;
           created_at?: string;
+          auto_skill_created?: boolean;
+          skill_id?: string | null;
         };
-        Update: Record<string, never>;
+        Update: {
+          auto_skill_created?: boolean;
+          skill_id?: string | null;
+        };
+      };
+      veronica_hermes_skills: {
+        Row: VeronicaHermesSkillRow;
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          category?: string | null;
+          instructions: string;
+          source_run_id?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+          last_used_at?: string | null;
+          usage_count?: number;
+          auto_created?: boolean;
+        };
+        Update: {
+          last_used_at?: string | null;
+          usage_count?: number;
+          name?: string;
+          description?: string | null;
+        };
       };
       // ── Victoria AI Sales Coach tables ─────────────────
       victoria_calls: {

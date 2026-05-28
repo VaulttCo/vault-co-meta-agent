@@ -33,8 +33,20 @@
 import { LucideIcon, TrendingUp, TrendingDown, Loader2, AlertTriangle } from "lucide-react";
 
 // ─── VCPanel ────────────────────────────────────────────────────────────────
-// The primary section wrapper. Use for every distinct content block.
-// Replaces raw div + vc-card / SectionCard / inline surface styles.
+// The primary section wrapper. Use for every distinct content block on a page.
+// Replaces: raw `div` with surface/border styles, `SectionCard` from _components.tsx,
+//           inline `bg-[#0D1520] border ...` patterns, and the `vc-card` utility class.
+//
+// DO NOT use for:
+//   - Cards on the Command Hub (those have custom gradient styles)
+//   - The Hermes prompt area (uses a different inner layout)
+//   - Anything needing a custom border color that isn't the `accent` prop
+//
+// Usage:
+//   <VCPanel>                          — standard panel
+//   <VCPanel accent="blue">            — blue glow edge (Veronica sections)
+//   <VCPanel accent="gold">            — gold glow edge (Revenue sections)
+//   <VCPanel className="extra-class">  — passthrough className
 
 interface VCPanelProps {
   children: React.ReactNode;
@@ -80,8 +92,18 @@ export function VCPanel({ children, className = "", accent }: VCPanelProps) {
 }
 
 // ─── VCPanelHeader ───────────────────────────────────────────────────────────
-// Standardized header row inside a VCPanel.
-// icon + title (+ optional label) on the left, action slot on the right.
+// Standardized header row inside a VCPanel. Always the first child of a VCPanel.
+// icon + title (+ optional micro-label) on the left, action slot on the right.
+// Replaces: manual `px-5 py-4 border-b flex items-center justify-between` header divs.
+//
+// Usage:
+//   <VCPanel>
+//     <VCPanelHeader icon={Users} title="Clients" action={<VCActionLink href="/clients" />} />
+//     ...body...
+//   </VCPanel>
+//
+//   <VCPanelHeader icon={Bot} title="Veronica AI" live />       — shows green pulse dot
+//   <VCPanelHeader label="Veronica AI" title="Clients" />       — micro-label above title
 
 interface VCPanelHeaderProps {
   icon?: LucideIcon;
@@ -122,7 +144,11 @@ export function VCPanelHeader({
 }
 
 // ─── VCGlowIcon ─────────────────────────────────────────────────────────────
-// Icon in a glowing ring — used for section intro icons and module cards.
+// Icon in a colored glow ring. Use for section intro icons, empty states, and
+// module cards. NOT for nav items (those use plain lucide icons directly).
+//
+// Usage:
+//   <VCGlowIcon icon={Bot} color="#0081f2" size={18} ringSize={40} />
 
 interface VCGlowIconProps {
   icon: LucideIcon;
@@ -154,8 +180,22 @@ export function VCGlowIcon({
 }
 
 // ─── VCStat ─────────────────────────────────────────────────────────────────
-// Premium stat tile. Use wherever a numeric KPI is displayed.
-// Replaces both StatCard (big card) and StatTile (inline tile) patterns.
+// Premium stat tile with hover glow. The single KPI component for the whole app.
+// Replaces: shared `StatCard` component, inline `StatTile` functions in ai-agent.
+//
+// EXCEPTION: `revenue-dashboard/clients/[clientId]/page.tsx` has its own local
+// StatCard with different props (label/sub/icon/badge, gold theme) — do not
+// replace that one; it serves a different layout contract.
+//
+// size="md" — dashboard overview grids (default, larger value)
+// size="sm" — inside panels like Client Intelligence, Fulfillment Pipeline
+// accent    — a CSS color string applied as a 2px top border (use sparingly)
+// iconColor — when no icon, also controls value text color (e.g. "#22c55e" for active counts)
+//
+// Usage:
+//   <VCStat label="Active Clients" value={5} />
+//   <VCStat label="Pending" value={pendingCount} iconColor="#ff8400" size="sm" />
+//   <VCStat label="Spend" value="$4,200" icon={DollarSign} iconColor="#a78bfa" />
 
 interface VCStatProps {
   label: string;
@@ -262,7 +302,18 @@ export function VCStat({
 }
 
 // ─── VCStatusBadge ───────────────────────────────────────────────────────────
-// Semantic status pill. Replaces ad-hoc inline badge spans.
+// Semantic status pill for labeling states in panels and headers.
+// Replaces ad-hoc inline badge spans (color/bg/border inline styles).
+//
+// COEXISTS WITH `Badge` from `@/components/ui/Badge` — Badge is used in tables
+// for client status (success/warning/danger/neutral/blue/orange variants).
+// VCStatusBadge adds `purple` and `gold` variants and an optional `dot` indicator.
+// Do NOT remove Badge.tsx — 7 pages import it directly.
+//
+// Usage:
+//   <VCStatusBadge label="Live" variant="success" dot />
+//   <VCStatusBadge label="Phase 1" variant="gold" />
+//   <VCStatusBadge label="Coming Soon" variant="neutral" />
 
 type StatusVariant = "success" | "warning" | "danger" | "neutral" | "blue" | "orange" | "purple" | "gold";
 
@@ -302,7 +353,12 @@ export function VCStatusBadge({ label, variant = "neutral", dot }: VCStatusBadge
 }
 
 // ─── VCChip ──────────────────────────────────────────────────────────────────
-// Tiny tag / metadata chip. Smaller than VCStatusBadge.
+// Tiny metadata chip — smaller than VCStatusBadge, no dot option.
+// Use for category tags, type labels, source indicators.
+//
+// Usage:
+//   <VCChip label="GHL" color="#22c55e" />
+//   <VCChip label="roofing" />
 
 interface VCChipProps {
   label: string;
@@ -325,7 +381,12 @@ export function VCChip({ label, color = "#6b7a99" }: VCChipProps) {
 }
 
 // ─── VCEmptyState ─────────────────────────────────────────────────────────────
-// Centered empty / loading state for panels and tables.
+// Centered empty or loading state — always inside a VCPanel or table wrapper.
+// Pass `loading` for a spinner, or title+description+action for the empty case.
+//
+// Usage:
+//   <VCEmptyState loading title="Loading clients…" />
+//   <VCEmptyState icon={Users} title="No clients yet" description="Add your first client." action={<button>…</button>} />
 
 interface VCEmptyStateProps {
   loading?: boolean;
@@ -405,7 +466,11 @@ export function VCDivider({ className = "" }: { className?: string }) {
 }
 
 // ─── VCFilterBar ─────────────────────────────────────────────────────────────
-// Horizontal filter pill row.
+// Horizontal row of filter pills (tab-style, single selection).
+// Replaces manual `vc-filter-pill` button loops.
+//
+// Usage:
+//   <VCFilterBar options={["All","Active","Paused"]} active={filter} onChange={setFilter} />
 
 interface VCFilterBarProps<T extends string> {
   options: T[];
@@ -434,7 +499,11 @@ export function VCFilterBar<T extends string>({
 }
 
 // ─── VCSearchInput ────────────────────────────────────────────────────────────
-// Search field with magnifier icon — used at top of list/table pages.
+// Search field with left magnifier icon. Always pair with VCFilterBar on list pages.
+// Uses `vc-input` class for consistent focus glow (no JS onFocus/onBlur needed).
+//
+// Usage:
+//   <VCSearchInput value={q} onChange={setQ} placeholder="Search clients…" className="max-w-xs" />
 
 import { Search } from "lucide-react";
 
@@ -470,7 +539,12 @@ export function VCSearchInput({
 }
 
 // ─── VCActionLink ─────────────────────────────────────────────────────────────
-// Small "View all →" style link used in panel headers.
+// Small muted right-arrow link. Always the `action` prop of VCPanelHeader.
+// Renders as a Next.js Link — no router push needed.
+//
+// Usage:
+//   <VCPanelHeader ... action={<VCActionLink href="/clients" />} />
+//   <VCPanelHeader ... action={<VCActionLink href="/approvals" label="Review" />} />
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -493,8 +567,19 @@ export function VCActionLink({ href, label = "View all" }: VCActionLinkProps) {
   );
 }
 
-// ─── VCButtonPrimary ─────────────────────────────────────────────────────────
-// The primary CTA button (orange).
+// ─── VCButton ────────────────────────────────────────────────────────────────
+// Standard CTA button. Three variants:
+//   orange — primary actions (Add Client, Generate, Submit)
+//   blue   — secondary AI/navigation actions
+//   ghost  — tertiary / cancel actions
+//
+// For the Add Client button in PageHeader.action, use a raw <button> with
+// `backgroundColor: "#ff8400"` — PageHeader is not inside a VCPanel.
+//
+// Usage:
+//   <VCButton onClick={handleSave}>Save Draft</VCButton>
+//   <VCButton variant="blue" size="sm"><Plus size={12} /> Add</VCButton>
+//   <VCButton variant="ghost" onClick={onClose}>Cancel</VCButton>
 
 interface VCButtonProps {
   onClick?: () => void;
@@ -552,7 +637,12 @@ export function VCButton({
 }
 
 // ─── VCPriorityDot ────────────────────────────────────────────────────────────
-// Colored dot for priority levels in task/queue tables.
+// 8px colored circle for urgent/high/medium/low priority in task lists.
+// Also exports `priorityColors` map for programmatic color lookup.
+//
+// Usage:
+//   <VCPriorityDot priority="urgent" />
+//   <span style={{ color: priorityColors[task.priority] }}>{task.priority}</span>
 
 type Priority = "urgent" | "high" | "medium" | "low";
 
@@ -577,14 +667,31 @@ export function VCPriorityDot({ priority }: { priority: Priority }) {
 export { priorityColors };
 
 // ─── VCSectionLabel ───────────────────────────────────────────────────────────
-// Micro uppercase label used above section headings.
+// Micro uppercase label rendered above a section title or stat group.
+// Wraps the `vc-label` CSS class. Use in page bodies, not inside VCPanelHeader
+// (VCPanelHeader has its own `label` prop for this).
+//
+// Usage:
+//   <VCSectionLabel>Executive Revenue Snapshot</VCSectionLabel>
+//   <h2 className="text-[18px] font-bold">…</h2>
 
 export function VCSectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="vc-label mb-1">{children}</p>;
 }
 
 // ─── VCPageWrapper ────────────────────────────────────────────────────────────
-// Standard page content wrapper — max width + consistent padding.
+// Standard page content wrapper. Constrains width and adds vertical spacing
+// between sections. Use as the root element of every page's return value.
+// Most existing pages use `max-w-7xl mx-auto space-y-5` inline — this is
+// the canonical equivalent. Migrate gradually; do not break existing layouts.
+//
+// Usage:
+//   return (
+//     <VCPageWrapper>
+//       <PageHeader ... />
+//       <VCPanel>…</VCPanel>
+//     </VCPageWrapper>
+//   );
 
 export function VCPageWrapper({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (

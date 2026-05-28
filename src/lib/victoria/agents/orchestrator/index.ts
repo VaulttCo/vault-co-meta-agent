@@ -15,7 +15,10 @@ import { runObjectionIntelAgent } from "../objection-intel";
 import { runDealRiskAgent } from "../deal-risk";
 import { runEmotionalAgent } from "../emotional";
 import { runRepPerformanceAgent } from "../rep-performance";
-import { buildTimelineEvents, buildPhaseTransitionEvent } from "./timeline";
+import { buildEnhancedTimelineEvents, buildPhaseTransitionEvent } from "../../intelligence/timeline-event-builder";
+import { computeMomentum, momentumSummary } from "../../intelligence/momentum-tracker";
+import { analyzeTrustSignals, recentTrustDirection } from "../../intelligence/trust-tracker";
+import { analyzeUrgencySignals, recentUrgencyDirection } from "../../intelligence/urgency-tracker";
 import { getKBContextForCall, getObjectionKBContext } from "../../kb/search";
 import { getProspectContextForSession } from "../prospect-memory";
 import { getSession, saveSession, saveLatestCoachingCard } from "../../memory/session-store";
@@ -38,6 +41,8 @@ import type {
   ObjectionCategory,
   TimelineEvent,
   RepPerformanceOutput,
+  MomentumSnapshot,
+  SessionScores,
 } from "../../types";
 
 // ─────────────────────────────────────────────────────────────
@@ -347,6 +352,40 @@ function buildRepWarningCard(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Momentum Decline Card — fires when overall momentum is declining
+// and deal risk agents confirm a falling score pattern.
+// ─────────────────────────────────────────────────────────────
+
+function buildMomentumDeclineCard(
+  session: LiveCallSession,
+  chunk: TranscriptChunk,
+  momentum: MomentumSnapshot
+): CoachingCard | null {
+  // Only fire when multiple dimensions are declining and score is meaningful
+  const decliningCount = [momentum.trust, momentum.urgency, momentum.engagement, momentum.close_readiness]
+    .filter((d) => d === "declining").length;
+
+  if (decliningCount < 2 || session.scores.close_readiness < 15) return null;
+
+  return {
+    id: generateCardId(),
+    call_id: session.call_id,
+    chunk_index: chunk.chunk_index,
+    timestamp_ms: Date.now(),
+    priority: "high",
+    coaching_type: "danger_warning",
+    headline: `Momentum declining — ${momentumSummary(momentum)}`,
+    primary_action: "Change approach immediately. Stop whatever you're doing and ask: 'What's your biggest concern right now?'",
+    why: `${decliningCount} dimensions dropping simultaneously. The prospect is losing interest.`,
+    what_not_to_do: "Do not continue your current line of questioning or pitch — it is not working.",
+    context_tags: ["momentum", "danger", "re-engage"],
+    confidence: 0.72,
+    current_phase: session.phase,
+    source_agent: "deal_risk",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Priority resolver — which card wins?
 // Priority order (high to low):
 //   1. Buying signal (critical)
@@ -354,8 +393,9 @@ function buildRepWarningCard(
 //   3. Emotional shutdown/breakthrough (critical/high)
 //   4. Objection detected (high)
 //   5. Discovery warning / premature pitch (critical → high)
-//   6. Deal risk signal (varies)
-//   7. Standard discovery coaching (normal)
+//   6. Momentum decline (high)
+//   7. Deal risk signal (varies)
+//   8. Standard discovery coaching (normal)
 // ─────────────────────────────────────────────────────────────
 
 const PRIORITY_RANK: Record<CoachingPriority, number> = {
@@ -556,6 +596,9 @@ export async function processTranscriptChunk(
     candidateCards.push(bsCard);
   }
 
+  // Capture scores BEFORE any agent updates them (for momentum computation)
+  const prevScores: SessionScores = { ...session.scores };
+
   // 7b. Pre-fetch KB context + prospect memory in parallel BEFORE agents
   //     Both are fast DB reads (< 20ms). Done before the agent batch so
   //     context is ready to inject without adding to agent latency.
@@ -711,11 +754,14 @@ export async function processTranscriptChunk(
     }
   }
 
-  // Generate timeline events for this chunk
-  const newTimelineEvents: TimelineEvent[] = buildTimelineEvents({
+  // ── Intelligence layer — enhanced event builder ──────────────
+  // Uses momentum, trust, and urgency trackers in addition to base events.
+  // Returns both events and the computed momentum snapshot.
+  const { events: newTimelineEvents, momentum } = buildEnhancedTimelineEvents({
     session,
     chunk,
     prevDiscoveryDepth,
+    prevScores: session.prev_scores,   // The reading from BEFORE this session update
     discovery: discoveryResult.status === "fulfilled" ? discoveryResult.value?.output : null,
     objection: objectionResult.status === "fulfilled" && objectionResult.value ? objectionResult.value.output : null,
     dealRisk: dealRiskResult.status === "fulfilled" && dealRiskResult.value ? dealRiskResult.value.output : null,
@@ -723,13 +769,33 @@ export async function processTranscriptChunk(
     repPerformance: repPerfOutput,
   });
 
+  // Backfill momentum/trust/urgency into the rep performance output
+  if (repPerfOutput) {
+    const trustSignals = analyzeTrustSignals(session.transcript.slice(-8));
+    const urgencySignals = analyzeUrgencySignals(session.transcript.slice(-8));
+    repPerfOutput.momentum_direction = momentum.overall;
+    repPerfOutput.trust_trend = recentTrustDirection(trustSignals, 6);
+    repPerfOutput.urgency_trend = recentUrgencyDirection(urgencySignals, 6);
+    session.agent_outputs.rep_performance = repPerfOutput;
+  }
+
+  // ── Momentum decline card ────────────────────────────────────
+  if (momentum.overall === "declining") {
+    const momentumCard = buildMomentumDeclineCard(session, chunk, momentum);
+    if (momentumCard) candidateCards.push(momentumCard);
+  }
+
+  // Save current scores as prev_scores for the NEXT chunk's momentum computation
+  // Only update when deal risk ran (scores change only then)
+  if (dealRiskResult.status === "fulfilled" && dealRiskResult.value) {
+    session.prev_scores = { ...prevScores };
+  }
+
   // Add phase transition event if phase changed
   if (newPhase && newPhase !== session.phase) {
-    // Note: session.phase was already updated above — we use the value before it changed
-    // (The phase was already set to newPhase before this point — emit the event)
     newTimelineEvents.unshift(buildPhaseTransitionEvent(
       chunk.chunk_index,
-      session.phase, // current (which is now newPhase)
+      session.phase,
       newPhase
     ));
   }
@@ -778,5 +844,6 @@ export async function processTranscriptChunk(
     session_scores: session.scores,
     processing_time_ms: totalLatency,
     new_timeline_events: newTimelineEvents,
+    momentum,
   };
 }

@@ -24,11 +24,14 @@ import {
   Terminal,
   Play,
   AlertTriangle,
+  BookOpen,
+  RotateCcw,
+  Sparkle,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
-import type { VeronicaHermesRunRow } from "@/lib/supabase/types";
+import type { VeronicaHermesRunRow, VeronicaHermesSkillRow } from "@/lib/supabase/types";
 
 interface OperatorTask {
   id: string;
@@ -94,6 +97,9 @@ export default function VeronicaOverviewPage() {
   const hermesOutputRef = useRef<HTMLDivElement>(null);
   const [hermesRuns, setHermesRuns] = useState<VeronicaHermesRunRow[]>([]);
   const [hermesRunsLoading, setHermesRunsLoading] = useState(true);
+  const [hermesSkills, setHermesSkills] = useState<VeronicaHermesSkillRow[]>([]);
+  const [hermesSkillsLoading, setHermesSkillsLoading] = useState(true);
+  const [runningSkillId, setRunningSkillId] = useState<string | null>(null);
 
   useEffect(() => {
     getDataProvider()
@@ -125,7 +131,17 @@ export default function VeronicaOverviewPage() {
       .catch(() => setHermesRunsLoading(false));
   }
 
-  useEffect(() => { fetchHermesRuns(); }, []);
+  function fetchHermesSkills() {
+    fetch("/api/veronica/hermes/skills")
+      .then((r) => r.json())
+      .then((d: { skills?: VeronicaHermesSkillRow[] }) => {
+        setHermesSkills(d.skills ?? []);
+        setHermesSkillsLoading(false);
+      })
+      .catch(() => setHermesSkillsLoading(false));
+  }
+
+  useEffect(() => { fetchHermesRuns(); fetchHermesSkills(); }, []);
 
   // ── Client stats ────────────────────────────────────────────
   const totalClients = clients.length;
@@ -192,6 +208,35 @@ export default function VeronicaOverviewPage() {
     } finally {
       setHermesLoading(false);
       fetchHermesRuns();
+      fetchHermesSkills();
+    }
+  }
+
+  async function runSkill(skill: VeronicaHermesSkillRow) {
+    if (runningSkillId) return;
+    setRunningSkillId(skill.id);
+    setHermesOutput(null);
+    setHermesError(null);
+    try {
+      const res = await fetch("/api/veronica/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: skill.instructions, skill_id: skill.id }),
+      });
+      const data: { output?: string | null; error?: string | null } = await res.json();
+      if (data.error) {
+        setHermesError(data.error);
+      } else {
+        setHermesPrompt(skill.instructions);
+        setHermesOutput(data.output ?? null);
+        setTimeout(() => hermesOutputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 80);
+      }
+    } catch {
+      setHermesError("Unable to reach Hermes. Check your connection and try again.");
+    } finally {
+      setRunningSkillId(null);
+      fetchHermesRuns();
+      fetchHermesSkills();
     }
   }
 
@@ -898,15 +943,131 @@ export default function VeronicaOverviewPage() {
                           </div>
                         )}
                       </div>
-                      <span
-                        className="text-[10px] flex-shrink-0 tabular-nums"
-                        style={{ color: "rgba(107,122,153,0.50)" }}
-                      >
-                        {ts}
-                      </span>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {run.auto_skill_created && (
+                          <span
+                            className="text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"
+                            style={{
+                              color: "#a78bfa",
+                              backgroundColor: "rgba(167,139,250,0.10)",
+                              border: "1px solid rgba(167,139,250,0.22)",
+                            }}
+                          >
+                            <Sparkle size={7} />
+                            Skill saved
+                          </span>
+                        )}
+                        <span
+                          className="text-[10px] tabular-nums"
+                          style={{ color: "rgba(107,122,153,0.50)" }}
+                        >
+                          {ts}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Saved Skills ───────────────────────────────── */}
+          <div
+            className="pt-2 border-t space-y-2"
+            style={{ borderColor: "var(--t-border)" }}
+          >
+            <div className="flex items-center gap-2">
+              <BookOpen size={11} style={{ color: "#a78bfa" }} />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: "rgba(167,139,250,0.75)" }}
+              >
+                Saved Skills
+              </span>
+            </div>
+
+            {hermesSkillsLoading ? (
+              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                Loading…
+              </p>
+            ) : hermesSkills.length === 0 ? (
+              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                No skills saved yet. Reusable outputs are auto-detected and saved here.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {hermesSkills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    className="px-3 py-2.5 rounded-lg"
+                    style={{
+                      backgroundColor: "rgba(167,139,250,0.04)",
+                      border: "1px solid rgba(167,139,250,0.14)",
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className="text-[12px] font-semibold leading-tight"
+                          style={{ color: "var(--t-text)" }}
+                        >
+                          {skill.name}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {skill.category && (
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                              style={{
+                                color: "#a78bfa",
+                                backgroundColor: "rgba(167,139,250,0.10)",
+                                border: "1px solid rgba(167,139,250,0.20)",
+                              }}
+                            >
+                              {skill.category}
+                            </span>
+                          )}
+                          <span
+                            className="text-[10px]"
+                            style={{ color: "rgba(107,122,153,0.55)" }}
+                          >
+                            {new Date(skill.created_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                          {skill.usage_count > 0 && (
+                            <span
+                              className="text-[10px]"
+                              style={{ color: "rgba(107,122,153,0.55)" }}
+                            >
+                              {skill.usage_count} use{skill.usage_count !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => runSkill(skill)}
+                        disabled={runningSkillId === skill.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{
+                          backgroundColor: "rgba(167,139,250,0.10)",
+                          border: "1px solid rgba(167,139,250,0.24)",
+                          color: "#a78bfa",
+                        }}
+                      >
+                        {runningSkillId === skill.id ? (
+                          <span
+                            className="w-3 h-3 rounded-full border-2 animate-spin flex-shrink-0"
+                            style={{ borderColor: "rgba(167,139,250,0.4)", borderTopColor: "transparent" }}
+                          />
+                        ) : (
+                          <RotateCcw size={11} />
+                        )}
+                        Run Skill
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

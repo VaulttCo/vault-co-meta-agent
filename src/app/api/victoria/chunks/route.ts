@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
       discovery_depth: result.agent_outputs.discovery?.depth_score ?? 0,
       deal_risk: result.agent_outputs.deal_risk ?? null,
       emotional_signals: result.agent_outputs.emotional_signals ?? null,
+      rep_performance: result.agent_outputs.rep_performance ?? null,
+      new_timeline_events: result.new_timeline_events ?? [],
       processing_time_ms: result.processing_time_ms,
     });
   } catch (err) {

@@ -12,7 +12,7 @@ import {
   FileText, Loader,
 } from "lucide-react";
 import { useVictoriaTranscription } from "@/lib/victoria/transcription/useVictoriaTranscription";
-import type { CoachingCard, LiveCallSession, ContractorVertical, DealRiskOutput, EmotionalOutput, EmotionalState } from "@/lib/victoria/types";
+import type { CoachingCard, LiveCallSession, ContractorVertical, DealRiskOutput, EmotionalOutput, EmotionalState, RepPerformanceOutput, TimelineEvent } from "@/lib/victoria/types";
 import { KB_DOMAINS } from "@/lib/victoria/types";
 import type { KBSearchResult, VictoriaProspectRow, PreCallBriefing } from "@/lib/victoria/types";
 
@@ -968,6 +968,250 @@ function ProspectsView({ onStartCallWithProspect }: { onStartCallWithProspect: (
 }
 
 // ─────────────────────────────────────────────────────────────
+// Rep Performance Panel
+// ─────────────────────────────────────────────────────────────
+
+const PERF_COLORS = {
+  excellent: { bg: "rgba(34,197,94,0.1)", text: "#22c55e", border: "rgba(34,197,94,0.25)" },
+  good: { bg: "rgba(59,130,246,0.1)", text: "#3b82f6", border: "rgba(59,130,246,0.25)" },
+  needs_improvement: { bg: "rgba(245,158,11,0.1)", text: "#f59e0b", border: "rgba(245,158,11,0.25)" },
+  poor: { bg: "rgba(239,68,68,0.1)", text: "#ef4444", border: "rgba(239,68,68,0.25)" },
+};
+
+const WARNING_COLORS = {
+  critical: { text: "#ef4444", bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.2)" },
+  high: { text: "#f59e0b", bg: "rgba(245,158,11,0.06)", border: "rgba(245,158,11,0.2)" },
+  medium: { text: "#6b7280", bg: "rgba(107,114,128,0.05)", border: "rgba(107,114,128,0.15)" },
+};
+
+function TalkRatioBar({ rep_percent, prospect_percent }: { rep_percent: number; prospect_percent: number }) {
+  const isWarning = rep_percent > 60;
+  const isCritical = rep_percent > 75;
+  const repColor = isCritical ? "#ef4444" : isWarning ? "#f59e0b" : "#6b7280";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "var(--t-muted)" }}>Talk Ratio</span>
+        {isCritical && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: "rgba(239,68,68,0.12)", color: "#ef4444" }}>REP OVERTALKING</span>}
+        {isWarning && !isCritical && <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: "rgba(245,158,11,0.1)", color: "#f59e0b" }}>WATCH RATIO</span>}
+      </div>
+      <div className="h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+        <div
+          className="h-full transition-all duration-700"
+          style={{ width: `${rep_percent}%`, backgroundColor: repColor }}
+        />
+        <div
+          className="h-full transition-all duration-700"
+          style={{ width: `${prospect_percent}%`, backgroundColor: "#22c55e" }}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: repColor }} />
+          <span className="text-[10px]" style={{ color: repColor }}>Rep {rep_percent}%</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px]" style={{ color: "#22c55e" }}>Prospect {prospect_percent}%</span>
+          <span className="w-2 h-2 rounded-full bg-green-500" />
+        </div>
+      </div>
+      <p className="text-[9px]" style={{ color: "var(--t-dim)" }}>
+        Target: Rep 30–45% · Prospect 55–70%
+      </p>
+    </div>
+  );
+}
+
+function RepPerformancePanel({ data }: { data: RepPerformanceOutput }) {
+  const perf = PERF_COLORS[data.overall_performance] ?? PERF_COLORS.good;
+  const perfLabel = {
+    excellent: "Excellent",
+    good: "Good",
+    needs_improvement: "Needs Work",
+    poor: "Critical Issues",
+  }[data.overall_performance];
+
+  return (
+    <div className="space-y-4">
+      {/* Overall performance badge */}
+      <div className="flex items-center gap-2.5">
+        <div
+          className="px-3 py-1.5 rounded-lg text-[12px] font-bold"
+          style={{ backgroundColor: perf.bg, color: perf.text, border: `1px solid ${perf.border}` }}
+        >
+          {perfLabel}
+        </div>
+        <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>
+          rep performance
+        </span>
+      </div>
+
+      {/* Talk ratio */}
+      <TalkRatioBar
+        rep_percent={data.talk_ratio.rep_percent}
+        prospect_percent={data.talk_ratio.prospect_percent}
+      />
+
+      {/* Coaching priorities */}
+      {data.coaching_priorities.length > 0 && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>
+            Priority Fixes
+          </p>
+          <div className="space-y-1.5">
+            {data.coaching_priorities.map((p, i) => (
+              <div key={i} className="flex gap-2">
+                <span
+                  className="text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ backgroundColor: i === 0 ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.1)", color: i === 0 ? "#ef4444" : "#f59e0b" }}
+                >
+                  {i + 1}
+                </span>
+                <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{p}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Warnings */}
+      {data.warnings.length > 0 && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>
+            Detected Issues
+          </p>
+          <div className="space-y-2">
+            {data.warnings.map((w, i) => {
+              const wc = WARNING_COLORS[w.severity];
+              return (
+                <div key={i} className="px-3 py-2 rounded-lg space-y-1" style={{ backgroundColor: wc.bg, border: `1px solid ${wc.border}` }}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: wc.text }}>
+                      {w.type.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-[8px] font-bold uppercase" style={{ color: wc.text }}>{w.severity}</span>
+                  </div>
+                  <p className="text-[11px]" style={{ color: "var(--t-text)" }}>{w.message}</p>
+                  {w.evidence && (
+                    <p className="text-[10px] italic" style={{ color: "var(--t-dim)" }}>{w.evidence}</p>
+                  )}
+                  <p className="text-[10px]" style={{ color: wc.text }}>→ {w.suggested_fix}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Positive observations */}
+      {data.positive_observations.length > 0 && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>
+            What&rsquo;s Working
+          </p>
+          <div className="space-y-1">
+            {data.positive_observations.map((o, i) => (
+              <div key={i} className="flex gap-2">
+                <span style={{ color: "#22c55e" }}>✓</span>
+                <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>{o}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Timeline Panel
+// ─────────────────────────────────────────────────────────────
+
+const TIMELINE_EVENT_META: Record<string, { icon: string; color: string; label: string }> = {
+  buying_signal:        { icon: "🟢", color: "#22c55e", label: "Buying Signal" },
+  emotional_breakthrough: { icon: "💡", color: "#a78bfa", label: "Breakthrough" },
+  emotional_shutdown:   { icon: "⚠️", color: "#ef4444", label: "Shutdown" },
+  emotional_shift:      { icon: "↕", color: "#f59e0b", label: "Mood Shift" },
+  objection_detected:   { icon: "🛑", color: "#f59e0b", label: "Objection" },
+  objection_not_isolated: { icon: "⚠", color: "#f59e0b", label: "Not Isolated" },
+  discovery_improved:   { icon: "📈", color: "#3b82f6", label: "Discovery ↑" },
+  premature_pitch:      { icon: "🚨", color: "#ef4444", label: "Early Pitch" },
+  rep_interrupted:      { icon: "✂️", color: "#f59e0b", label: "Interrupted" },
+  rep_overtalking:      { icon: "🔊", color: "#f59e0b", label: "Overtalking" },
+  rep_weak_probe:       { icon: "💬", color: "#6b7280", label: "Weak Probe" },
+  rep_missing_emotional: { icon: "👁", color: "#ef4444", label: "Missed Emotion" },
+  rep_question_stacking: { icon: "❓", color: "#6b7280", label: "Question Stack" },
+  rep_overexplaining:   { icon: "📢", color: "#f59e0b", label: "Overexplaining" },
+  phase_transition:     { icon: "→", color: "#3b82f6", label: "Phase Change" },
+  close_signal:         { icon: "🎯", color: "#a78bfa", label: "Close Ready" },
+};
+
+const SEVERITY_BORDER: Record<TimelineEvent["severity"], string> = {
+  critical: "#ef4444",
+  high: "#f59e0b",
+  medium: "#3b82f6",
+  info: "#4b5563",
+};
+
+function TimelinePanel({ events }: { events: TimelineEvent[] }) {
+  // Show most recent first
+  const sorted = [...events].reverse();
+
+  if (sorted.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Activity size={24} className="mb-2 opacity-20" style={{ color: "var(--t-muted)" }} />
+        <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>
+          Timeline events will appear as the call unfolds.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      {sorted.map((evt) => {
+        const meta = TIMELINE_EVENT_META[evt.event_type] ?? { icon: "•", color: "#6b7280", label: evt.event_type };
+        const borderColor = SEVERITY_BORDER[evt.severity];
+        return (
+          <div
+            key={evt.id}
+            className="flex gap-2.5 py-2.5 px-0"
+            style={{ borderBottom: "1px solid var(--t-border)" }}
+          >
+            {/* Severity bar */}
+            <div
+              className="w-0.5 rounded-full flex-shrink-0 self-stretch"
+              style={{ backgroundColor: borderColor, minHeight: "36px" }}
+            />
+            <div className="flex-1 min-w-0 space-y-0.5">
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[12px]">{meta.icon}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: meta.color }}>
+                    {meta.label}
+                  </span>
+                </div>
+                <span className="text-[9px] flex-shrink-0" style={{ color: "var(--t-dim)" }}>
+                  #{evt.chunk_index}
+                </span>
+              </div>
+              <p className="text-[11px] font-medium leading-snug" style={{ color: "var(--t-text)" }}>
+                {evt.title}
+              </p>
+              <p className="text-[10px] leading-snug" style={{ color: "var(--t-muted)" }}>
+                {evt.description}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Mode Toggle — top-level navigation between Victoria modes
 // ─────────────────────────────────────────────────────────────
 
@@ -1214,11 +1458,13 @@ export default function VictoriaPage() {
   const [sessionState, setSessionState] = useState<Partial<LiveCallSession> | null>(null);
   const [dealRisk, setDealRisk] = useState<DealRiskOutput | null>(null);
   const [emotionalData, setEmotionalData] = useState<EmotionalOutput | null>(null);
+  const [repPerformance, setRepPerformance] = useState<RepPerformanceOutput | null>(null);
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [callDuration, setCallDuration] = useState(0);
   const [manualText, setManualText] = useState("");
   const [manualSpeaker, setManualSpeaker] = useState<"rep" | "prospect">("prospect");
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
-  const [activeIntelTab, setActiveIntelTab] = useState<"scores" | "deal_risk" | "emotional">("scores");
+  const [activeIntelTab, setActiveIntelTab] = useState<"scores" | "deal_risk" | "emotional" | "rep" | "timeline">("scores");
 
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const cardsEndRef = useRef<HTMLDivElement>(null);
@@ -1235,6 +1481,8 @@ export default function VictoriaPage() {
       discovery_depth?: number;
       deal_risk?: DealRiskOutput | null;
       emotional_signals?: EmotionalOutput | null;
+      rep_performance?: RepPerformanceOutput | null;
+      new_timeline_events?: TimelineEvent[];
     }) => {
       setSessionState((prev) => ({
         ...prev,
@@ -1250,6 +1498,16 @@ export default function VictoriaPage() {
         setEmotionalData(result.emotional_signals);
         // Auto-switch to emotional tab on alert
         if (result.emotional_signals.alert) setActiveIntelTab("emotional");
+      }
+      if (result.rep_performance) {
+        setRepPerformance(result.rep_performance);
+        // Auto-switch to rep tab on critical warnings
+        if (result.rep_performance.warnings.some((w) => w.severity === "critical")) {
+          setActiveIntelTab("rep");
+        }
+      }
+      if (result.new_timeline_events && result.new_timeline_events.length > 0) {
+        setTimeline((prev) => [...prev, ...result.new_timeline_events!].slice(-50));
       }
     },
     []
@@ -1357,6 +1615,8 @@ export default function VictoriaPage() {
     setCoachingCards([]);
     setDealRisk(null);
     setEmotionalData(null);
+    setRepPerformance(null);
+    setTimeline([]);
     setCallDuration(0);
     setActiveIntelTab("scores");
   }, [callId, transcription]);
@@ -1621,10 +1881,18 @@ export default function VictoriaPage() {
           </div>
           {/* Tabs */}
           <div className="flex">
-            {(["scores", "deal_risk", "emotional"] as const).map((tab) => {
-              const labels = { scores: "Scores", deal_risk: "Deal Risk", emotional: "Emotional" };
+            {(["scores", "deal_risk", "emotional", "rep", "timeline"] as const).map((tab) => {
+              const labels: Record<typeof tab, string> = {
+                scores: "Scores",
+                deal_risk: "Risk",
+                emotional: "Mood",
+                rep: "Rep",
+                timeline: "Timeline",
+              };
               const isActive = activeIntelTab === tab;
-              const hasBadge = tab === "emotional" && emotionalData?.alert;
+              const hasBadge =
+                (tab === "emotional" && !!emotionalData?.alert) ||
+                (tab === "rep" && !!repPerformance?.warnings.some((w) => w.severity === "critical"));
               return (
                 <button
                   key={tab}
@@ -1741,6 +2009,42 @@ export default function VictoriaPage() {
                   </p>
                 </div>
               )}
+            </>
+          )}
+
+          {/* ── Rep Performance tab ── */}
+          {activeIntelTab === "rep" && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>
+                <Users size={10} className="inline mr-1 mb-0.5" />
+                Rep Performance
+              </p>
+              {repPerformance ? (
+                <RepPerformancePanel data={repPerformance} />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <Activity size={24} className="mb-2 opacity-20" style={{ color: "var(--t-muted)" }} />
+                  <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>
+                    Rep performance analysis will appear after a few transcript chunks.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Timeline tab ── */}
+          {activeIntelTab === "timeline" && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>
+                <Radio size={10} className="inline mr-1 mb-0.5" />
+                Live Call Timeline
+                {timeline.length > 0 && (
+                  <span className="ml-1.5 text-[9px] normal-case font-normal" style={{ color: "var(--t-dim)" }}>
+                    {timeline.length} event{timeline.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </p>
+              <TimelinePanel events={timeline} />
             </>
           )}
 

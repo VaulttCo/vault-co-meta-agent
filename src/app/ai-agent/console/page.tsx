@@ -1289,6 +1289,437 @@ function GenerateTaskListButton({ msg, clientName }: { msg: ConsoleMsg; clientNa
 }
 
 // ─────────────────────────────────────────────────────────────
+// Hermes Assist Panel (Veronica Console right column)
+// ─────────────────────────────────────────────────────────────
+
+interface HermesSkillEntry {
+  id: string;
+  name: string;
+  category: string;
+  instructions: string;
+}
+
+function HermesAssistPanel({
+  selectedClient,
+  goal,
+  service,
+  market,
+  displayPlan,
+}: {
+  selectedClient: ReturnType<typeof Array.prototype.find> | null;
+  goal: string;
+  service: string;
+  market: string;
+  displayPlan: CampaignDraft | null;
+}) {
+  const client = selectedClient as ({ id: string; name: string } | null);
+
+  const [skills, setSkills] = useState<HermesSkillEntry[]>([]);
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [running, setRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [output, setOutput] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedApproval, setSavedApproval] = useState(false);
+  const [savedTask, setSavedTask] = useState(false);
+  const [savingApproval, setSavingApproval] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
+  const didInitRef = useRef(false);
+
+  // Load skills on mount
+  useEffect(() => {
+    fetch("/api/veronica/hermes/skills?limit=50")
+      .then((r) => (r.ok ? r.json() : { skills: [] }))
+      .then((d) => setSkills(d.skills ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Pre-fill prompt once when context becomes available
+  useEffect(() => {
+    if (didInitRef.current) return;
+    const parts: string[] = [];
+    if (client) parts.push(`Client: ${client.name}`);
+    if (goal) parts.push(`Campaign Goal: ${goal}`);
+    if (service) parts.push(`Service: ${service}`);
+    if (market) parts.push(`Market: ${market}`);
+    if (displayPlan) parts.push(`Active Draft: ${displayPlan.campaignName}`);
+    if (parts.length === 0) return;
+    setPrompt(parts.join("\n") + "\n\n");
+    didInitRef.current = true;
+  }, [client, goal, service, market, displayPlan]);
+
+  function handleSkillSelect(skillId: string) {
+    setSelectedSkillId(skillId);
+    if (skillId) {
+      const skill = skills.find((s) => s.id === skillId);
+      if (skill) {
+        const ctxParts: string[] = [];
+        if (client) ctxParts.push(`Client: ${client.name}`);
+        if (goal) ctxParts.push(`Goal: ${goal}`);
+        if (service) ctxParts.push(`Service: ${service}`);
+        if (displayPlan) ctxParts.push(`Draft: ${displayPlan.campaignName}`);
+        const ctx = ctxParts.length ? ctxParts.join("\n") + "\n\n---\n" : "";
+        setPrompt(`${ctx}Skill: "${skill.name}"\n\n${skill.instructions}`);
+      }
+    }
+  }
+
+  async function runHermes() {
+    if (!prompt.trim() || running) return;
+    setRunning(true);
+    setRunStatus("pending");
+    setOutput(null);
+    setErrorMsg(null);
+    setSavedApproval(false);
+    setSavedTask(false);
+    try {
+      const res = await fetch("/api/veronica/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          skill_id: selectedSkillId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setRunStatus("error");
+        setErrorMsg(data.error ?? "Hermes returned an error.");
+      } else {
+        setRunStatus("success");
+        setOutput(data.output ?? "");
+      }
+    } catch {
+      setRunStatus("error");
+      setErrorMsg("Network error. Hermes is unreachable.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function sendToApprovals() {
+    if (!output) return;
+    setSavingApproval(true);
+    try {
+      const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const title = client
+        ? `Hermes Output — ${client.name} — ${date}`
+        : `Hermes Output — ${date}`;
+      const res = await fetch("/api/veronica/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: client?.id,
+          draftType: "campaign_draft",
+          title,
+          content: output,
+          agentsUsed: ["hermes"],
+          dataSources: [],
+        }),
+      });
+      if (res.ok) setSavedApproval(true);
+    } catch {
+      // non-blocking
+    } finally {
+      setSavingApproval(false);
+    }
+  }
+
+  async function saveAsTask() {
+    if (!output) return;
+    setSavingTask(true);
+    try {
+      const firstLine = (output.split("\n")[0] ?? "").slice(0, 70).trim() || "Hermes Output";
+      const title = client ? `${firstLine} — ${client.name}` : firstLine;
+      const res = await fetch("/api/operator-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: client?.id,
+          title,
+          description: output,
+          taskType: "internal_admin",
+          priority: "medium",
+          source: "veronica",
+          sourceAgent: "hermes",
+        }),
+      });
+      if (res.ok) setSavedTask(true);
+    } catch {
+      // non-blocking
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  const hasContext = !!(client || goal || service || displayPlan);
+
+  return (
+    <div
+      className="bg-[var(--t-surface)] border border-[var(--t-border)] rounded-xl overflow-hidden flex flex-col"
+      style={{ maxHeight: "calc(100vh - 220px)" }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[var(--t-border)] flex-shrink-0">
+        <Zap size={13} style={{ color: "#c9a84c" }} />
+        <span className="text-[13px] font-semibold text-[var(--t-text)]">Hermes Assist</span>
+        <span
+          className="ml-auto text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+          style={{
+            color: "#c9a84c",
+            backgroundColor: "rgba(201,168,76,0.1)",
+            border: "1px solid rgba(201,168,76,0.2)",
+          }}
+        >
+          Operator Only
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Context badges */}
+        {hasContext && (
+          <div className="flex flex-wrap gap-1">
+            {client && (
+              <span
+                className="text-[9px] px-2 py-0.5 rounded-full"
+                style={{
+                  color: "#0081f2",
+                  backgroundColor: "rgba(0,129,242,0.1)",
+                  border: "1px solid rgba(0,129,242,0.2)",
+                }}
+              >
+                {client.name}
+              </span>
+            )}
+            {goal && (
+              <span
+                className="text-[9px] px-2 py-0.5 rounded-full"
+                style={{
+                  color: "var(--t-dim)",
+                  backgroundColor: "var(--t-surface-2)",
+                  border: "1px solid var(--t-border)",
+                }}
+              >
+                {goal}
+              </span>
+            )}
+            {service && (
+              <span
+                className="text-[9px] px-2 py-0.5 rounded-full"
+                style={{
+                  color: "var(--t-dim)",
+                  backgroundColor: "var(--t-surface-2)",
+                  border: "1px solid var(--t-border)",
+                }}
+              >
+                {service}
+              </span>
+            )}
+            {displayPlan && (
+              <span
+                className="text-[9px] px-2 py-0.5 rounded-full"
+                style={{
+                  color: "#22c55e",
+                  backgroundColor: "rgba(34,197,94,0.08)",
+                  border: "1px solid rgba(34,197,94,0.15)",
+                }}
+              >
+                Draft active
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Skill dropdown */}
+        {skills.length > 0 && (
+          <div>
+            <label
+              className="block text-[10px] font-semibold mb-1"
+              style={{ color: "var(--t-dim)" }}
+            >
+              Saved Skill (optional)
+            </label>
+            <select
+              value={selectedSkillId}
+              onChange={(e) => handleSkillSelect(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-md text-[11px] focus:outline-none"
+              style={{
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+                color: "var(--t-muted)",
+              }}
+            >
+              <option value="">— Custom prompt —</option>
+              {skills.map((s) => (
+                <option key={s.id} value={s.id}>
+                  [{s.category}] {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Prompt */}
+        <div>
+          <label
+            className="block text-[10px] font-semibold mb-1"
+            style={{ color: "var(--t-dim)" }}
+          >
+            Prompt
+          </label>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={5}
+            placeholder="Ask Hermes to prepare an SOP, audit, workflow, operator plan, or creative brief…"
+            className="w-full px-2.5 py-2 rounded-md text-[11px] leading-relaxed resize-none focus:outline-none"
+            style={{
+              backgroundColor: "var(--t-surface-2)",
+              border: "1px solid var(--t-border)",
+              color: "var(--t-text)",
+            }}
+          />
+        </div>
+
+        {/* Run button */}
+        <button
+          disabled={running || !prompt.trim()}
+          onClick={runHermes}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-[12px] font-semibold rounded-lg transition-opacity disabled:opacity-40"
+          style={{ backgroundColor: "#c9a84c", color: "#000" }}
+        >
+          {running ? (
+            <>
+              <Loader2 size={11} className="animate-spin" />
+              Running…
+            </>
+          ) : (
+            <>
+              <Zap size={11} />
+              Run with Hermes
+            </>
+          )}
+        </button>
+
+        {/* Output */}
+        {runStatus === "success" && output && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 size={10} style={{ color: "#22c55e" }} />
+              <span className="text-[10px] font-semibold" style={{ color: "#22c55e" }}>
+                Hermes complete
+              </span>
+            </div>
+            <pre
+              className="text-[11px] leading-relaxed whitespace-pre-wrap break-words overflow-auto rounded-lg p-2.5"
+              style={{
+                color: "var(--t-muted)",
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+                maxHeight: "220px",
+              }}
+            >
+              {output}
+            </pre>
+            <div className="flex items-center gap-2 flex-wrap">
+              {savedApproval ? (
+                <div className="flex items-center gap-1 text-[10px]" style={{ color: "#22c55e" }}>
+                  <CheckCircle2 size={9} />
+                  Sent to Approvals
+                  <a
+                    href="/approvals"
+                    className="hover:underline ml-0.5"
+                    style={{ color: "#a78bfa" }}
+                  >
+                    View →
+                  </a>
+                </div>
+              ) : (
+                <button
+                  disabled={savingApproval}
+                  onClick={sendToApprovals}
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity disabled:opacity-50"
+                  style={{
+                    color: "#a78bfa",
+                    borderColor: "rgba(167,139,250,0.25)",
+                    backgroundColor: "rgba(167,139,250,0.06)",
+                  }}
+                >
+                  {savingApproval ? (
+                    <Loader2 size={9} className="animate-spin" />
+                  ) : (
+                    <FileText size={9} />
+                  )}
+                  {savingApproval ? "Saving…" : "Send to Approvals"}
+                </button>
+              )}
+              {savedTask ? (
+                <div className="flex items-center gap-1 text-[10px]" style={{ color: "#c9a84c" }}>
+                  <CheckCircle2 size={9} />
+                  Task saved
+                  <a
+                    href="/operator-queue"
+                    className="hover:underline ml-0.5"
+                    style={{ color: "#a78bfa" }}
+                  >
+                    View →
+                  </a>
+                </div>
+              ) : (
+                <button
+                  disabled={savingTask}
+                  onClick={saveAsTask}
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity disabled:opacity-50"
+                  style={{
+                    color: "#6b7a99",
+                    borderColor: "rgba(255,255,255,0.08)",
+                    backgroundColor: "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  {savingTask ? (
+                    <Loader2 size={9} className="animate-spin" />
+                  ) : (
+                    <ListChecks size={9} />
+                  )}
+                  {savingTask ? "Saving…" : "Save as Task"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {runStatus === "error" && errorMsg && (
+          <div
+            className="px-2.5 py-2 rounded-lg"
+            style={{
+              backgroundColor: "rgba(239,68,68,0.05)",
+              border: "1px solid rgba(239,68,68,0.2)",
+            }}
+          >
+            <p className="text-[11px]" style={{ color: "#ef4444" }}>
+              {errorMsg}
+            </p>
+          </div>
+        )}
+
+        {/* Safety notice */}
+        <div
+          className="flex items-start gap-1.5 pt-2"
+          style={{ borderTop: "1px solid var(--t-border)" }}
+        >
+          <ShieldCheck size={9} className="flex-shrink-0 mt-0.5" style={{ color: "#c9a84c" }} />
+          <p className="text-[10px] leading-snug" style={{ color: "var(--t-dim)" }}>
+            Hermes cannot publish campaigns, change budgets, send emails, or push GHL workflows. All outputs require operator approval.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────
 
@@ -3462,17 +3893,13 @@ function AICampaignBuilderContent() {
               </button>
             </div>
           </div>
-          <div className="bg-[var(--t-surface)] border border-[var(--t-border)] rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3.5 border-b border-[var(--t-border)]">
-              <Zap size={13} className="text-[#ff8400]" />
-              <span className="text-[13px] font-semibold text-[var(--t-text)]">Recent Actions</span>
-            </div>
-            <div className="p-4 flex flex-col items-center justify-center text-center gap-2" style={{ minHeight: "120px" }}>
-              <Sparkles size={14} className="text-[var(--t-dim)]" />
-              <p className="text-[12px] font-medium" style={{ color: "var(--t-muted)" }}>No recent actions yet</p>
-              <p className="text-[11px] leading-snug" style={{ color: "var(--t-dim)" }}>Veronica is ready. Ask a question or generate a campaign draft.</p>
-            </div>
-          </div>
+          <HermesAssistPanel
+            selectedClient={selectedClient}
+            goal={goal}
+            service={service}
+            market={market}
+            displayPlan={displayPlan}
+          />
         </div>
       )}
 

@@ -75,15 +75,18 @@ async function logRun(
   prompt: string,
   output: string | null,
   errorMsg: string | null,
-  status: HermesRunStatus
+  status: HermesRunStatus,
+  taskId?: string | null
 ): Promise<string | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = getSupabaseServerClient() as any;
     if (!db) return null;
+    const insert: Record<string, unknown> = { prompt, output, error: errorMsg, status, created_by: "operator" };
+    if (taskId) insert.task_id = taskId;
     const { data } = await db
       .from("veronica_hermes_runs")
-      .insert({ prompt, output, error: errorMsg, status, created_by: "operator" })
+      .insert(insert)
       .select("id")
       .single();
     return (data as { id: string } | null)?.id ?? null;
@@ -177,14 +180,21 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { prompt?: string; skill_id?: string };
+  let body: { prompt?: string; skill_id?: string; task_id?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { prompt, skill_id: incomingSkillId } = body;
+  const { prompt, skill_id: incomingSkillId, task_id: incomingTaskId } = body;
+
+  // Validate task_id is a UUID if provided; discard malformed values
+  const safeTaskId: string | null =
+    typeof incomingTaskId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incomingTaskId.trim())
+      ? incomingTaskId.trim()
+      : null;
   if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
   }
@@ -194,7 +204,7 @@ export async function POST(req: NextRequest) {
   const secret = process.env.HERMES_SECRET;
 
   if (!workerUrl || !secret) {
-    await logRun(trimmedPrompt, null, "Hermes is not configured on this deployment.", "error");
+    await logRun(trimmedPrompt, null, "Hermes is not configured on this deployment.", "error", safeTaskId);
     return NextResponse.json(
       { output: null, error: "Hermes is not configured on this deployment." },
       { status: 503 }
@@ -210,7 +220,7 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     const msg = "Hermes VPS is unreachable. Please try again later.";
-    await logRun(trimmedPrompt, null, msg, "unreachable");
+    await logRun(trimmedPrompt, null, msg, "unreachable", safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: 502 });
   }
 
@@ -219,13 +229,13 @@ export async function POST(req: NextRequest) {
     data = await res.json();
   } catch {
     const msg = `Hermes returned an unparseable response (HTTP ${res.status}).`;
-    await logRun(trimmedPrompt, null, msg, "error");
+    await logRun(trimmedPrompt, null, msg, "error", safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: 502 });
   }
 
   if (!res.ok) {
     const msg = data.error ?? `Hermes returned an error (HTTP ${res.status}).`;
-    await logRun(trimmedPrompt, null, msg, "error");
+    await logRun(trimmedPrompt, null, msg, "error", safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: res.status });
   }
 
@@ -234,7 +244,7 @@ export async function POST(req: NextRequest) {
   const runStatus: HermesRunStatus = responseError ? "error" : "success";
 
   // Log the run; get ID for skill linking
-  const runId = await logRun(trimmedPrompt, output, responseError, runStatus);
+  const runId = await logRun(trimmedPrompt, output, responseError, runStatus, safeTaskId);
 
   // If this was a skill re-run, update usage stats
   if (incomingSkillId) {

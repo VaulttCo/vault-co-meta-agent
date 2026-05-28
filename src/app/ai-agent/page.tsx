@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { getDataProvider } from "@/lib/data/data-provider";
+import { VCStat, VCPanel, VCPanelHeader, VCActionLink } from "@/components/ui/VaultUI";
 import type { Client } from "@/lib/data";
 import type { VeronicaHermesRunRow, VeronicaHermesSkillRow } from "@/lib/supabase/types";
 
@@ -42,38 +43,6 @@ interface OperatorTask {
   clientName?: string | null;
 }
 
-function StatTile({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-}) {
-  return (
-    <div
-      className="rounded-xl p-4"
-      style={{
-        backgroundColor: "rgba(0,129,242,0.04)",
-        border: "1px solid rgba(0,129,242,0.10)",
-      }}
-    >
-      <div
-        className="text-[24px] font-bold leading-none"
-        style={{ color: color ?? "var(--t-text)" }}
-      >
-        {value}
-      </div>
-      <div
-        className="text-[11px] font-medium mt-1.5"
-        style={{ color: "var(--t-muted)" }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
 
 const priorityColor = (p: string) => {
   if (p === "urgent") return "#ef4444";
@@ -241,7 +210,7 @@ export default function VeronicaOverviewPage() {
   }
 
   return (
-    <div className="max-w-[1100px] mx-auto space-y-6">
+    <div className="max-w-[1100px] mx-auto space-y-5">
 
       {/* ── Hero ──────────────────────────────────────────────── */}
       <div
@@ -340,57 +309,18 @@ export default function VeronicaOverviewPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Client Intelligence */}
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid var(--t-border)",
-          }}
-        >
-          <div
-            className="px-5 py-4 border-b flex items-center justify-between"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div className="flex items-center gap-2">
-              <Users size={14} style={{ color: "#0081f2" }} />
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: "var(--t-text)" }}
-              >
-                Client Intelligence
-              </span>
-            </div>
-            <Link
-              href="/clients"
-              className="text-[11px] flex items-center gap-1 transition-opacity hover:opacity-100 opacity-70"
-              style={{ color: "var(--t-muted)" }}
-            >
-              View all <ArrowRight size={11} />
-            </Link>
-          </div>
-
+        <VCPanel>
+          <VCPanelHeader
+            icon={Users}
+            title="Client Intelligence"
+            action={<VCActionLink href="/clients" />}
+          />
           <div className="p-4 grid grid-cols-2 gap-3">
-            <StatTile
-              label="Total Clients"
-              value={loadingClients ? "—" : totalClients}
-            />
-            <StatTile
-              label="Active"
-              value={loadingClients ? "—" : activeClients}
-              color="#22c55e"
-            />
-            <StatTile
-              label="Setup / Onboarding"
-              value={loadingClients ? "—" : onboardingClients}
-              color="#ff8400"
-            />
-            <StatTile
-              label="Paused / Archived"
-              value={loadingClients ? "—" : blockedClients}
-              color={blockedClients > 0 ? "#ef4444" : undefined}
-            />
+            <VCStat size="sm" label="Total Clients"        value={loadingClients ? "—" : totalClients} />
+            <VCStat size="sm" label="Active"               value={loadingClients ? "—" : activeClients}    iconColor="#22c55e" />
+            <VCStat size="sm" label="Setup / Onboarding"   value={loadingClients ? "—" : onboardingClients} iconColor="#ff8400" />
+            <VCStat size="sm" label="Paused / Archived"    value={loadingClients ? "—" : blockedClients}    iconColor={blockedClients > 0 ? "#ef4444" : undefined} />
           </div>
-
           {!loadingClients && missingConnections > 0 && (
             <div className="px-4 pb-4">
               <div
@@ -402,213 +332,82 @@ export default function VeronicaOverviewPage() {
                 }}
               >
                 <AlertCircle size={12} className="flex-shrink-0" />
-                {missingConnections} client
-                {missingConnections !== 1 ? "s" : ""} missing Meta or GHL
-                connection — launch blocked
+                {missingConnections} client{missingConnections !== 1 ? "s" : ""} missing Meta or GHL connection — launch blocked
               </div>
             </div>
           )}
-        </div>
+        </VCPanel>
 
         {/* Fulfillment Pipeline */}
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid var(--t-border)",
-          }}
-        >
-          <div
-            className="px-5 py-4 border-b flex items-center justify-between"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div className="flex items-center gap-2">
-              <Zap size={14} style={{ color: "#0081f2" }} />
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: "var(--t-text)" }}
-              >
-                Fulfillment Pipeline
-              </span>
-            </div>
-            <Link
-              href="/operator-queue"
-              className="text-[11px] flex items-center gap-1 transition-opacity hover:opacity-100 opacity-70"
-              style={{ color: "var(--t-muted)" }}
-            >
-              Operator Queue <ArrowRight size={11} />
-            </Link>
-          </div>
-
+        <VCPanel>
+          <VCPanelHeader
+            icon={Zap}
+            title="Fulfillment Pipeline"
+            action={<VCActionLink href="/operator-queue" label="Operator Queue" />}
+          />
           <div className="p-4 grid grid-cols-3 gap-3">
-            <StatTile
-              label="Open Tasks"
-              value={loadingTasks ? "—" : openTasks}
-            />
-            <StatTile
-              label="Urgent"
-              value={loadingTasks ? "—" : urgentTasks}
-              color={urgentTasks > 0 ? "#ef4444" : undefined}
-            />
-            <StatTile
-              label="Blocked"
-              value={loadingTasks ? "—" : blockedTasks}
-              color={blockedTasks > 0 ? "#ff8400" : undefined}
-            />
+            <VCStat size="sm" label="Open Tasks"  value={loadingTasks ? "—" : openTasks} />
+            <VCStat size="sm" label="Urgent"      value={loadingTasks ? "—" : urgentTasks} iconColor={urgentTasks > 0 ? "#ef4444" : undefined} />
+            <VCStat size="sm" label="Blocked"     value={loadingTasks ? "—" : blockedTasks} iconColor={blockedTasks > 0 ? "#ff8400" : undefined} />
           </div>
-
           <div className="px-4 pb-4 grid grid-cols-2 gap-3">
-            <StatTile
-              label="Pending Approval"
-              value={pendingPlans}
-              color={pendingPlans > 0 ? "#ff8400" : undefined}
-            />
-            <StatTile label="Drafts In Progress" value={draftPlans} />
+            <VCStat size="sm" label="Pending Approval"  value={pendingPlans} iconColor={pendingPlans > 0 ? "#ff8400" : undefined} />
+            <VCStat size="sm" label="Drafts In Progress" value={draftPlans} />
           </div>
-        </div>
+        </VCPanel>
       </div>
 
       {/* ── Approval Queue + Operator Execution ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Approval Queue */}
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid var(--t-border)",
-          }}
-        >
-          <div
-            className="px-5 py-4 border-b flex items-center justify-between"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div className="flex items-center gap-2">
-              <CheckSquare size={14} style={{ color: "#0081f2" }} />
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: "var(--t-text)" }}
-              >
-                Approval Queue
-              </span>
-              {pendingPlans > 0 && (
-                <span
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{
-                    color: "#ff8400",
-                    backgroundColor: "rgba(255,132,0,0.10)",
-                    border: "1px solid rgba(255,132,0,0.20)",
-                  }}
-                >
-                  {pendingPlans} pending
-                </span>
-              )}
-            </div>
-            <Link
-              href="/approvals"
-              className="text-[11px] flex items-center gap-1 transition-opacity hover:opacity-100 opacity-70"
-              style={{ color: "var(--t-muted)" }}
-            >
-              Review <ArrowRight size={11} />
-            </Link>
-          </div>
-
+        <VCPanel>
+          <VCPanelHeader
+            icon={CheckSquare}
+            title="Approval Queue"
+            action={<VCActionLink href="/approvals" label="Review" />}
+          />
           <div className="p-5 space-y-3">
             {[
-              {
-                label: "Needs Human Review",
-                count: pendingPlans,
-                color: "#ff8400",
-                icon: Clock,
-              },
-              {
-                label: "Approved Drafts",
-                count: approvedPlans,
-                color: "#22c55e",
-                icon: CheckCircle2,
-              },
-              {
-                label: "Rejected / Changes Requested",
-                count: rejectedPlans,
-                color: "#ef4444",
-                icon: XCircle,
-              },
+              { label: "Needs Human Review",          count: pendingPlans,  color: "#ff8400", icon: Clock        },
+              { label: "Approved Drafts",              count: approvedPlans, color: "#22c55e", icon: CheckCircle2 },
+              { label: "Rejected / Changes Requested", count: rejectedPlans, color: "#ef4444", icon: XCircle     },
             ].map(({ label, count, color, icon: Icon }) => (
               <div key={label} className="flex items-center justify-between">
-                <div
-                  className="flex items-center gap-2 text-[12px]"
-                  style={{ color: "var(--t-muted)" }}
-                >
+                <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--t-muted)" }}>
                   <Icon size={13} style={{ color }} />
                   {label}
                 </div>
                 <span
-                  className="text-[14px] font-bold tabular-nums"
-                  style={{
-                    color:
-                      count > 0 ? color : "rgba(107,122,153,0.35)",
-                  }}
+                  className="text-[15px] font-bold tabular-nums"
+                  style={{ fontFamily: "var(--font-rajdhani)", color: count > 0 ? color : "rgba(107,122,153,0.30)" }}
                 >
                   {count}
                 </span>
               </div>
             ))}
-
             {plans.length === 0 && (
-              <p
-                className="text-[12px] text-center py-3"
-                style={{ color: "rgba(107,122,153,0.50)" }}
-              >
-                No campaign drafts yet — open the Veronica Console to generate
-                one.
+              <p className="text-[12px] text-center py-3" style={{ color: "rgba(107,122,153,0.45)" }}>
+                No campaign drafts yet — open the Veronica Console to generate one.
               </p>
             )}
           </div>
-        </div>
+        </VCPanel>
 
         {/* Operator Execution */}
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            backgroundColor: "var(--t-input-bg)",
-            border: "1px solid var(--t-border)",
-          }}
-        >
-          <div
-            className="px-5 py-4 border-b flex items-center justify-between"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div className="flex items-center gap-2">
-              <ListChecks size={14} style={{ color: "#0081f2" }} />
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: "var(--t-text)" }}
-              >
-                Operator Execution
-              </span>
-            </div>
-            <Link
-              href="/operator-queue"
-              className="text-[11px] flex items-center gap-1 transition-opacity hover:opacity-100 opacity-70"
-              style={{ color: "var(--t-muted)" }}
-            >
-              Full Queue <ArrowRight size={11} />
-            </Link>
-          </div>
-
+        <VCPanel>
+          <VCPanelHeader
+            icon={ListChecks}
+            title="Operator Execution"
+            action={<VCActionLink href="/operator-queue" label="Full Queue" />}
+          />
           <div className="p-4">
             {loadingTasks ? (
-              <p
-                className="text-[12px] text-center py-6"
-                style={{ color: "rgba(107,122,153,0.50)" }}
-              >
+              <p className="text-[12px] text-center py-6" style={{ color: "rgba(107,122,153,0.45)" }}>
                 Loading tasks…
               </p>
             ) : topTasks.length === 0 ? (
-              <p
-                className="text-[12px] text-center py-6"
-                style={{ color: "rgba(107,122,153,0.50)" }}
-              >
+              <p className="text-[12px] text-center py-6" style={{ color: "rgba(107,122,153,0.45)" }}>
                 No open tasks in the queue.
               </p>
             ) : (
@@ -616,7 +415,7 @@ export default function VeronicaOverviewPage() {
                 {topTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg"
+                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg transition-colors"
                     style={{
                       backgroundColor: "rgba(0,129,242,0.04)",
                       border: "1px solid rgba(0,129,242,0.09)",
@@ -627,17 +426,11 @@ export default function VeronicaOverviewPage() {
                       style={{ backgroundColor: priorityColor(task.priority) }}
                     />
                     <div className="min-w-0 flex-1">
-                      <div
-                        className="text-[12px] font-medium truncate"
-                        style={{ color: "var(--t-text)" }}
-                      >
+                      <div className="text-[12px] font-medium truncate" style={{ color: "var(--t-text)" }}>
                         {task.title}
                       </div>
                       {task.clientName && (
-                        <div
-                          className="text-[10px] mt-0.5"
-                          style={{ color: "rgba(107,122,153,0.65)" }}
-                        >
+                        <div className="text-[10px] mt-0.5" style={{ color: "rgba(107,122,153,0.60)" }}>
                           {task.clientName}
                         </div>
                       )}
@@ -653,72 +446,36 @@ export default function VeronicaOverviewPage() {
               </div>
             )}
           </div>
-        </div>
+        </VCPanel>
       </div>
 
       {/* ── Meta Intelligence ─────────────────────────────────── */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          backgroundColor: "var(--t-input-bg)",
-          border: "1px solid var(--t-border)",
-        }}
-      >
-        <div
-          className="px-5 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: "var(--t-border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <Brain size={14} style={{ color: "#0081f2" }} />
-            <span
-              className="text-[13px] font-semibold"
-              style={{ color: "var(--t-text)" }}
-            >
-              Meta Intelligence
+      <VCPanel>
+        <VCPanelHeader
+          icon={Brain}
+          title="Meta Intelligence"
+          action={
+            <span className="vc-label px-2 py-0.5 rounded" style={{ backgroundColor: "rgba(61,79,110,0.10)", border: "1px solid rgba(61,79,110,0.16)" }}>
+              Read-Only
             </span>
-          </div>
-          <span
-            className="text-[9px] font-bold px-2 py-0.5 rounded"
-            style={{
-              color: "rgba(107,122,153,0.55)",
-              backgroundColor: "rgba(61,79,110,0.10)",
-              border: "1px solid rgba(61,79,110,0.16)",
-            }}
-          >
-            Read-Only
+          }
+        />
+        <div className="px-5 py-4 text-[12px] flex items-start gap-3" style={{ color: "rgba(107,122,153,0.60)" }}>
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" style={{ color: "rgba(107,122,153,0.45)" }} />
+          <span>
+            Meta account intelligence requires an active Meta Business integration. Connect an account in{" "}
+            <Link href="/settings" className="underline underline-offset-2 transition-opacity hover:opacity-100 opacity-80" style={{ color: "#4aabff" }}>
+              Settings
+            </Link>{" "}
+            to unlock live campaign and audience data.
           </span>
         </div>
-        <div
-          className="px-5 py-5 text-[12px] flex items-center gap-3"
-          style={{ color: "rgba(107,122,153,0.60)" }}
-        >
-          <AlertCircle size={14} className="flex-shrink-0" style={{ color: "rgba(107,122,153,0.45)" }} />
-          Meta account intelligence requires an active Meta Business integration.
-          Connect an account in{" "}
-          <Link
-            href="/settings"
-            className="underline underline-offset-2 transition-opacity hover:opacity-100 opacity-80"
-            style={{ color: "#4aabff" }}
-          >
-            Settings
-          </Link>{" "}
-          to unlock live campaign and audience data.
-        </div>
-      </div>
+      </VCPanel>
 
       {/* ── Hermes Operator ───────────────────────────────────── */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          backgroundColor: "var(--t-input-bg)",
-          border: "1px solid var(--t-border)",
-        }}
-      >
+      <div className="vc-panel">
         {/* Card header */}
-        <div
-          className="px-5 py-4 border-b flex items-center justify-between"
-          style={{ borderColor: "var(--t-border)" }}
-        >
+        <div className="vc-panel-header">
           <div className="flex items-center gap-2.5">
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -730,28 +487,15 @@ export default function VeronicaOverviewPage() {
               <Terminal size={13} style={{ color: "#4aabff" }} />
             </div>
             <div>
-              <div
-                className="text-[13px] font-semibold leading-tight"
-                style={{ color: "var(--t-text)" }}
-              >
+              <div className="text-[13px] font-semibold leading-tight" style={{ color: "var(--t-text)" }}>
                 Hermes Operator
               </div>
-              <div
-                className="text-[10px] mt-0.5"
-                style={{ color: "var(--t-muted)" }}
-              >
+              <div className="text-[10px] mt-0.5" style={{ color: "var(--t-muted)" }}>
                 Execution layer connected to Veronica
               </div>
             </div>
           </div>
-          <span
-            className="text-[9px] font-bold px-2 py-0.5 rounded"
-            style={{
-              color: "rgba(107,122,153,0.55)",
-              backgroundColor: "rgba(61,79,110,0.10)",
-              border: "1px solid rgba(61,79,110,0.16)",
-            }}
-          >
+          <span className="vc-label px-2 py-0.5 rounded" style={{ backgroundColor: "rgba(61,79,110,0.10)", border: "1px solid rgba(61,79,110,0.16)" }}>
             External
           </span>
         </div>

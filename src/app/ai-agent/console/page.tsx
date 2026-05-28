@@ -69,6 +69,9 @@ import {
   type AssetAdVariation,
   type AdSetDefinition,
 } from "@/lib/planStore";
+import { TheCouncil } from "@/components/council/TheCouncil";
+import { applyCouncilToDraft } from "@/lib/council/buildCouncilPrompt";
+import type { CouncilResponse } from "@/lib/council/types";
 
 // ─────────────────────────────────────────────────────────────
 // Mock generation engine (client-side fallback)
@@ -1735,21 +1738,21 @@ const CAMPAIGN_ACTIONS: Array<{
     label: "Improve Draft",
     icon: Sparkles,
     color: "#0081f2",
-    instructions: `\n\nTask: Analyze this campaign and return specific, actionable improvements. For each area return: AREA | CURRENT ISSUE | RECOMMENDED CHANGE | EXPECTED IMPACT. Cover: primary copy hooks, offer clarity, audience targeting precision, CTA strength, headline variations, lead form conversion, and retargeting readiness.`,
+    instructions: `\n\nTask: REWRITE this campaign draft with specific, ready-to-use improvements. Do NOT give generic recommendations. Return rewritten sections ready to paste in.\n\nFor each section below, provide:\n- BEFORE: (current weakness in one sentence)\n- AFTER: (rewritten version ready to use — not a recommendation, the actual rewrite)\n\nSections to rewrite:\n1. PRIMARY TEXT — Hook line + body (tie to actual creative asset if present, avoid generic filler like "in [city]")\n2. HEADLINE VARIATIONS — 3 options\n3. CTA — stronger alternative\n4. LEAD FORM INTRO — rewritten for higher conversion\n5. CREATIVE DIRECTION — angle and hook improvements\n6. RETARGETING NOTE — specific warm audience angle\n\nEnd with:\nKEY CHANGES SUMMARY: (3-5 bullet points of what changed and why)\nAPPROVAL READINESS: X/100`,
   },
   {
     id: "qa",
     label: "QA Before Approval",
     icon: ShieldCheck,
     color: "#f59e0b",
-    instructions: `\n\nTask: Perform a structured pre-approval QA audit. Score each area /10 and provide brief notes:\n1. Offer Clarity\n2. Audience Fit\n3. Creative Angle\n4. Lead Form Readiness\n5. Retargeting Readiness\n6. Budget Safety\n7. Compliance Risk (lower score = higher risk)\n8. Tracking Readiness\n9. Approval Readiness\n10. Asset Completeness\n\nEnd with:\nOVERALL READINESS: X/100\nHARD BLOCKERS: [list or "None"]\nGREEN FLAGS: [what is ready]\nRECOMMENDED ACTION: Approve / Revise First / Block`,
+    instructions: `\n\nTask: Structured pre-approval QA audit. Score each area out of 10. Give specific notes — not generic. Flag real issues.\n\n1. Offer Clarity — Is the offer specific, credible, and compelling?\n2. Audience Fit — Does targeting match the actual buyer?\n3. Creative-to-Copy Match — Does the copy match the visual asset?\n4. Asset Quality — Are assets approved and appropriate?\n5. Lead Form Readiness — Form name, questions, consent language, thank-you page\n6. Retargeting Readiness — Pixel, warm audiences, exclusions\n7. GHL Follow-Up Readiness — Trigger, SMS timing, STOP conditions\n8. Budget Safety — Is the budget allocation sensible?\n9. Compliance Risk — Claims, guarantees, restricted language (lower = higher risk)\n10. Tracking Readiness — Pixel event, lead event, CRM sync\n11. Approval Readiness — Internal sign-off, creative library\n12. Missing Assets — What is still needed?\n\nOVERALL READINESS: X/100\nHARD BLOCKERS: [specific list or "None"]\nGREEN FLAGS: [what is already solid]\nRECOMMENDED ACTION: Approve / Revise First / Block — with specific reason`,
   },
   {
     id: "meta_payload",
     label: "Meta Push Payload",
     icon: RadioTower,
     color: "#a78bfa",
-    instructions: `\n\nTask: Produce a structured Meta campaign push payload DRAFT. This is a DRAFT ONLY — status must be PAUSED — do not include API calls or activation steps. Output as structured JSON-ready text:\n{\n  campaign_name,\n  objective,\n  buying_type: "AUCTION",\n  status: "PAUSED",\n  ad_sets: [{name, audience, daily_budget, optimization_event, placements}],\n  ads: [{name, format, creative_requirements}],\n  lead_form_requirements: {fields, consent_language, thank_you_copy},\n  tracking_requirements: {pixel_event, custom_conversions},\n  validation_warnings: []\n}\nvalidation_warnings must list every item a human must verify before pushing to Meta.`,
+    instructions: `\n\nTask: Produce a structured Meta campaign push payload DRAFT only. Status MUST be PAUSED. Do not include any activation steps, API call instructions, or launch commands.\n\nOutput this exact structure:\n{\n  "campaign_name": "...",\n  "objective": "LEAD_GENERATION | CONVERSIONS | AWARENESS",\n  "buying_type": "AUCTION",\n  "status": "PAUSED",\n  "ad_sets": [\n    {\n      "name": "...",\n      "audience": "...",\n      "daily_budget_usd": 0,\n      "optimization_event": "LEAD | OFFSITE_CONVERSION",\n      "placements": [],\n      "audience_temperature": "cold | warm | hot"\n    }\n  ],\n  "ads": [\n    {\n      "name": "...",\n      "format": "single_image | video | carousel",\n      "creative_requirements": "..."\n    }\n  ],\n  "lead_form_requirements": {\n    "fields": [],\n    "consent_language": "...",\n    "thank_you_copy": "..."\n  },\n  "tracking_requirements": {\n    "pixel_event": "Lead",\n    "custom_conversions": [],\n    "crm_integration": "GHL — Meta integration"\n  },\n  "validation_warnings": []\n}\n\nvalidation_warnings must list EVERY item a human operator must verify before this can be pushed to Meta. Be specific.`,
   },
   {
     id: "retargeting",
@@ -2706,6 +2709,12 @@ function AICampaignBuilderContent() {
   function handleSaveDraft() {
     if (!displayPlan) return;
     saveDraft(displayPlan);
+  }
+
+  function handleApplyCouncilDraft(council: CouncilResponse) {
+    if (!displayPlan) return;
+    const improved = applyCouncilToDraft(displayPlan, council);
+    setCurrentPlan(improved);
   }
 
   function handleUpdateStatus(status: DraftStatus) {
@@ -4247,6 +4256,22 @@ function AICampaignBuilderContent() {
                 budget={budget}
                 displayPlan={displayPlan}
                 selectedAssets={selectedAssets}
+              />
+            )}
+
+            {/* The Council — strategy room attached to the campaign builder */}
+            {!isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
+              <TheCouncil
+                selectedClient={selectedClient}
+                goal={goal}
+                service={service}
+                market={market}
+                budget={budget}
+                displayPlan={displayPlan}
+                selectedAssets={selectedAssets}
+                assetNotes={assetNotes}
+                assetAnalyses={assetAnalyses}
+                onApplyImprovedDraft={handleApplyCouncilDraft}
               />
             )}
           </div>

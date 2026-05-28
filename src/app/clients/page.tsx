@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, ChevronRight, Phone, DollarSign, X, Loader2 } from "lucide-react";
+import { Plus, ChevronRight, Phone, DollarSign, X, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { VCSearchInput, VCFilterBar } from "@/components/ui/VaultUI";
 import { clientStatusVariant } from "@/lib/data";
 import type { Client } from "@/lib/data";
 import { getDataProvider } from "@/lib/data/data-provider";
@@ -377,13 +378,14 @@ export default function ClientsPage() {
             ? `${allClients.length} client${allClients.length !== 1 ? "s" : ""} · ${activeCount} active`
             : "Loading…"
         }
+        sectionLabel="Vault Co CRM"
         action={
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 text-white text-[13px] font-semibold rounded-lg transition-all"
-            style={{ backgroundColor: "#ff8400", borderRadius: "6px" }}
+            className="flex items-center gap-2 px-4 py-2 text-white text-[12px] font-semibold rounded-lg transition-all hover:opacity-90"
+            style={{ backgroundColor: "#ff8400" }}
           >
-            <Plus size={14} />
+            <Plus size={13} />
             Add Client
           </button>
         }
@@ -391,53 +393,34 @@ export default function ClientsPage() {
 
       {/* Search & filters */}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5">
-        <div className="relative flex-1 min-w-[160px] max-w-xs">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6b7a99" }} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search clients…"
-            className="w-full pl-8 pr-3 py-2 text-[13px] focus:outline-none transition-colors rounded-lg"
-            style={inputStyle}
-          />
-        </div>
-        {(["All", "Active", "Setup", "Onboarding", "Paused"] as FilterStatus[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className="px-3 py-2 rounded-lg text-[13px] font-medium transition-colors"
-            style={
-              filter === f
-                ? {
-                    backgroundColor: "rgba(0, 129, 242, 0.10)",
-                    border: "1px solid rgba(0, 129, 242, 0.22)",
-                    color: "#f8f8f7",
-                  }
-                : { color: "#6b7a99", backgroundColor: "transparent" }
-            }
-          >
-            {f}
-          </button>
-        ))}
+        <VCSearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search clients…"
+          className="flex-1 min-w-[160px] max-w-xs"
+        />
+        <VCFilterBar
+          options={["All", "Active", "Setup", "Onboarding", "Paused"] as FilterStatus[]}
+          active={filter}
+          onChange={setFilter}
+        />
       </div>
 
       {/* Table */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          backgroundColor: "var(--t-surface)",
-          border: "1px solid var(--t-border)",
-          boxShadow: "var(--t-card-shadow)",
-        }}
-      >
+      <div className="vc-panel">
         {!hasLoaded ? (
           <div className="flex items-center justify-center py-16 text-[13px] gap-2" style={{ color: "var(--t-muted)" }}>
             <Loader2 size={14} className="animate-spin" />
             Loading clients…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+              style={{ backgroundColor: "rgba(0,129,242,0.06)", border: "1px solid rgba(0,129,242,0.14)" }}
+            >
+              <Phone size={16} style={{ color: "var(--t-dim)" }} />
+            </div>
             <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--t-text)" }}>
               {search || filter !== "All" ? "No clients match your filter" : "No clients yet"}
             </div>
@@ -458,72 +441,92 @@ export default function ClientsPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
-            <thead>
-              <tr className="border-b" style={{ borderColor: "var(--t-border-subtle)" }}>
-                {["Client", "Market", "Status", "Budget", "Leads", "Booked", "CPL", "Avg. Job Value", ""].map(
-                  (h, i) => (
-                    <th
-                      key={`${h}-${i}`}
-                      className={`px-4 py-3.5 text-[9px] font-bold uppercase tracking-widest ${
-                        h === "Client" || h === "Market" ? "text-left" : h === "" ? "" : "text-right"
-                      }`}
-                      style={{ color: "var(--t-dim)" }}
-                    >
-                      {h}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c, i) => (
-                <tr
-                  key={c.id}
-                  className="border-b transition-colors group cursor-pointer"
-                  style={{
-                    borderColor: i === filtered.length - 1 ? "transparent" : "var(--t-border-subtle)",
-                  }}
-                  onClick={() => router.push(`/clients/${c.id}`)}
-                >
-                  <td className="px-4 py-4">
-                    <div className="font-semibold" style={{ color: "var(--t-text)" }}>{c.name}</div>
-                    <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "var(--t-muted)" }}>
-                      <Phone size={9} />
-                      {c.owner} · {c.phone || "—"}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4" style={{ color: "var(--t-muted)" }}>{c.market || "—"}</td>
-                  <td className="px-4 py-4">
-                    <Badge label={c.status} variant={clientStatusVariant[c.status]} />
-                  </td>
-                  <td className="px-4 py-4 text-right" style={{ color: "var(--t-text)" }}>{c.monthlyBudget || "—"}</td>
-                  <td className="px-4 py-4 text-right font-semibold" style={{ color: "#0081f2" }}>
-                    {c.stats.leads > 0 ? c.stats.leads : "—"}
-                  </td>
-                  <td className="px-4 py-4 text-right font-semibold" style={{ color: "#22c55e" }}>
-                    {c.stats.booked > 0 ? c.stats.booked : "—"}
-                  </td>
-                  <td className="px-4 py-4 text-right" style={{ color: "var(--t-text)" }}>{c.stats.cpl}</td>
-                  <td className="px-4 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1" style={{ color: "var(--t-text)" }}>
-                      <DollarSign size={10} style={{ color: "#ff8400" }} />
-                      {(c.avgJobValue || "0").replace("$", "").replace(",", "")}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <Link
-                      href={`/clients/${c.id}`}
-                      className="flex items-center gap-1 text-[11px] transition-colors opacity-0 group-hover:opacity-100"
-                      style={{ color: "var(--t-muted)" }}
-                    >
-                      Open <ChevronRight size={11} />
-                    </Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px] min-w-[680px]">
+              <thead>
+                <tr className="border-b" style={{ borderColor: "var(--t-border-subtle)" }}>
+                  {/* Status indicator column */}
+                  <th className="w-1 p-0" />
+                  {["Client", "Market", "Status", "Budget", "Leads", "Booked", "CPL", "Avg. Job Value", ""].map(
+                    (h, i) => (
+                      <th
+                        key={`${h}-${i}`}
+                        className={`px-4 py-3 text-[9px] font-bold uppercase tracking-widest ${
+                          h === "Client" || h === "Market" ? "text-left" : h === "" ? "" : "text-right"
+                        }`}
+                        style={{ color: "var(--t-dim)" }}
+                      >
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table></div>
+              </thead>
+              <tbody>
+                {filtered.map((c, i) => {
+                  const statusColor =
+                    c.status === "active"      ? "#22c55e" :
+                    c.status === "setup"       ? "#0081f2" :
+                    c.status === "onboarding"  ? "#ff8400" :
+                    c.status === "paused"      ? "#f59e0b" :
+                                                 "#3d4f6e";
+                  return (
+                    <tr
+                      key={c.id}
+                      className="vc-table-row border-b group"
+                      style={{
+                        borderColor: i === filtered.length - 1 ? "transparent" : "var(--t-border-subtle)",
+                      }}
+                      onClick={() => router.push(`/clients/${c.id}`)}
+                    >
+                      {/* Status indicator bar */}
+                      <td className="p-0 w-1">
+                        <div
+                          className="w-[3px] h-full min-h-[52px] rounded-r"
+                          style={{ backgroundColor: statusColor, opacity: 0.7 }}
+                        />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="font-semibold text-[13px]" style={{ color: "var(--t-text)" }}>{c.name}</div>
+                        <div className="flex items-center gap-1 text-[10px] mt-0.5" style={{ color: "var(--t-muted)" }}>
+                          <Phone size={9} />
+                          {c.owner} · {c.phone || "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 text-[12px]" style={{ color: "var(--t-muted)" }}>{c.market || "—"}</td>
+                      <td className="px-4 py-3.5">
+                        <Badge label={c.status} variant={clientStatusVariant[c.status]} />
+                      </td>
+                      <td className="px-4 py-3.5 text-right text-[12px]" style={{ color: "var(--t-text)" }}>{c.monthlyBudget || "—"}</td>
+                      <td className="px-4 py-3.5 text-right text-[13px] font-semibold" style={{ color: "#0081f2" }}>
+                        {c.stats.leads > 0 ? c.stats.leads : "—"}
+                      </td>
+                      <td className="px-4 py-3.5 text-right text-[13px] font-semibold" style={{ color: "#22c55e" }}>
+                        {c.stats.booked > 0 ? c.stats.booked : "—"}
+                      </td>
+                      <td className="px-4 py-3.5 text-right text-[12px]" style={{ color: "var(--t-text)" }}>{c.stats.cpl}</td>
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1 text-[12px]" style={{ color: "var(--t-text)" }}>
+                          <DollarSign size={10} style={{ color: "#ff8400" }} />
+                          {(c.avgJobValue || "0").replace("$", "").replace(",", "")}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Link
+                          href={`/clients/${c.id}`}
+                          className="flex items-center gap-1 text-[11px] transition-opacity opacity-0 group-hover:opacity-70 whitespace-nowrap"
+                          style={{ color: "var(--t-muted)" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Open <ChevronRight size={10} />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

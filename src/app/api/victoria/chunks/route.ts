@@ -56,6 +56,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       call_id: result.call_id,
       chunk_index: result.chunk_index,
+      chunk_text: text,           // Echo back for client transcript feed
+      chunk_speaker: speaker,     // Echo back for client transcript feed
       coaching_card: result.coaching_card,
       session_phase: result.session_phase,
       session_scores: result.session_scores,
@@ -64,6 +66,7 @@ export async function POST(req: NextRequest) {
       emotional_signals: result.agent_outputs.emotional_signals ?? null,
       rep_performance: result.agent_outputs.rep_performance ?? null,
       new_timeline_events: result.new_timeline_events ?? [],
+      momentum: result.momentum ?? null,
       processing_time_ms: result.processing_time_ms,
     });
   } catch (err) {

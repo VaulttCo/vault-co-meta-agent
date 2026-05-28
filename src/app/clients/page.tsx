@@ -12,27 +12,8 @@ import type { Client } from "@/lib/data";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { ClientCreateInput } from "@/lib/data/data-provider";
 
-// ── Shared input style ─────────────────────────────────────────
-const inputStyle: React.CSSProperties = {
-  backgroundColor: "var(--t-input-bg)",
-  border: "1px solid var(--t-border)",
-  color: "var(--t-text)",
-  borderRadius: "8px",
-};
-
-const inputFocusStyle = {
-  borderColor: "rgba(0, 129, 242, 0.40)",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "10px",
-  fontWeight: 700,
-  textTransform: "uppercase" as const,
-  letterSpacing: "0.08em",
-  color: "var(--t-muted)",
-  display: "block",
-  marginBottom: "6px",
-};
+// Form label style — use vc-label class (globals.css) plus display:block and margin
+const labelCls = "vc-label block mb-1.5";
 
 // ── Add Client Modal ──────────────────────────────────────────
 
@@ -145,93 +126,75 @@ function AddClientModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={labelStyle}>Company Name <span style={{ color: "#ef4444" }}>*</span></label>
+              <label className={labelCls}>Company Name <span style={{ color: "#ef4444" }}>*</span></label>
               <input
                 type="text"
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Acme Roofing"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
             <div>
-              <label style={labelStyle}>Owner Name <span style={{ color: "#ef4444" }}>*</span></label>
+              <label className={labelCls}>Owner Name <span style={{ color: "#ef4444" }}>*</span></label>
               <input
                 type="text"
                 value={form.owner}
                 onChange={(e) => set("owner", e.target.value)}
                 placeholder="John Smith"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={labelStyle}>Email</label>
+              <label className={labelCls}>Email</label>
               <input
                 type="email"
                 value={form.email ?? ""}
                 onChange={(e) => set("email", e.target.value)}
                 placeholder="john@company.com"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
             <div>
-              <label style={labelStyle}>Phone</label>
+              <label className={labelCls}>Phone</label>
               <input
                 type="tel"
                 value={form.phone ?? ""}
                 onChange={(e) => set("phone", e.target.value)}
                 placeholder="(555) 000-0000"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label style={labelStyle}>Market / City</label>
+              <label className={labelCls}>Market / City</label>
               <input
                 type="text"
                 value={form.market ?? ""}
                 onChange={(e) => set("market", e.target.value)}
                 placeholder="Phoenix, AZ"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
             <div>
-              <label style={labelStyle}>Monthly Budget</label>
+              <label className={labelCls}>Monthly Budget</label>
               <input
                 type="text"
                 value={form.monthlyBudget ?? ""}
                 onChange={(e) => set("monthlyBudget", e.target.value)}
                 placeholder="$2,000/mo"
-                className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input px-3 py-2"
               />
             </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Services</label>
+            <label className={labelCls}>Services</label>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
@@ -239,10 +202,7 @@ function AddClientModal({
                 onChange={(e) => setServiceInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addService(); } }}
                 placeholder="Roof Replacement"
-                className="flex-1 px-3 py-2 text-[13px] focus:outline-none transition-colors"
-                style={inputStyle}
-                onFocus={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputFocusStyle)}
-                onBlur={(e) => Object.assign((e.currentTarget as HTMLElement).style, inputStyle)}
+                className="vc-input flex-1 px-3 py-2"
               />
               <button
                 type="button"
@@ -280,12 +240,11 @@ function AddClientModal({
           </div>
 
           <div>
-            <label style={labelStyle}>Status</label>
+            <label className={labelCls}>Status</label>
             <select
               value={form.status}
               onChange={(e) => set("status", e.target.value as Client["status"])}
-              className="w-full px-3 py-2 text-[13px] focus:outline-none transition-colors"
-              style={inputStyle}
+              className="vc-input px-3 py-2"
             >
               <option value="onboarding">Onboarding</option>
               <option value="setup">Setup</option>

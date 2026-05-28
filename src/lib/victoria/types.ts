@@ -260,12 +260,79 @@ export interface EmotionalOutput {
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Rep Performance — real-time coaching of the sales rep
+// ─────────────────────────────────────────────────────────────
+
+export type RepWarningType =
+  | "overtalking"
+  | "interrupting"
+  | "premature_pitching"
+  | "weak_probing"
+  | "missing_emotional_signal"
+  | "overexplaining"
+  | "question_stacking"
+  | "poor_listening";
+
+export interface RepWarning {
+  type: RepWarningType;
+  severity: "critical" | "high" | "medium";
+  message: string;       // What went wrong. Max 20 words.
+  evidence: string;      // Quote or evidence. Max 30 words.
+  chunk_index: number;
+  suggested_fix: string; // Exact corrective action. Max 25 words.
+}
+
+export interface RepPerformanceOutput {
+  overall_performance: "excellent" | "good" | "needs_improvement" | "poor";
+  warnings: RepWarning[];
+  positive_observations: string[];
+  coaching_priorities: string[]; // Ordered, most urgent first
+  talk_ratio: {
+    rep_percent: number;
+    prospect_percent: number;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Timeline — live event stream for the call
+// ─────────────────────────────────────────────────────────────
+
+export type TimelineEventType =
+  | "buying_signal"
+  | "emotional_breakthrough"
+  | "emotional_shutdown"
+  | "emotional_shift"
+  | "objection_detected"
+  | "objection_not_isolated"
+  | "discovery_improved"
+  | "premature_pitch"
+  | "rep_interrupted"
+  | "rep_overtalking"
+  | "rep_weak_probe"
+  | "rep_missing_emotional"
+  | "rep_question_stacking"
+  | "rep_overexplaining"
+  | "phase_transition"
+  | "close_signal";
+
+export interface TimelineEvent {
+  id: string;
+  timestamp_ms: number;
+  chunk_index: number;
+  event_type: TimelineEventType;
+  severity: "critical" | "high" | "medium" | "info";
+  title: string;
+  description: string;
+}
+
 // Bundle of all latest agent outputs in a session
 export interface AgentOutputBundle {
   discovery: DiscoveryOutput | null;
   objection_intel: ObjectionOutput | null;
   deal_risk: DealRiskOutput | null;
   emotional_signals: EmotionalOutput | null;
+  rep_performance: RepPerformanceOutput | null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -334,6 +401,9 @@ export interface LiveCallSession {
   // Latest agent outputs
   agent_outputs: AgentOutputBundle;
 
+  // Live call timeline — event stream across the full call
+  timeline: TimelineEvent[];
+
   // Coaching history
   current_coaching: CoachingCard | null;
   coaching_history: CoachingCard[];
@@ -397,6 +467,7 @@ export interface ChunkProcessingResult {
   session_phase: ConversationPhase;
   session_scores: SessionScores;
   processing_time_ms: number;
+  new_timeline_events: TimelineEvent[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -473,7 +544,9 @@ export function createDefaultSession(
       objection_intel: null,
       deal_risk: null,
       emotional_signals: null,
+      rep_performance: null,
     },
+    timeline: [],
     current_coaching: null,
     coaching_history: [],
   };

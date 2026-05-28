@@ -16,6 +16,7 @@ import type {
   CoachingCard, LiveCallSession, ContractorVertical,
   DealRiskOutput, EmotionalOutput, EmotionalState,
   RepPerformanceOutput, TimelineEvent, MomentumSnapshot, MomentumDirection,
+  PostCallReview, MissedOpportunity, TurningPoint, ReplayMoment, RepScorecard,
 } from "@/lib/victoria/types";
 import { KB_DOMAINS } from "@/lib/victoria/types";
 import type { KBSearchResult, VictoriaProspectRow, PreCallBriefing } from "@/lib/victoria/types";
@@ -1366,6 +1367,563 @@ function TranscriptTimeline({ entries }: { entries: TranscriptFeedEntry[] }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Post-Call Review Components
+// ─────────────────────────────────────────────────────────────
+
+const GRADE_STYLES: Record<RepScorecard["grade"], { bg: string; text: string; border: string }> = {
+  A: { bg: "rgba(34,197,94,0.12)",    text: "#22c55e",  border: "rgba(34,197,94,0.3)" },
+  B: { bg: "rgba(59,130,246,0.12)",   text: "#3b82f6",  border: "rgba(59,130,246,0.3)" },
+  C: { bg: "rgba(245,158,11,0.12)",   text: "#f59e0b",  border: "rgba(245,158,11,0.3)" },
+  D: { bg: "rgba(249,115,22,0.12)",   text: "#f97316",  border: "rgba(249,115,22,0.3)" },
+  F: { bg: "rgba(239,68,68,0.12)",    text: "#ef4444",  border: "rgba(239,68,68,0.3)" },
+};
+
+const MISSED_COLORS = {
+  critical: { text: "#ef4444", bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.2)" },
+  high:     { text: "#f59e0b", bg: "rgba(245,158,11,0.06)", border: "rgba(245,158,11,0.2)" },
+  medium:   { text: "#6b7280", bg: "rgba(107,114,128,0.05)", border: "rgba(107,114,128,0.15)" },
+};
+
+const TP_COLORS = {
+  positive: { text: "#22c55e", bg: "rgba(34,197,94,0.06)", border: "rgba(34,197,94,0.2)", arrow: "↑" },
+  negative: { text: "#ef4444", bg: "rgba(239,68,68,0.06)", border: "rgba(239,68,68,0.2)", arrow: "↓" },
+};
+
+const REPLAY_COLORS: Record<ReplayMoment["category"], { icon: string; color: string; label: string }> = {
+  best:           { icon: "⭐", color: "#22c55e",  label: "Best Moment" },
+  worst:          { icon: "🔴", color: "#ef4444",  label: "Worst Moment" },
+  missed:         { icon: "⚠️", color: "#f59e0b",  label: "Missed Opportunity" },
+  objection:      { icon: "🛑", color: "#f97316",  label: "Objection" },
+  buying_signal:  { icon: "💚", color: "#a78bfa",  label: "Buying Signal" },
+};
+
+function ScorecardDimension({ label, score, color }: { label: string; score: number; color: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>{label}</span>
+        <span className="text-[11px] font-bold tabular-nums" style={{ color }}>{score}</span>
+      </div>
+      <div className="h-1.5 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
+        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${score}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function PostCallSummaryTab({ review }: { review: PostCallReview }) {
+  const prob = review.close_probability;
+  const probColor = prob.probability >= 60 ? "#22c55e" : prob.probability >= 35 ? "#f59e0b" : "#ef4444";
+
+  return (
+    <div className="space-y-5">
+      {/* AI Coaching Summary — front and center */}
+      <div
+        className="rounded-xl p-5"
+        style={{ backgroundColor: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.25)" }}
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#a78bfa" }} />
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#a78bfa" }}>
+            Victoria&rsquo;s Coaching
+          </p>
+        </div>
+        <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text)" }}>
+          {review.ai_coaching_summary}
+        </p>
+      </div>
+
+      {/* Executive Summary */}
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>Executive Summary</p>
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-text)" }}>
+          {review.executive_summary}
+        </p>
+      </div>
+
+      {/* Close Probability */}
+      <div
+        className="rounded-xl p-4 space-y-3"
+        style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-14 h-14 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${probColor}12`, border: `1px solid ${probColor}30` }}
+          >
+            <span className="text-[22px] font-black tabular-nums leading-none" style={{ color: probColor, fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
+              {prob.probability}
+            </span>
+            <span className="text-[8px] uppercase tracking-wide" style={{ color: "var(--t-dim)" }}>% close</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--t-muted)" }}>Close Probability</p>
+            <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{prob.reasoning}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {prob.blockers.length > 0 && (
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "#ef4444" }}>Blockers</p>
+              {prob.blockers.map((b, i) => (
+                <p key={i} className="text-[10px] flex gap-1.5 leading-snug mb-1" style={{ color: "var(--t-muted)" }}>
+                  <span style={{ color: "#ef4444" }}>✕</span> {b}
+                </p>
+              ))}
+            </div>
+          )}
+          {prob.accelerators.length > 0 && (
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "#22c55e" }}>Accelerators</p>
+              {prob.accelerators.map((a, i) => (
+                <p key={i} className="text-[10px] flex gap-1.5 leading-snug mb-1" style={{ color: "var(--t-muted)" }}>
+                  <span style={{ color: "#22c55e" }}>→</span> {a}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Next Call Strategy */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)" }}
+      >
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "#c9a84c" }}>Next Call Strategy</p>
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-text)" }}>{review.next_call_strategy}</p>
+      </div>
+
+      {/* Follow-up Recommendations */}
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>Follow-Up Steps</p>
+        <div className="space-y-1.5">
+          {review.follow_up_recommendations.map((rec, i) => (
+            <div key={i} className="flex gap-2">
+              <span
+                className="text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ backgroundColor: i === 0 ? "rgba(167,139,250,0.15)" : "rgba(107,114,128,0.1)", color: i === 0 ? "#a78bfa" : "var(--t-dim)" }}
+              >
+                {i + 1}
+              </span>
+              <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{rec}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Rep Performance Review */}
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>Rep Performance Review</p>
+        <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-text)" }}>{review.rep_performance_review}</p>
+      </div>
+
+      {/* Objection Analysis */}
+      {review.objection_analysis && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "var(--t-muted)" }}>Objection Analysis</p>
+          <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-muted)" }}>{review.objection_analysis}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PostCallScorecardTab({ scorecard }: { scorecard: RepScorecard }) {
+  const gradeStyle = GRADE_STYLES[scorecard.grade];
+
+  return (
+    <div className="space-y-5">
+      {/* Grade + Overall */}
+      <div className="flex items-center gap-4">
+        <div
+          className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: gradeStyle.bg, border: `1px solid ${gradeStyle.border}` }}
+        >
+          <span className="text-[32px] font-black" style={{ color: gradeStyle.text, fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
+            {scorecard.grade}
+          </span>
+        </div>
+        <div className="flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--t-muted)" }}>Overall Score</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[28px] font-black tabular-nums" style={{ color: gradeStyle.text, fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif" }}>
+              {scorecard.overall_score}
+            </span>
+            <span className="text-[13px]" style={{ color: "var(--t-dim)" }}>/100</span>
+          </div>
+          <div className="mt-1 h-1.5 rounded-full" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
+            <div className="h-1.5 rounded-full" style={{ width: `${scorecard.overall_score}%`, backgroundColor: gradeStyle.text }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Dimension scores */}
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--t-muted)" }}>Dimension Breakdown</p>
+        <div className="space-y-2">
+          <ScorecardDimension label="Talk Ratio"             score={scorecard.talk_ratio_score}            color="#3b82f6" />
+          <ScorecardDimension label="Question Quality"       score={scorecard.question_quality_score}       color="#f59e0b" />
+          <ScorecardDimension label="Emotional Intelligence" score={scorecard.emotional_intelligence_score} color="#a78bfa" />
+          <ScorecardDimension label="Discovery Depth"        score={scorecard.discovery_score}              color="#22c55e" />
+          <ScorecardDimension label="Objection Handling"     score={scorecard.objection_handling_score}     color="#f97316" />
+          <ScorecardDimension label="Closing Skill"          score={scorecard.closing_skill_score}          color="#06b6d4" />
+        </div>
+      </div>
+
+      {/* Strengths */}
+      {scorecard.areas_of_strength.length > 0 && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "#22c55e" }}>What Worked</p>
+          {scorecard.areas_of_strength.map((s, i) => (
+            <div key={i} className="flex gap-2 mb-1.5">
+              <span style={{ color: "#22c55e" }}>✓</span>
+              <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{s}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Improvements */}
+      {scorecard.areas_for_improvement.length > 0 && (
+        <div>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "#ef4444" }}>Priority Fixes</p>
+          {scorecard.areas_for_improvement.map((imp, i) => (
+            <div key={i} className="flex gap-2 mb-1.5">
+              <span
+                className="text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ backgroundColor: "rgba(239,68,68,0.12)", color: "#ef4444" }}
+              >
+                {i + 1}
+              </span>
+              <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{imp}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PostCallMissedTab({ missed }: { missed: MissedOpportunity[] }) {
+  if (missed.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <span className="text-[32px] mb-3">✅</span>
+        <p className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>No Missed Opportunities</p>
+        <p className="text-[11px] mt-1" style={{ color: "var(--t-muted)" }}>
+          Clean execution — no significant opportunities were left on the table.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>
+        {missed.length} opportunity{missed.length !== 1 ? "ies" : "y"} identified — ordered by impact
+      </p>
+      {missed.map((m, i) => {
+        const c = MISSED_COLORS[m.severity];
+        return (
+          <div key={i} className="rounded-xl p-4 space-y-2.5" style={{ backgroundColor: c.bg, border: `1px solid ${c.border}` }}>
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: c.text }}>
+                {m.type.replace(/_/g, " ")}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase" style={{ backgroundColor: `${c.text}15`, color: c.text }}>
+                  {m.severity}
+                </span>
+                <span className="text-[8px]" style={{ color: "var(--t-dim)" }}>chunk #{m.chunk_index}</span>
+              </div>
+            </div>
+            <p className="text-[12px] font-semibold leading-snug" style={{ color: "var(--t-text)" }}>{m.what_happened}</p>
+            <p className="text-[10px] leading-snug" style={{ color: c.text }}>
+              Why it mattered: {m.why_it_mattered}
+            </p>
+            <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--t-dim)" }}>What should have happened</p>
+              <p className="text-[11px] leading-snug" style={{ color: "var(--t-muted)" }}>{m.what_should_have_happened}</p>
+            </div>
+            <p className="text-[10px] italic" style={{ color: "var(--t-dim)" }}>{m.evidence}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PostCallTurningPointsTab({ turningPoints }: { turningPoints: TurningPoint[] }) {
+  if (turningPoints.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Activity size={28} className="mb-3 opacity-20" style={{ color: "var(--t-muted)" }} />
+        <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>
+          No significant turning points detected in this call.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0">
+      <p className="text-[9px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--t-muted)" }}>
+        {turningPoints.length} pivotal moment{turningPoints.length !== 1 ? "s" : ""} — chronological order
+      </p>
+      {turningPoints.map((tp, i) => {
+        const c = TP_COLORS[tp.direction];
+        return (
+          <div
+            key={i}
+            className="flex gap-3 py-3"
+            style={{ borderBottom: "1px solid var(--t-border)" }}
+          >
+            {/* Direction indicator */}
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold"
+                style={{ backgroundColor: c.bg, border: `1px solid ${c.border}` }}
+              >
+                {c.arrow}
+              </div>
+              {i < turningPoints.length - 1 && (
+                <div className="w-px flex-1 mt-1" style={{ backgroundColor: "var(--t-border)", minHeight: "16px" }} />
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0 pb-1">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: c.text }}>
+                  {tp.type.replace(/_/g, " ")}
+                </span>
+                <span className="text-[8px]" style={{ color: "var(--t-dim)" }}>· chunk #{tp.chunk_index}</span>
+                <span
+                  className="text-[8px] px-1.5 py-0.5 rounded-full font-semibold ml-auto"
+                  style={{ backgroundColor: `${c.text}12`, color: c.text }}
+                >
+                  {tp.impact} impact
+                </span>
+              </div>
+              <p className="text-[12px] font-semibold leading-snug mb-1" style={{ color: "var(--t-text)" }}>{tp.title}</p>
+              <p className="text-[10px] leading-snug mb-1" style={{ color: "var(--t-muted)" }}>{tp.description}</p>
+              <p className="text-[10px] italic" style={{ color: "var(--t-dim)" }}>{tp.evidence}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PostCallReplayTab({ replay }: { replay: ReplayMoment[] }) {
+  if (replay.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Radio size={28} className="mb-3 opacity-20" style={{ color: "var(--t-muted)" }} />
+        <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>
+          No replay moments available for this call.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>
+        {replay.length} moment{replay.length !== 1 ? "s" : ""} — call highlights in order
+      </p>
+      {replay.map((moment, i) => {
+        const meta = REPLAY_COLORS[moment.category];
+        return (
+          <div
+            key={i}
+            className="rounded-xl p-4 space-y-2"
+            style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[14px]">{meta.icon}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: meta.color }}>
+                {meta.label}
+              </span>
+              <span className="text-[8px]" style={{ color: "var(--t-dim)" }}>chunk #{moment.chunk_index}</span>
+            </div>
+            <p className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>{moment.label}</p>
+            <div
+              className="px-3 py-2 rounded-lg"
+              style={{ backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}
+            >
+              <p className="text-[11px] italic leading-relaxed" style={{ color: "var(--t-muted)" }}>
+                {moment.transcript_excerpt}
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <span style={{ color: meta.color, fontSize: "10px" }}>→</span>
+              <p className="text-[10px] leading-snug" style={{ color: meta.color }}>
+                {moment.coaching_note}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type ReviewTab = "summary" | "scorecard" | "missed" | "turning_points" | "replay";
+
+function PostCallReviewPage({
+  review,
+  callInfo,
+  loading,
+  onNewCall,
+}: {
+  review: PostCallReview | null;
+  callInfo: { prospect_name: string; company: string } | null;
+  loading: boolean;
+  onNewCall: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<ReviewTab>("summary");
+
+  const reviewTabs: { id: ReviewTab; label: string; badge?: number }[] = [
+    { id: "summary", label: "Summary" },
+    { id: "scorecard", label: "Scorecard" },
+    { id: "missed", label: "Missed", badge: review?.missed_opportunities.length },
+    { id: "turning_points", label: "Turning Pts", badge: review?.turning_points.length },
+    { id: "replay", label: "Replay", badge: review?.replay_timeline.length },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-4">
+      {/* Header */}
+      <div
+        className="flex items-center gap-4 px-5 py-4 rounded-xl"
+        style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}
+      >
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.25)" }}
+        >
+          <FileText size={18} style={{ color: "#a78bfa" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-[16px] font-bold"
+            style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
+          >
+            Post-Call Review
+          </p>
+          <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>
+            {callInfo ? `${callInfo.prospect_name} · ${callInfo.company}` : "Completed Call"}
+            {review && ` · ${review.call_duration_chunks} chunks`}
+          </p>
+        </div>
+        {review && !review.mock_mode && (
+          <span className="text-[9px] px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
+            AI-Powered
+          </span>
+        )}
+        <button
+          onClick={onNewCall}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold flex-shrink-0"
+          style={{ backgroundColor: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+        >
+          <PhoneCall size={12} /> New Call
+        </button>
+      </div>
+
+      {loading ? (
+        <div
+          className="flex flex-col items-center justify-center py-24 rounded-xl"
+          style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}
+        >
+          <div className="relative mb-5">
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ backgroundColor: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)" }}
+            >
+              <Loader size={24} className="animate-spin" style={{ color: "#a78bfa" }} />
+            </div>
+          </div>
+          <p className="text-[14px] font-semibold" style={{ color: "var(--t-text)" }}>Victoria is reviewing the call…</p>
+          <p className="text-[11px] mt-1.5" style={{ color: "var(--t-muted)" }}>
+            Analyzing transcript, missed opportunities, turning points, and generating your coaching debrief.
+          </p>
+          <p className="text-[10px] mt-1" style={{ color: "var(--t-dim)" }}>This typically takes 10–25 seconds.</p>
+        </div>
+      ) : !review ? (
+        <div
+          className="flex flex-col items-center justify-center py-16 rounded-xl text-center"
+          style={{ backgroundColor: "var(--t-surface)", border: "1px dashed var(--t-border)" }}
+        >
+          <AlertTriangle size={28} className="mb-3 opacity-30" style={{ color: "#f59e0b" }} />
+          <p className="text-[13px]" style={{ color: "var(--t-muted)" }}>Review generation failed or call had no transcript data.</p>
+          <button
+            onClick={onNewCall}
+            className="mt-4 px-4 py-2 rounded-lg text-[12px] font-semibold"
+            style={{ backgroundColor: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+          >
+            Start a New Call
+          </button>
+        </div>
+      ) : (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}
+        >
+          {/* Tab bar */}
+          <div className="flex border-b" style={{ borderColor: "var(--t-border)" }}>
+            {reviewTabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const hasCritical =
+                tab.id === "missed" &&
+                review.missed_opportunities.some((m) => m.severity === "critical");
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors relative"
+                  style={{
+                    color: isActive ? "#a78bfa" : "var(--t-dim)",
+                    borderBottom: isActive ? "2px solid #a78bfa" : "2px solid transparent",
+                    backgroundColor: isActive ? "rgba(167,139,250,0.05)" : "transparent",
+                  }}
+                >
+                  {tab.label}
+                  {tab.badge !== undefined && tab.badge > 0 && (
+                    <span
+                      className="ml-1 text-[8px] px-1 py-0.5 rounded-full font-bold"
+                      style={{
+                        backgroundColor: hasCritical ? "rgba(239,68,68,0.2)" : "rgba(107,114,128,0.2)",
+                        color: hasCritical ? "#ef4444" : "var(--t-dim)",
+                      }}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                  {hasCritical && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab content */}
+          <div className="p-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
+            {activeTab === "summary"       && <PostCallSummaryTab       review={review} />}
+            {activeTab === "scorecard"     && <PostCallScorecardTab     scorecard={review.rep_scorecard} />}
+            {activeTab === "missed"        && <PostCallMissedTab        missed={review.missed_opportunities} />}
+            {activeTab === "turning_points" && <PostCallTurningPointsTab turningPoints={review.turning_points} />}
+            {activeTab === "replay"        && <PostCallReplayTab        replay={review.replay_timeline} />}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Mode Toggle — top-level navigation between Victoria modes
 // ─────────────────────────────────────────────────────────────
 
@@ -1625,6 +2183,11 @@ export default function VictoriaPage() {
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
   const [activeIntelTab, setActiveIntelTab] = useState<"scores" | "deal_risk" | "emotional" | "rep" | "timeline">("scores");
 
+  // ── Post-call review state ──────────────────────────────────
+  const [postCallReview, setPostCallReview] = useState<PostCallReview | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewCallInfo, setReviewCallInfo] = useState<{ prospect_name: string; company: string } | null>(null);
+
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callStartRef = useRef<number>(0);
   const cardsEndRef = useRef<HTMLDivElement>(null);
@@ -1791,13 +2354,17 @@ export default function VictoriaPage() {
   // ── End call ────────────────────────────────────────────────
 
   const handleEndCall = useCallback(async () => {
+    // Capture before clearing — needed for the post-call review request
+    const reviewCallId = callId;
+    const reviewInfo = sessionInfo;
+
     transcription.stopListening();
 
-    if (callId) {
+    if (reviewCallId) {
       await fetch("/api/victoria/session", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ call_id: callId, status: "completed" }),
+        body: JSON.stringify({ call_id: reviewCallId, status: "completed" }),
       });
     }
 
@@ -1814,7 +2381,19 @@ export default function VictoriaPage() {
     setCallDuration(0);
     callStartRef.current = 0;
     setActiveIntelTab("scores");
-  }, [callId, transcription]);
+
+    // ── Trigger post-call review ───────────────────────────────
+    if (reviewCallId && reviewInfo) {
+      setReviewCallInfo(reviewInfo);
+      setPostCallReview(null);
+      setReviewLoading(true);
+      fetch(`/api/victoria/session/${reviewCallId}/review`, { method: "POST" })
+        .then((r) => r.json() as Promise<{ review: PostCallReview }>)
+        .then((data) => { setPostCallReview(data.review ?? null); })
+        .catch((err) => { console.error("[Victoria] Post-call review failed:", err); })
+        .finally(() => setReviewLoading(false));
+    }
+  }, [callId, sessionInfo, transcription]);
 
   // ── Manual chunk submission ─────────────────────────────────
 
@@ -1834,6 +2413,32 @@ export default function VictoriaPage() {
     setLinkedProspect(prospect);
     setPageMode("live_call");
   }, []);
+
+  // Handle dismissing post-call review and starting fresh
+  const handleNewCall = useCallback(() => {
+    setPostCallReview(null);
+    setReviewCallInfo(null);
+    setReviewLoading(false);
+    setPageMode("live_call");
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────
+  // Render: Post-call review (after call ends)
+  // ─────────────────────────────────────────────────────────────
+
+  if (!callId && (reviewLoading || postCallReview)) {
+    return (
+      <div>
+        <ModeToggle mode="live_call" onChange={() => {}} callActive={false} />
+        <PostCallReviewPage
+          review={postCallReview}
+          callInfo={reviewCallInfo}
+          loading={reviewLoading}
+          onNewCall={handleNewCall}
+        />
+      </div>
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Render: Pre-call (mode-aware)

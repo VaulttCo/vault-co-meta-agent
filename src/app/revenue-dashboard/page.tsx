@@ -117,7 +117,7 @@ export default function RevenueDashboardPage() {
   ] as const;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-5">
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-xl"
@@ -204,8 +204,7 @@ export default function RevenueDashboardPage() {
           ].map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.label} className="rounded-xl p-5 flex flex-col gap-3"
-                style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
+              <div key={card.label} className="vc-stat-card flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center"
                     style={{ backgroundColor: card.bg, border: `1px solid ${card.border}` }}>

@@ -272,7 +272,9 @@ export type RepWarningType =
   | "missing_emotional_signal"
   | "overexplaining"
   | "question_stacking"
-  | "poor_listening";
+  | "poor_listening"
+  | "buying_signal_ignored"
+  | "feature_vs_outcome";
 
 export interface RepWarning {
   type: RepWarningType;
@@ -292,6 +294,10 @@ export interface RepPerformanceOutput {
     rep_percent: number;
     prospect_percent: number;
   };
+  interruptions: number;         // Count of detected interruptions
+  momentum_direction: string;    // "improving" | "stable" | "declining"
+  trust_trend: string;           // "building" | "stable" | "eroding"
+  urgency_trend: string;         // "increasing" | "stable" | "decreasing"
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -313,6 +319,14 @@ export type TimelineEventType =
   | "rep_missing_emotional"
   | "rep_question_stacking"
   | "rep_overexplaining"
+  | "rep_buying_signal_ignored"
+  | "rep_feature_vs_outcome"
+  | "momentum_declining"
+  | "momentum_improving"
+  | "trust_declining"
+  | "trust_building"
+  | "urgency_detected"
+  | "urgency_declining"
   | "phase_transition"
   | "close_signal";
 
@@ -324,6 +338,23 @@ export interface TimelineEvent {
   severity: "critical" | "high" | "medium" | "info";
   title: string;
   description: string;
+  agent_source?: string; // Which intelligence layer generated this event
+}
+
+// ─────────────────────────────────────────────────────────────
+// Momentum — directional trend tracking per dimension
+// ─────────────────────────────────────────────────────────────
+
+export type MomentumDirection = "improving" | "stable" | "declining";
+
+export interface MomentumSnapshot {
+  trust: MomentumDirection;
+  urgency: MomentumDirection;
+  pain_depth: MomentumDirection;
+  engagement: MomentumDirection;
+  close_readiness: MomentumDirection;
+  overall: MomentumDirection;
+  computed_at_chunk: number;
 }
 
 // Bundle of all latest agent outputs in a session
@@ -388,6 +419,7 @@ export interface LiveCallSession {
 
   // Scores
   scores: SessionScores;
+  prev_scores: SessionScores | null; // Previous reading for momentum computation
 
   // Discovery
   discovery: DiscoveryState;
@@ -468,6 +500,7 @@ export interface ChunkProcessingResult {
   session_scores: SessionScores;
   processing_time_ms: number;
   new_timeline_events: TimelineEvent[];
+  momentum: MomentumSnapshot | null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -503,6 +536,7 @@ export function createDefaultSession(
       close_readiness: 10,
       deal_risk: 70,
     },
+    prev_scores: null,
     discovery: {
       current_marketing_spend_known: false,
       current_lead_sources_known: false,

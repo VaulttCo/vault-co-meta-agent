@@ -97,7 +97,7 @@ function IntelCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+    <div className="vc-panel">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#0f1a28] transition-colors"
@@ -440,7 +440,7 @@ function ClientFilesTab({ clientId }: { clientId: string }) {
           </p>
         </div>
       ) : (
-        <div className="bg-[#0D1520] border border-[rgba(0, 129, 242, 0.15)] rounded-xl overflow-hidden">
+        <div className="vc-panel">
           <div className="divide-y divide-[rgba(0, 129, 242, 0.15)]">
             {filtered.map((file) => {
               const catColor = FILE_CATEGORY_COLORS[file.category];
@@ -2208,7 +2208,7 @@ function IntegrationsTab({ clientId, clientName }: { clientId: string; clientNam
     }
   }
 
-  const cardCls = "bg-[#0D1520] border border-[rgba(0,129,242,0.15)] rounded-xl overflow-hidden";
+  const cardCls = "vc-panel";
   const btnCls = "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors";
   const inputCls = "w-full bg-[#0f1a28] border border-[rgba(0,129,242,0.2)] rounded-lg px-3 py-2 text-[12px] text-[#f8f8f7] placeholder-[#3d4f6e] focus:outline-none focus:border-[#0081f2] transition-colors";
 

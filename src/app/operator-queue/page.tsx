@@ -16,6 +16,8 @@ import {
   ChevronUp,
   CalendarDays,
   User,
+  Zap,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -28,6 +30,14 @@ interface ChecklistItem {
   id: string;
   label: string;
   done: boolean;
+}
+
+interface HermesSkill {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  instructions: string;
 }
 
 interface OperatorTask {
@@ -239,17 +249,30 @@ function TaskCard({
   task,
   onStatusChange,
   onChecklistChange,
+  hermesSkills,
+  onTaskUpdate,
 }: {
   task: OperatorTask;
   onStatusChange: (id: string, status: OperatorTask["status"]) => Promise<void>;
   onChecklistChange: (id: string, checklist: ChecklistItem[]) => Promise<void>;
+  hermesSkills: HermesSkill[];
+  onTaskUpdate: (id: string, description: string) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
 
+  // Hermes state
+  const [hermesOpen, setHermesOpen] = useState(false);
+  const [hermesRunning, setHermesRunning] = useState(false);
+  const [hermesStatus, setHermesStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [hermesOutput, setHermesOutput] = useState<string | null>(null);
+  const [hermesError, setHermesError] = useState<string | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<string>("");
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [hermesSaved, setHermesSaved] = useState(false);
+
   // Effective checklist: use saved DB value if non-empty, else fall back to template.
-  // First step-toggle saves the full checklist to DB via PATCH.
   const effectiveChecklist =
     task.checklist.length > 0
       ? task.checklist
@@ -298,6 +321,80 @@ function TaskCard({
     } finally {
       setUpdating(false);
     }
+  }
+
+  // ── Hermes functions ───────────────────────────────────────
+
+  function openHermes() {
+    if (!hermesOpen && customPrompt === "") {
+      const ctx = `Task: "${task.title}"${
+        task.description
+          ? `\n\nContext:\n${task.description.slice(0, 600)}`
+          : ""
+      }`;
+      setCustomPrompt(ctx);
+    }
+    setHermesOpen((v) => !v);
+  }
+
+  function handleSkillSelect(skillId: string) {
+    setSelectedSkillId(skillId);
+    if (skillId) {
+      const skill = hermesSkills.find((s) => s.id === skillId);
+      if (skill) {
+        const ctx = `Task: "${task.title}"${
+          task.description ? `\nContext: ${task.description.slice(0, 300)}` : ""
+        }`;
+        setCustomPrompt(`${ctx}\n\n---\nSkill: "${skill.name}"\n\n${skill.instructions}`);
+      }
+    } else {
+      const ctx = `Task: "${task.title}"${
+        task.description ? `\n\nContext:\n${task.description.slice(0, 600)}` : ""
+      }`;
+      setCustomPrompt(ctx);
+    }
+  }
+
+  async function runHermes() {
+    if (!customPrompt.trim() || hermesRunning) return;
+    setHermesRunning(true);
+    setHermesStatus("pending");
+    setHermesOutput(null);
+    setHermesError(null);
+    setHermesSaved(false);
+    try {
+      const res = await fetch("/api/veronica/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: customPrompt.trim(),
+          skill_id: selectedSkillId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setHermesStatus("error");
+        setHermesError(data.error ?? "Hermes returned an error.");
+      } else {
+        setHermesStatus("success");
+        setHermesOutput(data.output ?? "");
+      }
+    } catch {
+      setHermesStatus("error");
+      setHermesError("Network error. Hermes is unreachable.");
+    } finally {
+      setHermesRunning(false);
+    }
+  }
+
+  async function saveToTaskNotes() {
+    if (!hermesOutput) return;
+    const existingDesc = task.description ?? "";
+    const divider = existingDesc ? "\n\n---\n" : "";
+    const note = `${divider}Hermes Output (${new Date().toLocaleString()}):\n${hermesOutput}`;
+    const newDesc = (existingDesc + note).trim();
+    await onTaskUpdate(task.id, newDesc);
+    setHermesSaved(true);
   }
 
   return (
@@ -372,6 +469,47 @@ function TaskCard({
                     · {AGENT_LABELS[task.sourceAgent] ?? task.sourceAgent}
                   </span>
                 )}
+              </span>
+            )}
+
+            {/* Hermes status badge */}
+            {hermesStatus === "pending" && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 flex-shrink-0"
+                style={{
+                  color: "#c9a84c",
+                  backgroundColor: "rgba(201,168,76,0.1)",
+                  borderColor: "rgba(201,168,76,0.25)",
+                }}
+              >
+                <Loader2 size={8} className="animate-spin" />
+                Hermes Pending
+              </span>
+            )}
+            {hermesStatus === "success" && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 flex-shrink-0"
+                style={{
+                  color: "#22c55e",
+                  backgroundColor: "rgba(34,197,94,0.1)",
+                  borderColor: "rgba(34,197,94,0.2)",
+                }}
+              >
+                <Zap size={8} />
+                Hermes Complete
+              </span>
+            )}
+            {hermesStatus === "error" && (
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 flex-shrink-0"
+                style={{
+                  color: "#ef4444",
+                  backgroundColor: "rgba(239,68,68,0.1)",
+                  borderColor: "rgba(239,68,68,0.2)",
+                }}
+              >
+                <Zap size={8} />
+                Hermes Error
               </span>
             )}
 
@@ -523,6 +661,177 @@ function TaskCard({
               )}
             </div>
           )}
+
+          {/* Hermes Operator Panel */}
+          <div className="mt-2.5">
+            <button
+              onClick={openHermes}
+              className="flex items-center gap-1.5 text-[10px] font-semibold rounded-md px-2 py-1 transition-colors"
+              style={{
+                color: hermesStatus === "success"
+                  ? "#22c55e"
+                  : hermesStatus === "error"
+                  ? "#ef4444"
+                  : "#c9a84c",
+                backgroundColor: hermesOpen
+                  ? "rgba(201,168,76,0.08)"
+                  : "var(--t-surface-2)",
+                border: `1px solid ${
+                  hermesStatus === "success"
+                    ? "rgba(34,197,94,0.2)"
+                    : hermesStatus === "error"
+                    ? "rgba(239,68,68,0.2)"
+                    : hermesOpen
+                    ? "rgba(201,168,76,0.3)"
+                    : "var(--t-border)"
+                }`,
+              }}
+            >
+              {hermesOpen ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+              <Zap size={9} />
+              Hermes Operator
+              {hermesStatus === "pending" && (
+                <Loader2 size={9} className="animate-spin ml-0.5" />
+              )}
+            </button>
+
+            {hermesOpen && (
+              <div
+                className="mt-2 rounded-lg p-3 space-y-2.5"
+                style={{
+                  backgroundColor: "var(--t-surface-2)",
+                  border: "1px solid var(--t-border)",
+                }}
+              >
+                {/* Skill dropdown */}
+                {hermesSkills.length > 0 && (
+                  <div>
+                    <label
+                      className="block text-[10px] font-semibold mb-1"
+                      style={{ color: "var(--t-dim)" }}
+                    >
+                      Use Saved Skill (optional)
+                    </label>
+                    <select
+                      value={selectedSkillId}
+                      onChange={(e) => handleSkillSelect(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-md text-[11px] focus:outline-none"
+                      style={{
+                        backgroundColor: "var(--t-surface)",
+                        border: "1px solid var(--t-border)",
+                        color: "var(--t-muted)",
+                      }}
+                    >
+                      <option value="">— Custom prompt —</option>
+                      {hermesSkills.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          [{s.category}] {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Prompt */}
+                <div>
+                  <label
+                    className="block text-[10px] font-semibold mb-1"
+                    style={{ color: "var(--t-dim)" }}
+                  >
+                    Prompt
+                  </label>
+                  <textarea
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    rows={4}
+                    placeholder="Describe what Hermes should prepare for this task…"
+                    className="w-full px-2.5 py-2 rounded-md text-[11px] leading-relaxed resize-none focus:outline-none"
+                    style={{
+                      backgroundColor: "var(--t-surface)",
+                      border: "1px solid var(--t-border)",
+                      color: "var(--t-text)",
+                    }}
+                  />
+                </div>
+
+                {/* Run button */}
+                <button
+                  disabled={hermesRunning || !customPrompt.trim()}
+                  onClick={runHermes}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-opacity disabled:opacity-40"
+                  style={{ backgroundColor: "#c9a84c", color: "#000" }}
+                >
+                  {hermesRunning ? (
+                    <>
+                      <Loader2 size={10} className="animate-spin" />
+                      Running…
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={10} />
+                      Run with Hermes
+                    </>
+                  )}
+                </button>
+
+                {/* Output */}
+                {hermesOutput && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold" style={{ color: "#22c55e" }}>
+                        ✓ Hermes complete
+                      </span>
+                      <button
+                        onClick={saveToTaskNotes}
+                        disabled={hermesSaved}
+                        className="text-[10px] font-medium px-2 py-0.5 rounded border transition-colors disabled:opacity-50"
+                        style={{ color: "var(--t-muted)", borderColor: "var(--t-border)" }}
+                      >
+                        {hermesSaved ? "Saved ✓" : "Save to task notes"}
+                      </button>
+                    </div>
+                    <pre
+                      className="text-[11px] leading-relaxed whitespace-pre-wrap break-words overflow-auto rounded-lg p-2.5"
+                      style={{
+                        color: "var(--t-muted)",
+                        backgroundColor: "var(--t-surface)",
+                        border: "1px solid var(--t-border)",
+                        maxHeight: "280px",
+                      }}
+                    >
+                      {hermesOutput}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Error */}
+                {hermesError && (
+                  <div
+                    className="px-2.5 py-2 rounded-lg"
+                    style={{
+                      backgroundColor: "rgba(239,68,68,0.05)",
+                      border: "1px solid rgba(239,68,68,0.2)",
+                    }}
+                  >
+                    <p className="text-[11px]" style={{ color: "#ef4444" }}>
+                      {hermesError}
+                    </p>
+                  </div>
+                )}
+
+                {/* Safety notice */}
+                <div
+                  className="flex items-start gap-1.5 pt-2"
+                  style={{ borderTop: "1px solid var(--t-border)" }}
+                >
+                  <ShieldCheck size={9} className="text-[#c9a84c] flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] leading-snug" style={{ color: "var(--t-dim)" }}>
+                    Hermes prepares drafts and operator plans only. It cannot complete, delete, or modify task status without your approval.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action buttons */}
@@ -592,6 +901,36 @@ function TaskCard({
               Done
             </span>
           )}
+
+          {/* Hermes toggle button */}
+          <button
+            onClick={openHermes}
+            title="Run with Hermes"
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg border transition-colors"
+            style={{
+              color:
+                hermesStatus === "success"
+                  ? "#22c55e"
+                  : hermesStatus === "error"
+                  ? "#ef4444"
+                  : "#c9a84c",
+              borderColor:
+                hermesStatus === "success"
+                  ? "rgba(34,197,94,0.25)"
+                  : hermesStatus === "error"
+                  ? "rgba(239,68,68,0.25)"
+                  : "rgba(201,168,76,0.25)",
+              backgroundColor: hermesOpen ? "rgba(201,168,76,0.08)" : "transparent",
+            }}
+          >
+            {hermesStatus === "pending" ? (
+              <Loader2 size={10} className="animate-spin" />
+            ) : (
+              <Zap size={10} />
+            )}
+            Hermes
+          </button>
+
           {task.status !== "archived" && task.status !== "done" && (
             <button
               disabled={updating}
@@ -969,6 +1308,7 @@ function SectionHeader({
 export default function OperatorQueuePage() {
   const [tasks, setTasks] = useState<OperatorTask[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [hermesSkills, setHermesSkills] = useState<HermesSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showDone, setShowDone] = useState(false);
@@ -984,16 +1324,21 @@ export default function OperatorQueuePage() {
     let cancelled = false;
     (async () => {
       try {
-        const [taskData, clientData] = await Promise.all([
+        const [taskData, clientData, skillData] = await Promise.all([
           fetch("/api/operator-tasks")
             .then((r) => r.ok ? r.json() : { tasks: [] })
             .then((b) => b.tasks ?? [])
             .catch(() => [] as OperatorTask[]),
           getDataProvider().getClients().catch(() => [] as Client[]),
+          fetch("/api/veronica/hermes/skills?limit=50")
+            .then((r) => r.ok ? r.json() : { skills: [] })
+            .then((b) => b.skills ?? [])
+            .catch(() => [] as HermesSkill[]),
         ]);
         if (!cancelled) {
           setTasks(taskData);
           setClients(clientData);
+          setHermesSkills(skillData);
         }
       } catch {
         // fall through to empty state
@@ -1016,13 +1361,23 @@ export default function OperatorQueuePage() {
   }
 
   async function handleChecklistChange(id: string, checklist: ChecklistItem[]) {
-    // Optimistic update so the UI responds immediately
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, checklist } : t)));
     await fetch(`/api/operator-tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ checklist }),
     });
+  }
+
+  async function handleTaskUpdate(id: string, description: string) {
+    const res = await fetch(`/api/operator-tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    });
+    if (res.ok) {
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, description } : t)));
+    }
   }
 
   function handleCreated(task: OperatorTask) {
@@ -1197,7 +1552,14 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {urgentHigh.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onStatusChange={handleStatusChange}
+                    onChecklistChange={handleChecklistChange}
+                    hermesSkills={hermesSkills}
+                    onTaskUpdate={handleTaskUpdate}
+                  />
                 ))}
               </div>
             </section>
@@ -1214,7 +1576,14 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {openMedLow.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onStatusChange={handleStatusChange}
+                    onChecklistChange={handleChecklistChange}
+                    hermesSkills={hermesSkills}
+                    onTaskUpdate={handleTaskUpdate}
+                  />
                 ))}
               </div>
             </section>
@@ -1231,7 +1600,14 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {inProgress.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onStatusChange={handleStatusChange}
+                    onChecklistChange={handleChecklistChange}
+                    hermesSkills={hermesSkills}
+                    onTaskUpdate={handleTaskUpdate}
+                  />
                 ))}
               </div>
             </section>
@@ -1248,7 +1624,14 @@ export default function OperatorQueuePage() {
               />
               <div className="space-y-2.5">
                 {blocked.map((t) => (
-                  <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    onStatusChange={handleStatusChange}
+                    onChecklistChange={handleChecklistChange}
+                    hermesSkills={hermesSkills}
+                    onTaskUpdate={handleTaskUpdate}
+                  />
                 ))}
               </div>
             </section>
@@ -1269,7 +1652,14 @@ export default function OperatorQueuePage() {
               {showDone && (
                 <div className="space-y-2.5">
                   {done.map((t) => (
-                    <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                    <TaskCard
+                      key={t.id}
+                      task={t}
+                      onStatusChange={handleStatusChange}
+                      onChecklistChange={handleChecklistChange}
+                      hermesSkills={hermesSkills}
+                      onTaskUpdate={handleTaskUpdate}
+                    />
                   ))}
                 </div>
               )}
@@ -1293,7 +1683,14 @@ export default function OperatorQueuePage() {
                   {tasks
                     .filter((t) => t.status === "archived")
                     .map((t) => (
-                      <TaskCard key={t.id} task={t} onStatusChange={handleStatusChange} onChecklistChange={handleChecklistChange} />
+                      <TaskCard
+                        key={t.id}
+                        task={t}
+                        onStatusChange={handleStatusChange}
+                        onChecklistChange={handleChecklistChange}
+                        hermesSkills={hermesSkills}
+                        onTaskUpdate={handleTaskUpdate}
+                      />
                     ))}
                 </div>
               )}

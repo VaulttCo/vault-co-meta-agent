@@ -70,7 +70,7 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { applyCouncilToDraft } from "@/lib/council/buildCouncilPrompt";
+import { buildCouncilPrompt, applyCouncilToDraft } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse } from "@/lib/council/types";
 
 // ─────────────────────────────────────────────────────────────

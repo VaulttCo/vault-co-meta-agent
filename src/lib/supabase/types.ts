@@ -259,6 +259,7 @@ export interface VeronicaHermesRunRow {
   created_at: string;
   auto_skill_created: boolean;
   skill_id: string | null;
+  task_id: string | null;
 }
 
 export interface VeronicaHermesSkillRow {
@@ -370,10 +371,12 @@ export interface Database {
           created_at?: string;
           auto_skill_created?: boolean;
           skill_id?: string | null;
+          task_id?: string | null;
         };
         Update: {
           auto_skill_created?: boolean;
           skill_id?: string | null;
+          task_id?: string | null;
         };
       };
       veronica_hermes_skills: {

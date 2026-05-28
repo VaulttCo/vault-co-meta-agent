@@ -40,6 +40,15 @@ interface HermesSkill {
   instructions: string;
 }
 
+interface HermesRunSummary {
+  id: string;
+  prompt: string;
+  status: "success" | "error" | "unreachable";
+  created_at: string;
+  auto_skill_created: boolean;
+  has_output: boolean;
+}
+
 interface OperatorTask {
   id: string;
   clientId: string | null;
@@ -271,6 +280,10 @@ function TaskCard({
   const [selectedSkillId, setSelectedSkillId] = useState<string>("");
   const [customPrompt, setCustomPrompt] = useState("");
   const [hermesSaved, setHermesSaved] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyRuns, setHistoryRuns] = useState<HermesRunSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
 
   // Effective checklist: use saved DB value if non-empty, else fall back to template.
   const effectiveChecklist =
@@ -369,6 +382,7 @@ function TaskCard({
         body: JSON.stringify({
           prompt: customPrompt.trim(),
           skill_id: selectedSkillId || undefined,
+          task_id: task.id,
         }),
       });
       const data = await res.json();
@@ -384,6 +398,32 @@ function TaskCard({
       setHermesError("Network error. Hermes is unreachable.");
     } finally {
       setHermesRunning(false);
+      if (historyLoaded) loadHistory();
+    }
+  }
+
+  async function loadHistory() {
+    if (historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      const res = await fetch(`/api/veronica/hermes/task-runs?task_id=${task.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryRuns(data.runs ?? []);
+      }
+    } catch {
+      // non-blocking
+    } finally {
+      setHistoryLoading(false);
+      setHistoryLoaded(true);
+    }
+  }
+
+  function toggleHistory() {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && !historyLoaded) {
+      loadHistory();
     }
   }
 
@@ -829,6 +869,115 @@ function TaskCard({
                     Hermes prepares drafts and operator plans only. It cannot complete, delete, or modify task status without your approval.
                   </p>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hermes History */}
+          <div className="mt-2">
+            <button
+              onClick={toggleHistory}
+              className="flex items-center gap-1.5 text-[10px] font-semibold rounded-md px-2 py-1 transition-colors"
+              style={{
+                color: "var(--t-dim)",
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+              }}
+            >
+              {historyOpen ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+              <Clock size={9} />
+              Hermes History
+              {historyLoading && <Loader2 size={9} className="animate-spin ml-0.5" />}
+            </button>
+
+            {historyOpen && (
+              <div
+                className="mt-2 rounded-lg overflow-hidden"
+                style={{ border: "1px solid var(--t-border)" }}
+              >
+                {historyLoading && historyRuns.length === 0 ? (
+                  <div
+                    className="px-3 py-2.5 flex items-center gap-2"
+                    style={{ backgroundColor: "var(--t-surface-2)" }}
+                  >
+                    <Loader2 size={10} className="animate-spin" style={{ color: "#c9a84c" }} />
+                    <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>
+                      Loading history…
+                    </span>
+                  </div>
+                ) : historyRuns.length === 0 ? (
+                  <div
+                    className="px-3 py-2.5"
+                    style={{ backgroundColor: "var(--t-surface-2)" }}
+                  >
+                    <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>
+                      No Hermes runs linked to this task yet.
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ backgroundColor: "var(--t-surface-2)" }}>
+                    {historyRuns.map((run, idx) => (
+                      <div
+                        key={run.id}
+                        className="px-3 py-2 flex items-start gap-2"
+                        style={{
+                          borderTop: idx > 0 ? "1px solid var(--t-border)" : undefined,
+                        }}
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          {run.status === "success" ? (
+                            <CheckCircle2 size={10} style={{ color: "#22c55e" }} />
+                          ) : (
+                            <AlertCircle size={10} style={{ color: "#ef4444" }} />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className="text-[10px] leading-snug break-words"
+                            style={{ color: "var(--t-muted)" }}
+                          >
+                            {run.prompt.length > 100
+                              ? run.prompt.slice(0, 100) + "…"
+                              : run.prompt}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-[9px]" style={{ color: "var(--t-dim)" }}>
+                              {new Date(run.created_at).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            {run.has_output && (
+                              <span
+                                className="text-[9px] px-1 py-0.5 rounded"
+                                style={{
+                                  color: "#22c55e",
+                                  backgroundColor: "rgba(34,197,94,0.1)",
+                                }}
+                              >
+                                Output
+                              </span>
+                            )}
+                            {run.auto_skill_created && (
+                              <span
+                                className="text-[9px] px-1 py-0.5 rounded flex items-center gap-0.5"
+                                style={{
+                                  color: "#c9a84c",
+                                  backgroundColor: "rgba(201,168,76,0.1)",
+                                }}
+                              >
+                                <Zap size={7} />
+                                Skill saved
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

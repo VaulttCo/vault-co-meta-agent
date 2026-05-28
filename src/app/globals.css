@@ -141,6 +141,228 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--t-scrollbar-hover);
 }
 
+/* ─── Vault Co Layout Utilities ─── */
+
+/* Premium panel / section card */
+.vc-panel {
+  background-color: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: 12px;
+  box-shadow: var(--t-card-shadow);
+  overflow: hidden;
+}
+
+.vc-panel-sm {
+  background-color: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: 10px;
+  box-shadow: var(--t-card-shadow);
+  overflow: hidden;
+}
+
+/* Panel header row */
+.vc-panel-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--t-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Filter pill */
+.vc-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--t-muted);
+  background: transparent;
+}
+.vc-filter-pill:hover {
+  color: var(--t-text-body);
+  background-color: rgba(0, 129, 242, 0.06);
+}
+.vc-filter-pill.active {
+  color: var(--t-text);
+  background-color: rgba(0, 129, 242, 0.10);
+  border-color: rgba(0, 129, 242, 0.22);
+}
+
+/* Table row hover */
+.vc-table-row {
+  transition: background-color 0.12s ease;
+  cursor: pointer;
+  position: relative;
+}
+.vc-table-row:hover {
+  background-color: rgba(0, 129, 242, 0.035);
+}
+
+/* Premium form input */
+.vc-input {
+  background-color: var(--t-input-bg);
+  border: 1px solid var(--t-border);
+  color: var(--t-text);
+  border-radius: 8px;
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+.vc-input:focus {
+  outline: none;
+  border-color: rgba(0, 129, 242, 0.38);
+  box-shadow: 0 0 0 3px rgba(0, 129, 242, 0.07);
+}
+.vc-input::placeholder {
+  color: var(--t-dim);
+}
+
+/* Stat number — Rajdhani big */
+.vc-stat-value {
+  font-family: var(--font-rajdhani), Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+/* Section label above headings */
+.vc-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-dim);
+}
+
+/* Status dot — inline live indicator */
+.vc-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.vc-dot-live {
+  background-color: #22c55e;
+  animation: vcDotPulse 2s ease-in-out infinite;
+}
+.vc-dot-warn {
+  background-color: #f59e0b;
+  animation: vcDotPulse 2s ease-in-out infinite;
+}
+.vc-dot-error {
+  background-color: #ef4444;
+  animation: vcDotPulse 2s ease-in-out infinite;
+}
+@keyframes vcDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Glow icon ring */
+.vc-icon-ring {
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: box-shadow 0.20s ease, transform 0.20s ease;
+}
+
+/* Scanline texture — applied to topbar/sidebar headers for depth */
+.vc-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.04) 2px,
+    rgba(0,0,0,0.04) 4px
+  );
+}
+
+/* Top accent bar — 1px blue gradient at very top of element */
+.vc-accent-top::before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 129, 242, 0.35) 20%,
+    rgba(0, 129, 242, 0.70) 50%,
+    rgba(0, 129, 242, 0.35) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Amber/gold accent top bar */
+.vc-accent-top-gold::before {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(201,168,76,0.40) 20%,
+    rgba(201,168,76,0.75) 50%,
+    rgba(201,168,76,0.40) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Empty state center block */
+.vc-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  gap: 12px;
+  text-align: center;
+}
+
+/* StatCard hover glow */
+.vc-stat-card {
+  background-color: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: var(--t-card-shadow);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+.vc-stat-card:hover {
+  border-color: rgba(0, 129, 242, 0.28);
+  box-shadow: 0 0 0 1px rgba(0, 129, 242, 0.10), 0 6px 24px rgba(0, 129, 242, 0.10);
+  transform: translateY(-1px);
+}
+.vc-stat-card-accent::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 12px 12px 0 0;
+}
+
 /* ─── Vault Co Utility Classes ─── */
 
 /* Orange CTA — matches onboarding portal primary button */

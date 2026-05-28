@@ -607,13 +607,14 @@ export default function ReportsPage() {
   const isLoading = loading || clientsLoading;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5">
       {viewReport && (
         <ViewReportModal report={viewReport} onClose={() => setViewReport(null)} />
       )}
 
       <PageHeader
         title="Reports"
+        sectionLabel="Veronica AI"
         description="Client performance reports — prepared by Veronica weekly"
         action={
           <div className="flex items-center gap-2">
@@ -656,19 +657,20 @@ export default function ReportsPage() {
           { label: "Avg. CPL (All Active)", value: isLoading ? "…" : avgCpl, icon: TrendingUp, color: "#ff8400" },
           { label: "Total Spend (MTD)", value: isLoading ? "…" : `$${totalSpend.toLocaleString()}`, icon: DollarSign, color: "#a78bfa" },
         ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl p-4"
-            style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
-          >
+          <div key={s.label} className="vc-stat-card" style={{ borderTopColor: s.color, borderTopWidth: "2px" }}>
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
-              style={{ backgroundColor: `${s.color}15`, border: `1px solid ${s.color}28` }}
+              style={{ backgroundColor: `${s.color}12`, border: `1px solid ${s.color}24` }}
             >
               <s.icon size={14} style={{ color: s.color }} />
             </div>
-            <div className="text-[18px] font-bold tracking-tight" style={{ color: "var(--t-text)" }}>{s.value}</div>
-            <div className="text-[11px] mt-0.5" style={{ color: "var(--t-muted)" }}>{s.label}</div>
+            <div
+              className="text-[22px] font-bold leading-none mb-1.5"
+              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
+            >
+              {s.value}
+            </div>
+            <div className="text-[11px] font-medium" style={{ color: "var(--t-muted)" }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -688,7 +690,7 @@ export default function ReportsPage() {
       )}
 
       {/* Reports table */}
-      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}>
+      <div className="vc-panel">
         {isLoading && (
           <div className="flex items-center gap-2 px-4 py-3 text-[12px]" style={{ borderBottom: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }}>
             <Loader2 size={12} className="animate-spin" />
@@ -744,7 +746,7 @@ export default function ReportsPage() {
                 return (
                   <tr
                     key={client.id}
-                    className="transition-colors group"
+                    className="vc-table-row group"
                     style={i < clients.length - 1 ? { borderBottom: "1px solid var(--t-border-subtle)" } : {}}
                   >
                     <td className="px-4 py-3.5">

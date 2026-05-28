@@ -14,6 +14,8 @@ import { runDiscoveryAgent, updateDiscoveryState } from "../discovery";
 import { runObjectionIntelAgent } from "../objection-intel";
 import { runDealRiskAgent } from "../deal-risk";
 import { runEmotionalAgent } from "../emotional";
+import { runRepPerformanceAgent } from "../rep-performance";
+import { buildTimelineEvents, buildPhaseTransitionEvent } from "./timeline";
 import { getKBContextForCall, getObjectionKBContext } from "../../kb/search";
 import { getProspectContextForSession } from "../prospect-memory";
 import { getSession, saveSession, saveLatestCoachingCard } from "../../memory/session-store";
@@ -34,6 +36,8 @@ import type {
   CoachingType,
   CoachingPriority,
   ObjectionCategory,
+  TimelineEvent,
+  RepPerformanceOutput,
 } from "../../types";
 
 // ─────────────────────────────────────────────────────────────
@@ -45,10 +49,14 @@ const CONFIG = {
   DISCOVERY_EVERY_N_CHUNKS: 1,
   // How often to run deal risk agent (every N chunks — slower, Haiku)
   DEAL_RISK_EVERY_N_CHUNKS: 3,
+  // How often to run rep performance agent (every N chunks — Haiku)
+  REP_PERF_EVERY_N_CHUNKS: 3,
   // Minimum confidence threshold to emit a coaching card
   MIN_CONFIDENCE_TO_EMIT: 0.55,
   // Max coaching history to keep in session state
   MAX_COACHING_HISTORY: 30,
+  // Max timeline events to keep in session (roll off oldest)
+  MAX_TIMELINE_EVENTS: 50,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -289,7 +297,65 @@ function buildEmotionalCard(
 }
 
 // ─────────────────────────────────────────────────────────────
+// Rep Warning Card — critical rep mistakes override standard coaching
+// Priority order: buying_signal > critical_rep_mistake > emotional_alert
+//                 > objection > discovery_warning > standard
+// ─────────────────────────────────────────────────────────────
+
+function buildRepWarningCard(
+  session: LiveCallSession,
+  chunk: TranscriptChunk,
+  repOutput: RepPerformanceOutput
+): CoachingCard | null {
+  // Only emit a card for critical warnings — high goes to timeline only
+  const criticalWarning = repOutput.warnings.find((w) => w.severity === "critical");
+  if (!criticalWarning) return null;
+
+  const coachingTypeMap: Record<string, CoachingType> = {
+    overtalking: "shut_up_listen",
+    interrupting: "rep_warning",
+    premature_pitching: "danger_warning",
+    weak_probing: "probe_deeper",
+    missing_emotional_signal: "probe_deeper",
+    overexplaining: "shut_up_listen",
+    question_stacking: "rep_warning",
+    poor_listening: "rep_warning",
+  };
+
+  const coachingType: CoachingType = coachingTypeMap[criticalWarning.type] ?? "rep_warning";
+
+  return {
+    id: generateCardId(),
+    call_id: session.call_id,
+    chunk_index: chunk.chunk_index,
+    timestamp_ms: Date.now(),
+    priority: "critical",
+    coaching_type: coachingType,
+    headline: criticalWarning.message,
+    primary_action: criticalWarning.suggested_fix,
+    why: criticalWarning.evidence,
+    what_not_to_do: criticalWarning.type === "premature_pitching"
+      ? "Do not continue pitching — the prospect has not felt enough pain to justify the investment"
+      : criticalWarning.type === "overtalking"
+      ? "Do not keep talking — the more you say, the less they hear"
+      : undefined,
+    context_tags: ["rep_coaching", criticalWarning.type, "correction"],
+    confidence: 0.88,
+    current_phase: session.phase,
+    source_agent: "orchestrator",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Priority resolver — which card wins?
+// Priority order (high to low):
+//   1. Buying signal (critical)
+//   2. Critical rep mistake (critical)
+//   3. Emotional shutdown/breakthrough (critical/high)
+//   4. Objection detected (high)
+//   5. Discovery warning / premature pitch (critical → high)
+//   6. Deal risk signal (varies)
+//   7. Standard discovery coaching (normal)
 // ─────────────────────────────────────────────────────────────
 
 const PRIORITY_RANK: Record<CoachingPriority, number> = {
@@ -299,13 +365,27 @@ const PRIORITY_RANK: Record<CoachingPriority, number> = {
   background: 1,
 };
 
+// Source agent tiebreaker — when two cards have the same priority,
+// prefer cards from more actionable sources
+const SOURCE_RANK: Record<string, number> = {
+  buying_signal: 7,
+  orchestrator: 6,   // rep warning cards
+  emotional_signals: 5,
+  objection_intel: 4,
+  discovery: 3,
+  deal_risk: 2,
+};
+
 function selectBestCard(cards: CoachingCard[]): CoachingCard | null {
   const eligible = cards.filter((c) => c.confidence >= CONFIG.MIN_CONFIDENCE_TO_EMIT);
   if (eligible.length === 0) return null;
 
-  return eligible.sort(
-    (a, b) => PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]
-  )[0];
+  return eligible.sort((a, b) => {
+    const priorityDiff = PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority];
+    if (priorityDiff !== 0) return priorityDiff;
+    // Tiebreak by source rank
+    return (SOURCE_RANK[b.source_agent] ?? 0) - (SOURCE_RANK[a.source_agent] ?? 0);
+  })[0];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -491,14 +571,19 @@ export async function processTranscriptChunk(
 
   // 7c. Run all agents in parallel — fast path (Haiku) + reasoning path (Sonnet)
   const shouldRunDealRisk = chunk.chunk_index % CONFIG.DEAL_RISK_EVERY_N_CHUNKS === 0;
+  const shouldRunRepPerf = chunk.chunk_index % CONFIG.REP_PERF_EVERY_N_CHUNKS === 0 && session.transcript.length >= 3;
   const hasProspectSpeech = chunk.speaker === "prospect";
+  const hasRepSpeech = chunk.speaker === "rep";
+
+  // Capture discovery depth BEFORE agents update it (for timeline milestone detection)
+  const prevDiscoveryDepth = session.discovery.depth_score;
 
   const agentOptions = {
     kb_context: kbContext || undefined,
     prospect_memory: prospectMemory || undefined,
   };
 
-  const [discoveryResult, objectionResult, dealRiskResult, emotionalResult] = await Promise.allSettled([
+  const [discoveryResult, objectionResult, dealRiskResult, emotionalResult, repPerfResult] = await Promise.allSettled([
     // Discovery: always (every chunk) — with KB + prospect memory context
     runDiscoveryAgent(session, agentOptions),
     // Objection Intel: only when objection keywords detected — with targeted objection KB
@@ -512,6 +597,8 @@ export async function processTranscriptChunk(
     shouldRunDealRisk ? runDealRiskAgent(session) : Promise.resolve(null),
     // Emotional: every chunk with prospect speech
     hasProspectSpeech ? runEmotionalAgent(session) : Promise.resolve(null),
+    // Rep Performance: every 3rd chunk (or when rep spoke)
+    shouldRunRepPerf || hasRepSpeech ? runRepPerformanceAgent(session) : Promise.resolve(null),
   ]);
 
   // Process discovery result
@@ -604,6 +691,55 @@ export async function processTranscriptChunk(
     }
   }
 
+  // Process rep performance result — emit critical warning cards
+  let repPerfOutput: RepPerformanceOutput | null = null;
+  if (repPerfResult.status === "fulfilled" && repPerfResult.value !== null) {
+    const rp = repPerfResult.value;
+    if (rp) {
+      session.agent_outputs.rep_performance = rp.output;
+      repPerfOutput = rp.output;
+
+      // Critical rep mistakes get coaching cards — they override standard discovery cards
+      const repCard = buildRepWarningCard(session, chunk, rp.output);
+      if (repCard) candidateCards.push(repCard);
+
+      persistAgentOutput(
+        session.call_id, "rep_performance", chunk.chunk_index,
+        rp.output as unknown as Record<string, unknown>,
+        rp.latency_ms, rp.model
+      ).catch(console.error);
+    }
+  }
+
+  // Generate timeline events for this chunk
+  const newTimelineEvents: TimelineEvent[] = buildTimelineEvents({
+    session,
+    chunk,
+    prevDiscoveryDepth,
+    discovery: discoveryResult.status === "fulfilled" ? discoveryResult.value?.output : null,
+    objection: objectionResult.status === "fulfilled" && objectionResult.value ? objectionResult.value.output : null,
+    dealRisk: dealRiskResult.status === "fulfilled" && dealRiskResult.value ? dealRiskResult.value.output : null,
+    emotional: emotionalResult.status === "fulfilled" && emotionalResult.value ? emotionalResult.value.output : null,
+    repPerformance: repPerfOutput,
+  });
+
+  // Add phase transition event if phase changed
+  if (newPhase && newPhase !== session.phase) {
+    // Note: session.phase was already updated above — we use the value before it changed
+    // (The phase was already set to newPhase before this point — emit the event)
+    newTimelineEvents.unshift(buildPhaseTransitionEvent(
+      chunk.chunk_index,
+      session.phase, // current (which is now newPhase)
+      newPhase
+    ));
+  }
+
+  // Append to session timeline, keep bounded
+  session.timeline = [
+    ...session.timeline,
+    ...newTimelineEvents,
+  ].slice(-CONFIG.MAX_TIMELINE_EVENTS);
+
   // 8. Select the best coaching card
   const bestCard = selectBestCard(candidateCards);
 
@@ -641,5 +777,6 @@ export async function processTranscriptChunk(
     session_phase: session.phase,
     session_scores: session.scores,
     processing_time_ms: totalLatency,
+    new_timeline_events: newTimelineEvents,
   };
 }

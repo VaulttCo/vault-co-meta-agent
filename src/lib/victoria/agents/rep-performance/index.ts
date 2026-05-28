@@ -43,6 +43,9 @@ function buildRuleBasedOutput(session: LiveCallSession): RepPerformanceOutput {
 
   // Build ordered coaching priorities
   const coaching_priorities: string[] = [];
+  if (metrics.buying_signal_ignore_count > 0) {
+    coaching_priorities.push("Buying signal ignored — slow down and ask a trial close immediately.");
+  }
   if (metrics.premature_pitch_events > 0) {
     coaching_priorities.push("Abort the pitch — return to discovery. Pain is not vivid enough yet.");
   }
@@ -58,6 +61,9 @@ function buildRuleBasedOutput(session: LiveCallSession): RepPerformanceOutput {
   if (metrics.interruption_count > 0) {
     coaching_priorities.push("Wait for the prospect to fully finish before responding. Silence is power.");
   }
+  if (metrics.feature_vs_outcome_count > 0) {
+    coaching_priorities.push("Connect features to outcomes. After any feature, say: 'What that means for you is…'");
+  }
   if (coaching_priorities.length === 0) {
     coaching_priorities.push("Maintain current approach — stay curious, keep digging into pain and impact.");
   }
@@ -71,6 +77,10 @@ function buildRuleBasedOutput(session: LiveCallSession): RepPerformanceOutput {
       rep_percent: metrics.talk_ratio.rep_percent,
       prospect_percent: metrics.talk_ratio.prospect_percent,
     },
+    interruptions: metrics.interruption_count,
+    momentum_direction: "stable",  // Populated by orchestrator using momentum-tracker
+    trust_trend: "stable",         // Populated by orchestrator using trust-tracker
+    urgency_trend: "stable",       // Populated by orchestrator using urgency-tracker
   };
 }
 
@@ -147,6 +157,10 @@ export async function runRepPerformanceAgent(
           (p) => !(result.output.positive_observations ?? []).some((ai) => ai.includes(p.slice(0, 15)))
         ),
       ].slice(0, 3),
+      interruptions: metrics.interruption_count,
+      momentum_direction: result.output.momentum_direction ?? "stable",
+      trust_trend: result.output.trust_trend ?? "stable",
+      urgency_trend: result.output.urgency_trend ?? "stable",
     };
 
     return {

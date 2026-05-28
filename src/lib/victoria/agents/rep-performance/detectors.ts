@@ -2,6 +2,10 @@
 // Pure functions — no AI, no I/O. All run synchronously.
 // Server-side only.
 
+// Re-export from focused detector modules so metrics.ts can import from one place
+export { detectQuestionStacking, type QuestionStackEvent } from "./question-stack-detector";
+export { detectOverexplaining, type OverexplainingEvent } from "./overexplaining-detector";
+
 import type { TranscriptChunk, LiveCallSession } from "../../types";
 
 // ─────────────────────────────────────────────────────────────
@@ -114,28 +118,49 @@ export function detectPrematurePitching(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Question Stacking
+// Buying Signal Ignored
+// Detect when rep responds to a prospect buying signal by pitching
+// features instead of asking a trial close question.
 // ─────────────────────────────────────────────────────────────
 
-export interface QuestionStackingEvent {
-  chunk_index: number;
-  question_count: number;
-  text_preview: string;
+export interface BuyingSignalIgnoreEvent {
+  chunk_index: number;         // The rep turn that ignored the signal
+  prospect_signal: string;     // What the prospect said (first 60 chars)
+  rep_response_preview: string;// What the rep said instead
 }
 
-export function detectQuestionStacking(transcript: TranscriptChunk[]): QuestionStackingEvent[] {
-  const events: QuestionStackingEvent[] = [];
+const TRIAL_CLOSE_PATTERNS = [
+  /what would (it|that) take/i,
+  /what would need to (be true|happen)/i,
+  /does that make sense/i,
+  /how does that (sound|feel|look)/i,
+  /are you (seeing|feeling|thinking)/i,
+  /can you see (how|yourself|this)/i,
+  /what('?s| is) (stopping|holding)/i,
+  /what('?s| is) your (gut|instinct|feeling)/i,
+  /where (are you|do you sit) on (that|this)/i,
+];
 
-  for (let i = 0; i < transcript.length; i++) {
+export function detectBuyingSignalIgnore(transcript: TranscriptChunk[]): BuyingSignalIgnoreEvent[] {
+  const events: BuyingSignalIgnoreEvent[] = [];
+
+  for (let i = 0; i < transcript.length - 1; i++) {
     const chunk = transcript[i];
-    if (chunk.speaker !== "rep") continue;
+    if (chunk.speaker !== "prospect" || !chunk.contains_buying_signal) continue;
 
-    const questionCount = (chunk.text.match(/\?/g) ?? []).length;
-    if (questionCount >= 2) {
+    // Find the next rep turn
+    const nextRep = transcript.slice(i + 1).find((c) => c.speaker === "rep");
+    if (!nextRep) continue;
+
+    const hasPitchPattern = PITCH_PATTERNS.some((p) => p.test(nextRep.text));
+    const hasTrialClose = TRIAL_CLOSE_PATTERNS.some((p) => p.test(nextRep.text));
+
+    // Rep pitched features instead of asking a trial close
+    if (hasPitchPattern && !hasTrialClose) {
       events.push({
-        chunk_index: i,
-        question_count: questionCount,
-        text_preview: chunk.text.slice(0, 90),
+        chunk_index: nextRep.chunk_index,
+        prospect_signal: chunk.text.slice(0, 60),
+        rep_response_preview: nextRep.text.slice(0, 60),
       });
     }
   }
@@ -144,28 +169,51 @@ export function detectQuestionStacking(transcript: TranscriptChunk[]): QuestionS
 }
 
 // ─────────────────────────────────────────────────────────────
-// Overexplaining
+// Feature vs Outcome Language
+// Detect when rep talks about FEATURES of the product instead of
+// OUTCOMES/RESULTS the prospect actually cares about.
 // ─────────────────────────────────────────────────────────────
 
-export interface OverexplainingEvent {
+export interface FeatureVsOutcomeEvent {
   chunk_index: number;
+  feature_phrase: string;
   word_count: number;
-  text_preview: string;
 }
 
-export function detectOverexplaining(transcript: TranscriptChunk[]): OverexplainingEvent[] {
-  const events: OverexplainingEvent[] = [];
+const FEATURE_LANGUAGE_PATTERNS = [
+  /we (have|use|offer|include|provide|run|build|set up) (a |the |an |our )?(crm|dashboard|portal|platform|automation|software|tool|tracking|system|pipeline)/i,
+  /it('?s| is) (built|powered|integrated|connected|synced|automated)/i,
+  /we (create|build|install|set up|manage|run) (your )?(website|landing page|funnel|ad campaign|google|facebook|meta)/i,
+  /we (include|add|set up) (a |the |an )?(follow.?up|email|sms|text|drip|sequence)/i,
+  /our (technology|tech|software|platform|system|process|dashboard|reporting)/i,
+];
+
+const OUTCOME_LANGUAGE_PATTERNS = [
+  /(more|extra|additional) (revenue|income|profit|jobs|leads|bookings|calls|clients)/i,
+  /grow(ing|th) (your )?(business|revenue|team)/i,
+  /roi|return on/i,
+  /stop (losing|missing|wasting)/i,
+  /what (this|that) means for you/i,
+  /the (result|impact|difference) (is|will be|for you)/i,
+];
+
+export function detectFeatureVsOutcome(transcript: TranscriptChunk[]): FeatureVsOutcomeEvent[] {
+  const events: FeatureVsOutcomeEvent[] = [];
 
   for (let i = 0; i < transcript.length; i++) {
     const chunk = transcript[i];
     if (chunk.speaker !== "rep") continue;
 
-    const words = countWords(chunk.text);
-    if (words > 100) {
+    const hasFeature = FEATURE_LANGUAGE_PATTERNS.some((p) => p.test(chunk.text));
+    const hasOutcome = OUTCOME_LANGUAGE_PATTERNS.some((p) => p.test(chunk.text));
+
+    // Feature-heavy without connecting to outcomes
+    if (hasFeature && !hasOutcome && countWords(chunk.text) > 30) {
+      const match = FEATURE_LANGUAGE_PATTERNS.map((p) => chunk.text.match(p)).filter(Boolean)[0];
       events.push({
         chunk_index: i,
-        word_count: words,
-        text_preview: chunk.text.slice(0, 90),
+        feature_phrase: match?.[0]?.slice(0, 50) ?? chunk.text.slice(0, 50),
+        word_count: countWords(chunk.text),
       });
     }
   }

@@ -70,7 +70,7 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { buildCouncilPrompt, applyCouncilToDraft } from "@/lib/council/buildCouncilPrompt";
+import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse } from "@/lib/council/types";
 
 // ─────────────────────────────────────────────────────────────
@@ -2762,24 +2762,42 @@ function AICampaignBuilderContent() {
         "improve_and_apply_draft"
       );
 
+      // ── Phase 3b: Send to Hermes ─────────────────────────────────────────
+      // Sanitize prompt — strip control characters that may trip VPS validation
+      // Sanitize prompt — strip null bytes and non-printable control chars
+      const safePrompt = councilPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
+
       let rawCouncilOutput = "";
       try {
         const hermesRes = await fetch("/api/veronica/hermes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: councilPrompt }),
+          body: JSON.stringify({ prompt: safePrompt }),
         });
-        const hermesData = await hermesRes.json();
+
+        // Try to parse the response body regardless of status
+        let hermesData: { output?: string | null; error?: string | null } = {};
+        try { hermesData = await hermesRes.json(); } catch { /* unparseable body */ }
+
         if (!hermesRes.ok || hermesData.error) {
-          throw new Error(hermesData.error ?? `Hermes HTTP ${hermesRes.status}`);
+          // Surface a Veronica-branded warning, not the internal error details
+          if (generationAttemptIdRef.current === attemptId) {
+            setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
+          }
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[Council] Hermes error:", hermesData.error ?? `HTTP ${hermesRes.status}`);
+          }
+          return;
         }
         rawCouncilOutput = (hermesData.output as string) ?? "";
       } catch (hermesErr) {
-        const msg = hermesErr instanceof Error ? hermesErr.message : String(hermesErr);
         if (generationAttemptIdRef.current === attemptId) {
-          setCouncilWarning(`Council improvement failed — original Veronica draft was preserved. (${msg.slice(0, 120)})`);
+          setCouncilWarning("Veronica couldn't reach the strategy engine. Your original draft was preserved.");
         }
-        return; // keep initialPlan
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Council] Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
+        }
+        return;
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
@@ -2788,12 +2806,22 @@ function AICampaignBuilderContent() {
       setPipelinePhase("Veronica is applying strategic improvements…");
 
       let councilResult: CouncilResponse | null = null;
-      try {
-        const clean = rawCouncilOutput.replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
-        councilResult = JSON.parse(clean) as CouncilResponse;
-      } catch {
+      const jsonStr = safeExtractJson(rawCouncilOutput);
+      if (jsonStr) {
+        try {
+          councilResult = JSON.parse(jsonStr) as CouncilResponse;
+        } catch {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[Council] JSON parse failed after extraction. Output length:", rawCouncilOutput.length);
+          }
+        }
+      } else if (process.env.NODE_ENV !== "production") {
+        console.warn("[Council] safeExtractJson returned null. Raw output length:", rawCouncilOutput.length);
+      }
+
+      if (!councilResult) {
         if (generationAttemptIdRef.current === attemptId) {
-          setCouncilWarning("Council returned non-structured output — original Veronica draft was preserved.");
+          setCouncilWarning("Veronica applied strategic analysis with minor warnings. Original draft structure preserved.");
         }
         return;
       }

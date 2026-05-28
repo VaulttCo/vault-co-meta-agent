@@ -1720,6 +1720,595 @@ function HermesAssistPanel({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Hermes Campaign Builder Assist (builder tab, below output)
+// ─────────────────────────────────────────────────────────────
+
+const CAMPAIGN_ACTIONS: Array<{
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  instructions: string;
+}> = [
+  {
+    id: "improve",
+    label: "Improve Draft",
+    icon: Sparkles,
+    color: "#0081f2",
+    instructions: `\n\nTask: Analyze this campaign and return specific, actionable improvements. For each area return: AREA | CURRENT ISSUE | RECOMMENDED CHANGE | EXPECTED IMPACT. Cover: primary copy hooks, offer clarity, audience targeting precision, CTA strength, headline variations, lead form conversion, and retargeting readiness.`,
+  },
+  {
+    id: "qa",
+    label: "QA Before Approval",
+    icon: ShieldCheck,
+    color: "#f59e0b",
+    instructions: `\n\nTask: Perform a structured pre-approval QA audit. Score each area /10 and provide brief notes:\n1. Offer Clarity\n2. Audience Fit\n3. Creative Angle\n4. Lead Form Readiness\n5. Retargeting Readiness\n6. Budget Safety\n7. Compliance Risk (lower score = higher risk)\n8. Tracking Readiness\n9. Approval Readiness\n10. Asset Completeness\n\nEnd with:\nOVERALL READINESS: X/100\nHARD BLOCKERS: [list or "None"]\nGREEN FLAGS: [what is ready]\nRECOMMENDED ACTION: Approve / Revise First / Block`,
+  },
+  {
+    id: "meta_payload",
+    label: "Meta Push Payload",
+    icon: RadioTower,
+    color: "#a78bfa",
+    instructions: `\n\nTask: Produce a structured Meta campaign push payload DRAFT. This is a DRAFT ONLY — status must be PAUSED — do not include API calls or activation steps. Output as structured JSON-ready text:\n{\n  campaign_name,\n  objective,\n  buying_type: "AUCTION",\n  status: "PAUSED",\n  ad_sets: [{name, audience, daily_budget, optimization_event, placements}],\n  ads: [{name, format, creative_requirements}],\n  lead_form_requirements: {fields, consent_language, thank_you_copy},\n  tracking_requirements: {pixel_event, custom_conversions},\n  validation_warnings: []\n}\nvalidation_warnings must list every item a human must verify before pushing to Meta.`,
+  },
+  {
+    id: "retargeting",
+    label: "Retargeting Layer",
+    icon: TrendingUp,
+    color: "#22c55e",
+    instructions: `\n\nTask: Design a complete retargeting campaign layer. Include:\n- Audience segments (website visitors 30/60/90d, video viewers 75%+, lead form openers, page engagers 60d)\n- Messaging angle per segment (warm/hot tone — they know the brand)\n- 3 ad copy variations per segment with different urgency hooks\n- Offer escalation strategy (what additional value for retargeting)\n- Budget allocation (% of total)\n- Frequency caps per segment\n- Exclusion audiences (existing customers, current leads)\n- Expected CPL vs cold prospecting`,
+  },
+  {
+    id: "ghl_workflow",
+    label: "GHL Follow-Up Workflow",
+    icon: Workflow,
+    color: "#0081f2",
+    instructions: `\n\nTask: Create a detailed GHL follow-up workflow BLUEPRINT. This is a blueprint only — do not activate or push. Include:\n- Trigger: Meta lead form submission\n- Sequence with exact timing: 0 min, 5 min, 1 hr, 4 hr, 24 hr, 48 hr, 7 days, 30 days\n- SMS copy per step (160 chars max, personalized, TCPA-compliant)\n- Email subject + body per step\n- Internal notification setup with owner assignment\n- Setter task creation (call within 5 min)\n- AI voice trigger condition (no call placed within 10 min)\n- STOP conditions (appointment booked)\n- Tags to apply on entry and completion\n- Pipeline stage changes at each step`,
+  },
+  {
+    id: "launch_checklist",
+    label: "Launch Checklist",
+    icon: ListChecks,
+    color: "#c9a84c",
+    instructions: `\n\nTask: Create a pre-launch readiness checklist. Organize into sections:\n\nMETA ACCOUNT: pixel, ad account, Facebook Page, BM permissions, payment method\nCAMPAIGN STRUCTURE: objective, ad sets, budget, targeting, placements\nCREATIVE ASSETS: approved, correct dimensions, captions on/off, brand compliance\nLEAD FORM: all fields present, TCPA consent language, thank-you page live, CRM connection\nGHL WORKFLOW: trigger active, SMS/email copy approved, setter task enabled, STOP conditions set\nCOMPLIANCE: disallowed phrases removed, insurance language reviewed, privacy policy URL live\nTRACKING: pixel firing, lead event confirmed, CRM sync tested\nAPPROVALS: internal approval, creative library approval, campaign draft status\n\nMark each: [REQUIRED] or [RECOMMENDED]\nEnd with: LAUNCH GATE SCORE: X/Y required items ready`,
+  },
+  {
+    id: "approval_summary",
+    label: "Approval Summary",
+    icon: FileText,
+    color: "#22c55e",
+    instructions: `\n\nTask: Write an operator-ready approval summary. Format:\n\nCAMPAIGN OVERVIEW: (2-3 sentences)\nOFFER & POSITIONING: (what we're offering and why it converts)\nAUDIENCE STRATEGY: (who, why, expected CPL)\nBUDGET PLAN: (allocation and scaling trigger)\nCOMPLIANCE STATUS: (flags or clean)\nCREATIVE STATUS: (assets and approval state)\nGHL WORKFLOW STATUS: (follow-up readiness)\nRISKS & MITIGATIONS: (honest risk assessment)\nMISSING ITEMS: (blockers before approval)\nRECOMMENDED ACTION: (specific next step)\n\nThis summary will be reviewed by the operator before final approval.`,
+  },
+  {
+    id: "operator_tasks",
+    label: "Create Operator Tasks",
+    icon: ClipboardList,
+    color: "#c9a84c",
+    instructions: `\n\nTask: Extract all operator action items needed to launch this campaign. Format each task:\nTASK: [title]\nPRIORITY: Urgent/High/Medium/Low\nTYPE: integration/creative/campaign/ghl_workflow/internal_admin/data_cleanup\nACTION: [specific 1-2 sentence action]\nBLOCKS: [what cannot launch until this is done]\n\nGroup into:\n1. BLOCKERS (must complete before any launch)\n2. REQUIRED (needed before campaign goes live)\n3. RECOMMENDED (improves performance)\n\nEnd with: TOTAL TASKS: X | BLOCKERS: Y | EST. DAYS TO LAUNCH-READY: Z`,
+  },
+];
+
+function HermesCampaignAssist({
+  selectedClient,
+  goal,
+  service,
+  market,
+  budget,
+  displayPlan,
+  selectedAssets,
+}: {
+  selectedClient: Client | null;
+  goal: string;
+  service: string;
+  market: string;
+  budget: string;
+  displayPlan: CampaignDraft | null;
+  selectedAssets: CreativeAsset[];
+}) {
+  const [activeActionId, setActiveActionId] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [runStatus, setRunStatus] = useState<"idle" | "success" | "error">("idle");
+  const [output, setOutput] = useState<string | null>(null);
+  const [autoSkillCreated, setAutoSkillCreated] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedApproval, setSavedApproval] = useState(false);
+  const [savedTask, setSavedTask] = useState(false);
+  const [savedSkill, setSavedSkill] = useState(false);
+  const [savingApproval, setSavingApproval] = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
+  const [savingSkill, setSavingSkill] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [campaignNotes, setCampaignNotes] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
+
+  function buildContext(): string {
+    const lines: string[] = [];
+    lines.push("=== VAULT CO SAFETY RULES ===");
+    lines.push(
+      "All outputs are DRAFT/APPROVAL-READY only. Do NOT include instructions to launch, activate, publish, or change budget. Campaign status must always be PAUSED or pending-approval."
+    );
+    if (selectedClient) {
+      lines.push("\n=== CLIENT ===");
+      lines.push(`Name: ${selectedClient.name}`);
+      lines.push(`Market: ${market || selectedClient.market || "—"}`);
+      lines.push(`Monthly Budget: ${budget || selectedClient.monthlyBudget || "—"}`);
+      if (selectedClient.services?.length) {
+        lines.push(`Services: ${selectedClient.services.join(", ")}`);
+      }
+    }
+    lines.push("\n=== CAMPAIGN PARAMETERS ===");
+    if (goal) lines.push(`Goal: ${goal}`);
+    if (service) lines.push(`Service: ${service}`);
+    if (market) lines.push(`Market: ${market}`);
+
+    if (displayPlan) {
+      lines.push("\n=== GENERATED CAMPAIGN DRAFT ===");
+      lines.push(`Name: ${displayPlan.campaignName}`);
+      lines.push(`Status: ${displayPlan.status}`);
+      lines.push(`Objective: ${displayPlan.metaStructure.campaignObjective}`);
+      lines.push(`Campaign Type: ${displayPlan.metaStructure.campaignType}`);
+      lines.push(`Audience: ${displayPlan.metaStructure.audience}`);
+      lines.push(`Location: ${displayPlan.metaStructure.locationTargeting}`);
+      lines.push(`Budget Split: ${displayPlan.metaStructure.budgetSplit}`);
+      lines.push(`Optimization Event: ${displayPlan.metaStructure.optimizationEvent}`);
+      if (displayPlan.metaStructure.adSetNames?.length) {
+        lines.push(`Ad Sets: ${displayPlan.metaStructure.adSetNames.join(" | ")}`);
+      }
+      if (displayPlan.adCopy?.primaryTexts?.[0]) {
+        lines.push(`\nAD COPY V1: ${displayPlan.adCopy.primaryTexts[0].slice(0, 400)}`);
+      }
+      if (displayPlan.adCopy?.headlines?.length) {
+        lines.push(`Headlines: ${displayPlan.adCopy.headlines.join(" / ")}`);
+      }
+      if (displayPlan.adCopy?.cta) lines.push(`CTA: ${displayPlan.adCopy.cta}`);
+      if (displayPlan.creativeDirection) {
+        lines.push(`\nCreative Angle: ${displayPlan.creativeDirection.angle}`);
+        lines.push(`Hook: ${displayPlan.creativeDirection.hook}`);
+        lines.push(`Format: ${displayPlan.creativeDirection.recommendedFormat}`);
+      }
+      if (displayPlan.compliance) {
+        lines.push(`\nCompliance: ${displayPlan.compliance.metaRisk}`);
+        if (displayPlan.compliance.disallowedPhrases?.length) {
+          lines.push(`Disallowed phrases: ${displayPlan.compliance.disallowedPhrases.slice(0, 3).join("; ")}`);
+        }
+      }
+      if (displayPlan.leadForm) {
+        lines.push(`\nLead Form: ${displayPlan.leadForm.formName}`);
+        lines.push(`Intro: ${displayPlan.leadForm.introCopy?.slice(0, 200)}`);
+      }
+    }
+    if (selectedAssets.length > 0) {
+      lines.push(
+        `\nSelected Assets: ${selectedAssets
+          .map((a) => `${a.assetType} (${a.approvedForAds ? "approved" : "not approved"})`)
+          .join(", ")}`
+      );
+    }
+    return lines.join("\n");
+  }
+
+  async function runAction(actionId: string) {
+    const action = CAMPAIGN_ACTIONS.find((a) => a.id === actionId);
+    if (!action || running) return;
+
+    const prompt = buildContext() + action.instructions;
+    setActiveActionId(actionId);
+    setRunning(true);
+    setRunStatus("idle");
+    setOutput(null);
+    setErrorMsg(null);
+    setSavedApproval(false);
+    setSavedTask(false);
+    setSavedSkill(false);
+    setAutoSkillCreated(false);
+
+    try {
+      const res = await fetch("/api/veronica/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setRunStatus("error");
+        setErrorMsg(data.error ?? "Hermes returned an error.");
+      } else {
+        setRunStatus("success");
+        setOutput(data.output ?? "");
+        setAutoSkillCreated(data.auto_skill_created === true);
+      }
+    } catch {
+      setRunStatus("error");
+      setErrorMsg("Network error. Hermes is unreachable.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function sendToApprovals() {
+    if (!output) return;
+    setSavingApproval(true);
+    try {
+      const action = CAMPAIGN_ACTIONS.find((a) => a.id === activeActionId);
+      const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const title = [
+        action?.label ?? "Hermes Output",
+        selectedClient?.name,
+        date,
+      ]
+        .filter(Boolean)
+        .join(" — ");
+      const res = await fetch("/api/veronica/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selectedClient?.id,
+          draftType: "campaign_draft",
+          title,
+          content: output,
+          agentsUsed: ["hermes"],
+          dataSources: [],
+        }),
+      });
+      if (res.ok) setSavedApproval(true);
+    } catch {
+      // non-blocking
+    } finally {
+      setSavingApproval(false);
+    }
+  }
+
+  async function saveAsTask() {
+    if (!output) return;
+    setSavingTask(true);
+    try {
+      const action = CAMPAIGN_ACTIONS.find((a) => a.id === activeActionId);
+      const firstLine = (output.split("\n")[0] ?? "").slice(0, 70).trim() || (action?.label ?? "Hermes Output");
+      const title = selectedClient ? `${firstLine} — ${selectedClient.name}` : firstLine;
+      const res = await fetch("/api/operator-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: selectedClient?.id,
+          title,
+          description: output,
+          taskType: activeActionId === "ghl_workflow" ? "ghl_workflow" : activeActionId === "operator_tasks" ? "internal_admin" : "campaign",
+          priority: activeActionId === "qa" || activeActionId === "launch_checklist" ? "high" : "medium",
+          source: "veronica",
+          sourceAgent: "hermes",
+        }),
+      });
+      if (res.ok) setSavedTask(true);
+    } catch {
+      // non-blocking
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  async function saveAsSkill() {
+    if (!output) return;
+    setSavingSkill(true);
+    try {
+      const action = CAMPAIGN_ACTIONS.find((a) => a.id === activeActionId);
+      const res = await fetch("/api/veronica/hermes/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: action?.label ?? "Campaign Assist Output",
+          category: "Campaign Framework",
+          description: `Generated by Hermes Campaign Assist: ${action?.label}`,
+          instructions: output,
+        }),
+      });
+      if (res.ok) setSavedSkill(true);
+    } catch {
+      // non-blocking
+    } finally {
+      setSavingSkill(false);
+    }
+  }
+
+  async function copyOutput() {
+    if (!output) return;
+    try {
+      await navigator.clipboard.writeText(output);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard not available in all contexts
+    }
+  }
+
+  function useAsCampaignNotes() {
+    if (!output) return;
+    const action = CAMPAIGN_ACTIONS.find((a) => a.id === activeActionId);
+    const ts = new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    const note = `\n\n--- ${action?.label ?? "Hermes Output"} (${ts}) ---\n${output}`;
+    setCampaignNotes((prev) => prev + note);
+    setShowNotes(true);
+  }
+
+  const activeAction = CAMPAIGN_ACTIONS.find((a) => a.id === activeActionId);
+  const hasContext = !!(selectedClient && goal && service) || !!displayPlan;
+
+  if (!hasContext) return null;
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{
+        backgroundColor: "var(--t-surface)",
+        border: "1px solid rgba(201,168,76,0.2)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 border-b"
+        style={{ borderColor: "rgba(201,168,76,0.15)" }}
+      >
+        <Zap size={13} style={{ color: "#c9a84c" }} />
+        <span className="text-[12px] font-semibold" style={{ color: "var(--t-text)" }}>
+          Hermes Campaign Builder Assist
+        </span>
+        <span
+          className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+          style={{
+            color: "#c9a84c",
+            backgroundColor: "rgba(201,168,76,0.1)",
+            border: "1px solid rgba(201,168,76,0.2)",
+          }}
+        >
+          Operator Only
+        </span>
+        {/* Context badges */}
+        <div className="ml-auto flex items-center gap-1 flex-wrap">
+          {selectedClient && (
+            <span
+              className="text-[9px] px-2 py-0.5 rounded-full"
+              style={{
+                color: "#0081f2",
+                backgroundColor: "rgba(0,129,242,0.1)",
+                border: "1px solid rgba(0,129,242,0.18)",
+              }}
+            >
+              {selectedClient.name}
+            </span>
+          )}
+          {goal && (
+            <span
+              className="text-[9px] px-2 py-0.5 rounded-full"
+              style={{
+                color: "var(--t-dim)",
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+              }}
+            >
+              {goal}
+            </span>
+          )}
+          {displayPlan && (
+            <span
+              className="text-[9px] px-2 py-0.5 rounded-full"
+              style={{
+                color: "#22c55e",
+                backgroundColor: "rgba(34,197,94,0.08)",
+                border: "1px solid rgba(34,197,94,0.15)",
+              }}
+            >
+              Draft active
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 space-y-3">
+        {/* Quick action buttons */}
+        <div className="grid grid-cols-4 gap-1.5">
+          {CAMPAIGN_ACTIONS.map((action) => {
+            const Icon = action.icon;
+            const isActive = activeActionId === action.id;
+            const isLoading = isActive && running;
+            return (
+              <button
+                key={action.id}
+                disabled={running}
+                onClick={() => runAction(action.id)}
+                className="flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-center transition-all disabled:opacity-40"
+                style={{
+                  backgroundColor: isActive
+                    ? `${action.color}15`
+                    : "var(--t-surface-2)",
+                  border: `1px solid ${isActive ? `${action.color}35` : "var(--t-border)"}`,
+                  color: isActive ? action.color : "var(--t-muted)",
+                }}
+              >
+                {isLoading ? (
+                  <Loader2 size={11} className="animate-spin" style={{ color: action.color }} />
+                ) : (
+                  <Icon size={11} style={{ color: isActive ? action.color : "var(--t-dim)" }} />
+                )}
+                <span className="text-[9px] font-semibold leading-tight">{action.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Running indicator */}
+        {running && activeAction && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)" }}>
+            <Loader2 size={11} className="animate-spin" style={{ color: "#c9a84c" }} />
+            <span className="text-[11px]" style={{ color: "#c9a84c" }}>
+              Hermes running: {activeAction.label}…
+            </span>
+          </div>
+        )}
+
+        {/* Output */}
+        {runStatus === "success" && output && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <CheckCircle2 size={10} style={{ color: "#22c55e" }} />
+              <span className="text-[10px] font-semibold" style={{ color: "#22c55e" }}>
+                {activeAction?.label} complete
+              </span>
+              {autoSkillCreated && (
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded flex items-center gap-0.5"
+                  style={{ color: "#c9a84c", backgroundColor: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.2)" }}
+                >
+                  <Zap size={7} />
+                  Skill auto-saved
+                </span>
+              )}
+            </div>
+            <pre
+              className="text-[11px] leading-relaxed whitespace-pre-wrap break-words overflow-auto rounded-lg p-3"
+              style={{
+                color: "var(--t-muted)",
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+                maxHeight: "300px",
+              }}
+            >
+              {output}
+            </pre>
+
+            {/* Output actions */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Send to Approvals */}
+              {savedApproval ? (
+                <span className="flex items-center gap-1 text-[10px]" style={{ color: "#22c55e" }}>
+                  <CheckCircle2 size={9} />Sent
+                  <a href="/approvals" className="hover:underline" style={{ color: "#a78bfa" }}>View →</a>
+                </span>
+              ) : (
+                <button
+                  disabled={savingApproval}
+                  onClick={sendToApprovals}
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity disabled:opacity-50"
+                  style={{ color: "#a78bfa", borderColor: "rgba(167,139,250,0.25)", backgroundColor: "rgba(167,139,250,0.06)" }}
+                >
+                  {savingApproval ? <Loader2 size={9} className="animate-spin" /> : <FileText size={9} />}
+                  {savingApproval ? "Saving…" : "Send to Approvals"}
+                </button>
+              )}
+
+              {/* Save as Task */}
+              {savedTask ? (
+                <span className="flex items-center gap-1 text-[10px]" style={{ color: "#c9a84c" }}>
+                  <CheckCircle2 size={9} />Task saved
+                  <a href="/operator-queue" className="hover:underline" style={{ color: "#a78bfa" }}>View →</a>
+                </span>
+              ) : (
+                <button
+                  disabled={savingTask}
+                  onClick={saveAsTask}
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity disabled:opacity-50"
+                  style={{ color: "#6b7a99", borderColor: "rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.03)" }}
+                >
+                  {savingTask ? <Loader2 size={9} className="animate-spin" /> : <ClipboardList size={9} />}
+                  {savingTask ? "Saving…" : "Save as Task"}
+                </button>
+              )}
+
+              {/* Copy */}
+              <button
+                onClick={copyOutput}
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity"
+                style={{ color: copied ? "#22c55e" : "var(--t-dim)", borderColor: "var(--t-border)", backgroundColor: "var(--t-surface-2)" }}
+              >
+                <CheckSquare size={9} />
+                {copied ? "Copied!" : "Copy"}
+              </button>
+
+              {/* Use as Campaign Notes */}
+              <button
+                onClick={useAsCampaignNotes}
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity"
+                style={{ color: "var(--t-dim)", borderColor: "var(--t-border)", backgroundColor: "var(--t-surface-2)" }}
+              >
+                <MessageSquare size={9} />
+                Add to Notes
+              </button>
+
+              {/* Save as Skill */}
+              {!autoSkillCreated && (
+                savedSkill ? (
+                  <span className="flex items-center gap-1 text-[10px]" style={{ color: "#c9a84c" }}>
+                    <Zap size={9} />Skill saved
+                  </span>
+                ) : (
+                  <button
+                    disabled={savingSkill}
+                    onClick={saveAsSkill}
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border transition-opacity disabled:opacity-50"
+                    style={{ color: "#c9a84c", borderColor: "rgba(201,168,76,0.2)", backgroundColor: "rgba(201,168,76,0.04)" }}
+                  >
+                    {savingSkill ? <Loader2 size={9} className="animate-spin" /> : <Zap size={9} />}
+                    {savingSkill ? "Saving…" : "Save as Skill"}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {runStatus === "error" && errorMsg && (
+          <div
+            className="px-3 py-2 rounded-lg"
+            style={{ backgroundColor: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}
+          >
+            <p className="text-[11px]" style={{ color: "#ef4444" }}>{errorMsg}</p>
+          </div>
+        )}
+
+        {/* Campaign Notes (client-side only) */}
+        {campaignNotes && (
+          <div className="space-y-1.5">
+            <button
+              onClick={() => setShowNotes((v) => !v)}
+              className="flex items-center gap-1.5 text-[10px] font-semibold"
+              style={{ color: "var(--t-dim)" }}
+            >
+              <MessageSquare size={9} />
+              Campaign Notes
+              {showNotes ? <ChevronDown size={8} style={{ transform: "rotate(180deg)" }} /> : <ChevronDown size={8} />}
+              <span style={{ color: "var(--t-dim)", fontWeight: "normal" }}>(session only)</span>
+            </button>
+            {showNotes && (
+              <textarea
+                value={campaignNotes}
+                onChange={(e) => setCampaignNotes(e.target.value)}
+                rows={6}
+                className="w-full px-3 py-2 rounded-lg text-[11px] leading-relaxed resize-none focus:outline-none"
+                style={{
+                  color: "var(--t-muted)",
+                  backgroundColor: "var(--t-surface-2)",
+                  border: "1px solid var(--t-border)",
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Safety notice */}
+        <div
+          className="flex items-start gap-2 px-3 py-2 rounded-lg"
+          style={{ backgroundColor: "rgba(201,168,76,0.04)", border: "1px solid rgba(201,168,76,0.12)" }}
+        >
+          <ShieldCheck size={9} className="flex-shrink-0 mt-0.5" style={{ color: "#c9a84c" }} />
+          <p className="text-[10px] leading-snug" style={{ color: "var(--t-dim)" }}>
+            Hermes can prepare and QA campaign assets. It cannot launch, publish, activate, or change spend without approval.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────
 
@@ -3646,6 +4235,19 @@ function AICampaignBuilderContent() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Hermes Campaign Builder Assist — shows when client+goal+service set or draft exists */}
+            {!isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
+              <HermesCampaignAssist
+                selectedClient={selectedClient}
+                goal={goal}
+                service={service}
+                market={market}
+                budget={budget}
+                displayPlan={displayPlan}
+                selectedAssets={selectedAssets}
+              />
             )}
           </div>
         </div>

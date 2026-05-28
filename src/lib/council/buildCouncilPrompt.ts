@@ -1,5 +1,6 @@
-// buildCouncilPrompt — constructs the full Council prompt for Hermes.
-// applyCouncilToDraft — merges Council improved draft back into CampaignDraft.
+// buildCouncilPrompt — constructs the Council prompt for Hermes.
+// applyCouncilToDraft — merges Council improved draft into CampaignDraft.
+// safeExtractJson — robust JSON extraction from raw Hermes output.
 
 import type { CampaignDraft } from "@/lib/planStore";
 import type { CreativeAsset } from "@/lib/creativeAssets";
@@ -18,374 +19,328 @@ export interface CouncilContext {
   campaignNotes?: string;
 }
 
-const SAFETY_HEADER = `=== VAULT CO COUNCIL SAFETY RULES ===
-The Council can: improve drafts, rewrite ad copy, create campaign structures, QA checklists, prepare Meta push payload drafts, create approval summaries, create operator tasks.
-The Council CANNOT: launch ads, activate campaigns, change budgets, publish to Meta, push GHL workflows, send emails, delete production data, modify billing systems.
-All outputs are DRAFT/APPROVAL-READY only. Campaign status must always be PAUSED or pending-approval.`;
+// ─────────────────────────────────────────────────────────────
+// safeExtractJson
+// ─────────────────────────────────────────────────────────────
+// Robust JSON extraction from raw Hermes output.
+// Handles: raw JSON, markdown fences, leading/trailing text.
+export function safeExtractJson(raw: string): string | null {
+  if (!raw || typeof raw !== "string") return null;
 
-const COUNCIL_ROLES = `=== THE COUNCIL — ADVISOR ROLES ===
+  // 1. Strip markdown fences
+  let s = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
 
-Each advisor gives an INDEPENDENT analysis. Do not validate the existing draft. Pressure-test it. Find blind spots. Then rebuild.
+  // 2. Try the stripped string as-is
+  try { JSON.parse(s); return s; } catch { /* continue */ }
 
-[FATAL FLAW ADVISOR]
-Find what could break this campaign. Identify weak assumptions, bad offers, unclear hooks, weak creative-to-copy match, tracking/budget/compliance/funnel risks.
-Ask: "What could make this fail?"
-Output: Fatal flaws, severity level, fix required before launch, what NOT to do.
+  // 3. Find the first { and last } and extract that range
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    const candidate = s.slice(first, last + 1);
+    try { JSON.parse(candidate); return candidate; } catch { /* continue */ }
+  }
 
-[RIGHT PROBLEM ADVISOR]
-Challenge whether we're solving the correct problem. Is the bottleneck lead quality, offer, creative, follow-up, market trust, sales process, or targeting?
-Ask: "Are we solving the right problem?"
-Output: Actual problem, misdiagnosed problem if any, better campaign objective, strategic correction.
+  // 4. Try the raw string without any stripping
+  try { JSON.parse(raw); return raw; } catch { /* continue */ }
 
-[UPSIDE ADVISOR]
-Find the strongest opportunity and highest-leverage angle. Identify best emotional/logical buying angle, proof/authority/trust/urgency opportunities, ways to increase conversion potential.
-Ask: "What is the upside if we get this right?"
-Output: Winning angle, highest-leverage opportunity, strongest audience segment, best offer framing, scale potential.
+  return null;
+}
 
-[NORMAL PERSON ADVISOR]
-Act like a real homeowner/business owner with zero marketing context. Point out confusing language, what feels too salesy/vague/fake/generic, whether the ad makes immediate sense.
-Ask: "Would a normal person care, understand, and take action?"
-Output: Confusing parts, trust issues, what feels fake or generic, what would make them stop scrolling, plain-English rewrite suggestions.
+// ─────────────────────────────────────────────────────────────
+// Prompt builder constants — kept plain-text to avoid VPS
+// pattern validation that rejects JSON-like syntax in prompts.
+// ─────────────────────────────────────────────────────────────
 
-[NEXT ACTION ADVISOR]
-Only care about what should be done next. Turn the debate into executable steps. Separate urgent fixes from nice-to-have improvements.
-Ask: "What do we actually do next?"
-Output: Immediate next steps, operator task list, approval requirements, missing assets, timeline recommendation.
+const SAFETY_HEADER = `VAULT CO CAMPAIGN STRATEGY TASK
+Safety: Only improve drafts, rewrite copy, build campaign structures, create QA checklists, prepare approval summaries, create operator tasks.
+Cannot: launch ads, change budgets, publish to Meta, push GHL, send emails, delete data.
+All output is draft/approval-ready only. Campaign status stays PAUSED.`;
 
-[CREATIVE DIRECTOR]
-Analyze creative assets and identify strongest visual campaign angles. Identify what each asset is showing, visual hooks, emotional/status/trust/proof signals. Decide whether each asset is better for cold traffic, retargeting, trust, testimonial, authority, offer, or proof. Identify copy that should NOT be paired with each asset. Identify missing visual assets.
-NOTE: Hermes receives asset metadata, operator notes, and any pre-completed vision analysis summaries. Base analysis on asset type, notes, vision summary if available, and campaign context.
+// Advisor descriptions in plain prose — no JSON syntax, no brackets
+const COUNCIL_ROLES = `STRATEGIC ADVISORS — each gives an independent analysis:
 
-[MEDIA BUYER]
-Check campaign structure, objective, funnel, targeting, budget safety, Meta readiness. Check campaign objective, audience/funnel logic, budget safety, retargeting layer, Meta push readiness. Identify launch risks.
+FATAL FLAW ADVISOR: Find what could break this campaign. Weak assumptions, bad offers, unclear hooks, weak creative-copy match, compliance or funnel risks. Output: flaws, severity, fix required.
 
-[COPY CHIEF]
-Rewrite hooks, primary text, headlines, CTAs, offer framing, and lead form language. Avoid generic local filler like "in [city]". Tie every copy piece to the actual creative asset and actual client context. Create exact ready-to-use copy blocks. Match cold traffic vs retargeting intent.
+RIGHT PROBLEM ADVISOR: Are we solving the right problem? Is the bottleneck lead quality, offer, creative, follow-up, trust, or targeting? Output: actual problem, strategic correction.
 
-[CRM/GHL AGENT]
-Build follow-up logic and conversion system. Build speed-to-lead logic, missed-call handling, SMS/email nurture, appointment reminders, pipeline stage logic, GHL workflow draft.
+UPSIDE ADVISOR: Highest-leverage opportunity. Strongest emotional or logical buying angle, proof, trust, urgency. Output: winning angle, strongest audience segment, best offer framing.
 
-[COMPLIANCE/RISK]
-Catch claims, policy risks, restricted wording, unclear guarantees, approval issues. Check ad copy risk, lead form wording, claims/guarantees, financial/housing sensitivity. Identify what should be softened before approval.
+NORMAL PERSON ADVISOR: Would a real customer care? Flag confusing language, fake-sounding claims, generic copy. Output: plain-English rewrite suggestions, what would make them stop scrolling.
 
-[LOCAL MARKET]
-Use actual market context intelligently. Avoid lazy "in [city]" copy. Use market context only when it strengthens trust, urgency, local proof, or relevance. Identify local buyer psychology.
+NEXT ACTION ADVISOR: Executable steps only. Output: immediate next steps, operator tasks, missing assets, timeline.
 
-[CHAIRMAN]
-Make the final call after reading all advisors. Review every opinion. Identify disagreements. Resolve contradictions. Decide: ready / revise / rebuild / reject. Produce final campaign direction and next steps.
-Output: Final verdict, winning strategy, required changes, final campaign direction, approval readiness score 0-100, next operator actions.`;
+CREATIVE DIRECTOR: Analyze creative assets. Identify best visual angles for cold traffic vs retargeting. What copy fits, what to avoid, what missing asset would strengthen the campaign.
+
+MEDIA BUYER: Campaign structure, Meta readiness, budget safety, audience logic, retargeting layer. Output: launch risks, targeting corrections.
+
+COPY CHIEF: Rewrite hooks, primary text, headlines, CTAs, lead form intro. Avoid generic local filler. Tie copy to actual creative and actual client context. Output: ready-to-use copy blocks.
+
+CRM GHL AGENT: Follow-up logic. Speed-to-lead, SMS timing, missed-call handling, STOP conditions. Output: workflow blueprint.
+
+COMPLIANCE RISK: Claims, restricted wording, approval risks, policy issues. Output: what to soften before approval.
+
+LOCAL MARKET: Market context used intelligently. Only use location when it adds trust, urgency, or local relevance. Avoid lazy city-name filler. Output: what resonates locally.
+
+CHAIRMAN: Read all advisors. Resolve disagreements. Final verdict: ready, revise, rebuild, or reject. Output: winning strategy, required changes, approval readiness score 0-100, next operator actions.`;
 
 const COUNCIL_MODE_INSTRUCTIONS: Record<CouncilMode, string> = {
-  campaign_build: `Run a FULL COUNCIL CAMPAIGN BUILD.
-Round 1: Each advisor analyzes independently.
-Round 2: Each advisor reads the others and identifies blind spots.
-Chairman Final Call: Summarize debate, resolve contradictions, give final decision.
-Hermes Build: Rebuild an improved campaign draft based on the Chairman's direction.
-IMPORTANT: Do NOT validate the existing draft. Pressure-test it. Fight over the weak parts. Identify blind spots. Rebuild into something better.`,
-
-  improve_and_apply_draft: `Run COUNCIL IMPROVE AND APPLY DRAFT — the highest-stakes Council mode.
-Full council debate. Chairman decides the winning direction. Hermes rebuilds the COMPLETE improved campaign draft.
-Every section of the improvedDraft must be written at full quality. No placeholders. No generic filler.
-Tie every piece of copy to the actual creative assets and actual client context.
-The adCopy field must contain ready-to-use primary text that is NOT generic. It must be specific to the client, offer, market, and creative.`,
-
-  campaign_qa: `Run a COUNCIL CAMPAIGN QA.
-Each advisor performs a pre-launch audit from their perspective.
-Chairman gives final QA verdict and approval readiness score.
-End with structured QA checklist covering: offer clarity, audience fit, creative-to-copy match, asset quality, lead form readiness, retargeting readiness, GHL readiness, budget safety, compliance risk, tracking readiness, approval readiness, missing assets. Score each out of 10.`,
-
-  creative_review: `Run a COUNCIL CREATIVE ASSET REVIEW.
-Focus entirely on the uploaded creative assets. Creative Director leads.
-Each advisor gives their angle on how to best use these assets.
-Copy Chief provides exact copy for each asset.
-Media Buyer confirms placement/objective fit per asset.
-Output specific ad copy tied to each actual asset.`,
-
-  meta_push_readiness: `Run a COUNCIL META PUSH READINESS CHECK.
-Media Buyer leads. Check every Meta launch requirement.
-Output a structured Meta push payload draft (PAUSED status only — no activation instructions).
-Include: campaign_name, objective, buying_type, status: PAUSED, ad_sets, ads, lead_form_requirements, tracking_requirements, validation_warnings.
-Compliance/Risk Agent reviews every field for approval risk.`,
-
-  offer_review: `Run a COUNCIL OFFER REVIEW.
-Focus on the offer itself — value proposition, the free offer, the framing, the conversion mechanism.
-Normal Person, Upside Advisor, and Copy Chief lead the debate.
-Chairman decides final offer direction and rewrite.`,
-
-  funnel_review: `Run a COUNCIL FUNNEL REVIEW.
-Analyze the full conversion funnel: ad → landing/lead form → GHL follow-up → booking.
-CRM/GHL Agent, Media Buyer, and Right Problem Advisor lead.
-Map every funnel stage and identify leaks, delays, and missed opportunities.`,
-
-  operator_task_review: `Run a COUNCIL OPERATOR TASK REVIEW.
-Next Action Advisor leads. Identify every operator action needed to launch this campaign.
-Create a prioritized task list with BLOCKERS vs REQUIRED vs RECOMMENDED.
-Include: owner, priority, type, action, and what each task blocks.`,
-
-  strategy_review: `Run a COUNCIL STRATEGY REVIEW.
-Question the entire campaign strategy. Is this the right market, offer, and funnel for this client right now?
-Right Problem Advisor and Chairman lead the debate.
-Output: final strategic direction decision with specific corrections.`,
+  campaign_build: `Run a full council campaign build. Each advisor analyzes independently. Chairman makes the final call. Then rebuild an improved campaign draft based on the Chairman direction. Do NOT validate the existing draft. Pressure-test it. Find blind spots. Rebuild into something better.`,
+  improve_and_apply_draft: `Improve and apply the draft. Full council debate. Chairman decides the winning direction. Then rebuild the complete improved campaign draft. Every section of improvedDraft must be written at full quality. No placeholders. No generic filler. Tie every piece of copy to the actual creative assets and actual client context. The adCopy field must contain ready-to-use primary text specific to this client, offer, market, and creative.`,
+  campaign_qa: `Run a council campaign QA. Each advisor performs a pre-launch audit. Chairman gives final QA verdict and approval readiness score. Score each area: offer clarity, audience fit, creative-copy match, asset quality, lead form, retargeting, GHL readiness, budget safety, compliance, tracking, approval readiness.`,
+  creative_review: `Run a council creative asset review. Focus entirely on the uploaded creative assets. Creative Director leads. Copy Chief provides exact copy for each asset. Media Buyer confirms placement fit.`,
+  meta_push_readiness: `Run a council Meta push readiness check. Media Buyer leads. Check every Meta launch requirement. Output a structured Meta push payload draft with PAUSED status only. Include: campaign name, objective, buying type, ad sets, ads, lead form requirements, tracking requirements, validation warnings.`,
+  offer_review: `Run a council offer review. Focus on the offer, value proposition, framing, and conversion mechanism. Normal Person, Upside Advisor, and Copy Chief lead. Chairman decides final offer direction.`,
+  funnel_review: `Run a council funnel review. Analyze the full funnel: ad to lead form to GHL follow-up to booking. CRM Agent, Media Buyer, and Right Problem Advisor lead. Map every funnel stage and identify leaks.`,
+  operator_task_review: `Run a council operator task review. Next Action Advisor leads. Create a prioritized task list with blockers vs required vs recommended. Include owner, priority, action, and what each task blocks.`,
+  strategy_review: `Run a council strategy review. Question the entire campaign strategy. Right Problem Advisor and Chairman lead. Output: final strategic direction with specific corrections.`,
 };
 
+// ─────────────────────────────────────────────────────────────
+// buildCouncilPrompt
+// ─────────────────────────────────────────────────────────────
+// Produces a plain-text prompt safe for the Hermes VPS.
+// No JSON syntax in the prompt body — output format described in prose.
 export function buildCouncilPrompt(ctx: CouncilContext, councilMode: CouncilMode): string {
   const lines: string[] = [];
 
   lines.push(SAFETY_HEADER);
   lines.push("");
 
+  // Client
   if (ctx.client) {
-    lines.push("=== CLIENT ===");
+    lines.push("CLIENT");
     lines.push(`Name: ${ctx.client.name}`);
     if (ctx.market || ctx.client.market) lines.push(`Market: ${ctx.market || ctx.client.market}`);
-    if (ctx.budget || ctx.client.monthlyBudget) lines.push(`Monthly Budget: ${ctx.budget || ctx.client.monthlyBudget}`);
+    if (ctx.budget || ctx.client.monthlyBudget) lines.push(`Budget: ${ctx.budget || ctx.client.monthlyBudget}`);
     if (ctx.client.services?.length) lines.push(`Services: ${ctx.client.services.join(", ")}`);
   }
 
-  lines.push("\n=== CAMPAIGN PARAMETERS ===");
+  // Campaign parameters
+  lines.push("\nCAMPAIGN PARAMETERS");
   if (ctx.goal) lines.push(`Goal: ${ctx.goal}`);
   if (ctx.service) lines.push(`Service: ${ctx.service}`);
   if (ctx.market) lines.push(`Market: ${ctx.market}`);
   if (ctx.budget) lines.push(`Budget: ${ctx.budget}`);
 
+  // Campaign draft — trim aggressively to keep prompt concise
   if (ctx.displayPlan) {
     const p = ctx.displayPlan;
-    lines.push("\n=== CURRENT CAMPAIGN DRAFT ===");
-    lines.push(`Campaign Name: ${p.campaignName}`);
-    lines.push(`Status: ${p.status}`);
-    lines.push(`Objective: ${p.metaStructure.campaignObjective}`);
-    lines.push(`Campaign Type: ${p.metaStructure.campaignType}`);
-    lines.push(`Audience: ${p.metaStructure.audience}`);
-    lines.push(`Location Targeting: ${p.metaStructure.locationTargeting}`);
-    lines.push(`Budget Split: ${p.metaStructure.budgetSplit}`);
-    lines.push(`Optimization Event: ${p.metaStructure.optimizationEvent}`);
-    if (p.metaStructure.adSetNames?.length) {
-      lines.push(`Ad Sets: ${p.metaStructure.adSetNames.join(" | ")}`);
-    }
+    lines.push("\nCURRENT CAMPAIGN DRAFT");
+    lines.push(`Name: ${p.campaignName}`);
+    lines.push(`Objective: ${p.metaStructure?.campaignObjective ?? ""}`);
+    lines.push(`Campaign Type: ${p.metaStructure?.campaignType ?? ""}`);
+    lines.push(`Audience: ${(p.metaStructure?.audience ?? "").slice(0, 200)}`);
+    lines.push(`Budget Split: ${(p.metaStructure?.budgetSplit ?? "").slice(0, 150)}`);
 
-    lines.push("\n--- AD COPY ---");
-    p.adCopy?.primaryTexts?.forEach((t, i) => {
-      if (t) lines.push(`Primary Text ${i + 1}: ${t}`);
-    });
-    if (p.adCopy?.headlines?.length) lines.push(`Headlines: ${p.adCopy.headlines.join(" | ")}`);
-    if (p.adCopy?.descriptions?.length) lines.push(`Descriptions: ${p.adCopy.descriptions.join(" | ")}`);
+    const texts = p.adCopy?.primaryTexts;
+    if (Array.isArray(texts)) {
+      texts.slice(0, 2).forEach((t, i) => {
+        if (t) lines.push(`Primary Text ${i + 1}: ${String(t).slice(0, 200)}`);
+      });
+    }
+    if (Array.isArray(p.adCopy?.headlines)) {
+      lines.push(`Headlines: ${p.adCopy.headlines.slice(0, 3).join(" / ")}`);
+    }
     if (p.adCopy?.cta) lines.push(`CTA: ${p.adCopy.cta}`);
 
-    lines.push("\n--- CREATIVE DIRECTION ---");
-    if (p.creativeDirection?.angle) lines.push(`Angle: ${p.creativeDirection.angle}`);
-    if (p.creativeDirection?.hook) lines.push(`Hook: ${p.creativeDirection.hook}`);
-    if (p.creativeDirection?.recommendedFormat) lines.push(`Format: ${p.creativeDirection.recommendedFormat}`);
-    if (p.creativeDirection?.voiceoverScript) lines.push(`Voiceover: ${p.creativeDirection.voiceoverScript.slice(0, 300)}`);
+    if (p.creativeDirection?.angle) lines.push(`Creative Angle: ${String(p.creativeDirection.angle).slice(0, 150)}`);
+    if (p.creativeDirection?.hook) lines.push(`Hook: ${String(p.creativeDirection.hook).slice(0, 150)}`);
 
-    lines.push("\n--- LEAD FORM ---");
-    if (p.leadForm?.formName) lines.push(`Form Name: ${p.leadForm.formName}`);
-    if (p.leadForm?.introCopy) lines.push(`Intro: ${p.leadForm.introCopy.slice(0, 300)}`);
-    if (p.leadForm?.qualificationQuestions?.length) {
-      lines.push(`Questions: ${p.leadForm.qualificationQuestions.join(" | ")}`);
-    }
-    if (p.leadForm?.thankYouCopy) lines.push(`Thank You: ${p.leadForm.thankYouCopy.slice(0, 200)}`);
+    if (p.leadForm?.introCopy) lines.push(`Lead Form Intro: ${String(p.leadForm.introCopy).slice(0, 150)}`);
 
-    lines.push("\n--- GHL WORKFLOW ---");
-    if (p.ghlWorkflow?.immediateSms) lines.push(`Immediate SMS: ${p.ghlWorkflow.immediateSms.slice(0, 200)}`);
-    if (p.ghlWorkflow?.pipelineStage) lines.push(`Pipeline Stage: ${p.ghlWorkflow.pipelineStage}`);
-    if (p.ghlWorkflow?.steps?.length) lines.push(`Steps: ${p.ghlWorkflow.steps.slice(0, 4).join(" → ")}`);
+    if (p.ghlWorkflow?.immediateSms) lines.push(`GHL Immediate SMS: ${String(p.ghlWorkflow.immediateSms).slice(0, 150)}`);
 
-    lines.push("\n--- COMPLIANCE ---");
-    if (p.compliance?.metaRisk) lines.push(`Meta Risk: ${p.compliance.metaRisk}`);
-    if (p.compliance?.disallowedPhrases?.length) {
-      lines.push(`Disallowed phrases: ${p.compliance.disallowedPhrases.slice(0, 5).join("; ")}`);
-    }
-    if (p.compliance?.approvalWarnings?.length) {
-      lines.push(`Approval warnings: ${p.compliance.approvalWarnings.slice(0, 3).join("; ")}`);
-    }
-
-    if (p.strategicRationale?.whyThisCampaign) {
-      lines.push(`\nStrategic Rationale: ${p.strategicRationale.whyThisCampaign.slice(0, 300)}`);
-    }
+    if (p.compliance?.metaRisk) lines.push(`Compliance Risk: ${String(p.compliance.metaRisk).slice(0, 100)}`);
   } else {
-    lines.push("\n=== CAMPAIGN DRAFT ===");
-    lines.push("No campaign draft generated yet. Build from scratch using available context.");
+    lines.push("\nCAMPAIGN DRAFT: Not yet generated. Build from scratch.");
   }
 
-  // Creative assets
-  lines.push("\n=== CREATIVE ASSETS ===");
+  // Creative assets — no storageUrl (may trigger VPS URL pattern validation)
+  lines.push("\nCREATIVE ASSETS");
   if (ctx.selectedAssets && ctx.selectedAssets.length > 0) {
     ctx.selectedAssets.forEach((asset, i) => {
-      lines.push(`\nAsset ${i + 1}: "${asset.fileName}"`);
-      lines.push(`  File Type: ${asset.fileType === "video" ? "VIDEO" : "IMAGE"}`);
-      lines.push(`  Creative Type: ${asset.assetType}`);
-      lines.push(`  Approval Status: ${asset.approvedForAds ? "Approved for Ads" : "NOT YET APPROVED"}`);
-      if (asset.campaignUseCase) lines.push(`  Intended Use: ${asset.campaignUseCase}`);
-      if (asset.notes) lines.push(`  Operator Notes: ${asset.notes}`);
-
+      lines.push(`Asset ${i + 1}: ${asset.fileName} (${asset.fileType === "video" ? "VIDEO" : "IMAGE"}, ${asset.assetType})`);
+      lines.push(`  Approved: ${asset.approvedForAds ? "Yes" : "No"}`);
+      if (asset.campaignUseCase) lines.push(`  Use: ${String(asset.campaignUseCase).slice(0, 100)}`);
+      if (asset.notes) lines.push(`  Notes: ${String(asset.notes).slice(0, 150)}`);
       const analysis = ctx.assetAnalyses?.[asset.id];
-      if (analysis?.visualSummary) {
-        lines.push(`  Vision Analysis: ${analysis.visualSummary}`);
-        lines.push(`  Analysis Source: ${analysis.analysisSource ?? "vision"}`);
+      if (analysis?.visualSummary && analysis.visualSummary !== "Image not available for analysis") {
+        lines.push(`  Vision: ${String(analysis.visualSummary).slice(0, 200)}`);
       }
-
       const note = ctx.assetNotes?.[asset.id];
-      if (note) lines.push(`  Campaign Notes: ${note}`);
+      if (note) lines.push(`  Campaign Note: ${String(note).slice(0, 100)}`);
     });
-    lines.push(`\nASSET NOTE: Hermes receives metadata, operator notes, and pre-completed vision summaries. Hermes cannot directly view image or video files. Creative Director must analyze based on asset type, notes, vision summary, and campaign context.`);
   } else {
-    lines.push("No creative assets uploaded. Creative Director should identify what visuals are missing and recommend what would most strengthen this campaign.");
+    lines.push("No creative assets uploaded.");
   }
 
   if (ctx.campaignNotes) {
-    lines.push(`\n=== CAMPAIGN NOTES ===\n${ctx.campaignNotes}`);
+    lines.push(`\nNOTES: ${String(ctx.campaignNotes).slice(0, 300)}`);
   }
 
   lines.push("");
   lines.push(COUNCIL_ROLES);
 
-  lines.push("\n=== COUNCIL TASK ===");
-  lines.push(COUNCIL_MODE_INSTRUCTIONS[councilMode]);
+  lines.push(`\nTASK: ${COUNCIL_MODE_INSTRUCTIONS[councilMode]}`);
 
-  lines.push(`\n=== REQUIRED OUTPUT FORMAT ===`);
-  lines.push(
-    `Return ONLY a single valid JSON object. No text before or after the JSON. No markdown code fences. The JSON must exactly match this shape:\n` +
-    `{\n` +
-    `  "finalVerdict": "ready|revise|rebuild|reject",\n` +
-    `  "approvalReadinessScore": 0,\n` +
-    `  "winningAngle": "...",\n` +
-    `  "councilDebate": {\n` +
-    `    "fatalFlawAdvisor": "...",\n` +
-    `    "rightProblemAdvisor": "...",\n` +
-    `    "upsideAdvisor": "...",\n` +
-    `    "normalPersonAdvisor": "...",\n` +
-    `    "nextActionAdvisor": "...",\n` +
-    `    "creativeDirectorAgent": "...",\n` +
-    `    "mediaBuyerAgent": "...",\n` +
-    `    "copyChiefAgent": "...",\n` +
-    `    "crmGhlAgent": "...",\n` +
-    `    "complianceRiskAgent": "...",\n` +
-    `    "localMarketAgent": "...",\n` +
-    `    "chairman": "..."\n` +
-    `  },\n` +
-    `  "councilSummary": {\n` +
-    `    "winningAngle": "...",\n` +
-    `    "creativeReasoning": "...",\n` +
-    `    "mediaBuyerReasoning": "...",\n` +
-    `    "copyReasoning": "...",\n` +
-    `    "crmReasoning": "...",\n` +
-    `    "complianceNotes": "...",\n` +
-    `    "localMarketNotes": "..."\n` +
-    `  },\n` +
-    `  "assetAnalysis": { "photos": [], "videos": [] },\n` +
-    `  "improvedDraft": {\n` +
-    `    "overview": "...",\n` +
-    `    "metaStructure": "...",\n` +
-    `    "adCopy": "...",\n` +
-    `    "leadForm": "...",\n` +
-    `    "ghlWorkflow": "...",\n` +
-    `    "creativeDirection": "...",\n` +
-    `    "compliance": "...",\n` +
-    `    "optimization": "..."\n` +
-    `  },\n` +
-    `  "changesMade": [],\n` +
-    `  "missingAssets": [],\n` +
-    `  "nextOperatorTasks": []\n` +
-    `}`
-  );
+  // Output format — described in prose only, no JSON syntax in the prompt
+  lines.push(`\nOUTPUT FORMAT:
+Return ONLY valid JSON. No markdown fences. No text before or after the JSON.
+Required top-level fields:
+- finalVerdict: string, one of: ready, revise, rebuild, reject
+- approvalReadinessScore: integer 0 to 100
+- winningAngle: string describing the strongest campaign angle
+- councilDebate: object with string fields for each advisor: fatalFlawAdvisor, rightProblemAdvisor, upsideAdvisor, normalPersonAdvisor, nextActionAdvisor, creativeDirectorAgent, mediaBuyerAgent, copyChiefAgent, crmGhlAgent, complianceRiskAgent, localMarketAgent, chairman
+- councilSummary: object with string fields: winningAngle, creativeReasoning, mediaBuyerReasoning, copyReasoning, crmReasoning, complianceNotes, localMarketNotes
+- assetAnalysis: object with photos array and videos array
+- improvedDraft: object with string fields: overview, metaStructure, adCopy, leadForm, ghlWorkflow, creativeDirection, compliance, optimization
+- changesMade: array of strings
+- missingAssets: array of strings
+- nextOperatorTasks: array of strings`);
 
   return lines.join("\n");
 }
 
-// Merges Council improved draft text back into an existing CampaignDraft.
-// Creates a new draft (does not mutate). Sets status to needs_review.
+// ─────────────────────────────────────────────────────────────
+// Safe field helpers — coerce unexpected shapes from AI output
+// ─────────────────────────────────────────────────────────────
+
+function safeStr(v: unknown, fallback = ""): string {
+  if (typeof v === "string") return v;
+  if (v == null) return fallback;
+  return String(v).slice(0, 2000);
+}
+
+function safeStrArray(v: unknown, fallback: string[] = []): string[] {
+  if (Array.isArray(v)) return v.map((x) => safeStr(x));
+  if (typeof v === "string" && v.trim()) return [v];
+  return fallback;
+}
+
+// ─────────────────────────────────────────────────────────────
+// applyCouncilToDraft
+// ─────────────────────────────────────────────────────────────
+// Completely defensive — never throws. Returns the original draft
+// if anything goes wrong. Normalizes all field shapes.
 export function applyCouncilToDraft(
   existing: CampaignDraft,
   council: CouncilResponse
 ): CampaignDraft {
-  const now = new Date().toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  try {
+    const now = new Date().toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    });
 
-  const improved = council.improvedDraft ?? {};
-  const summary = council.councilSummary ?? {};
+    const improved = council.improvedDraft ?? {};
+    const summary = council.councilSummary ?? {};
 
-  // Extract the best primary text from improved adCopy.
-  // The improved adCopy field is a string — use it as primaryTexts[0].
-  const improvedPrimaryText = improved.adCopy || existing.adCopy.primaryTexts[0];
-  const improvedPrimaryTexts: string[] = [
-    improvedPrimaryText,
-    existing.adCopy.primaryTexts[1] ?? "",
-    existing.adCopy.primaryTexts[2] ?? "",
-  ];
+    // adCopy — improved.adCopy is a string; use as primaryTexts[0]
+    const existingPrimaryTexts = Array.isArray(existing.adCopy?.primaryTexts)
+      ? existing.adCopy.primaryTexts
+      : [""];
+    const improvedPrimaryText = safeStr(improved.adCopy, existingPrimaryTexts[0]);
+    const newPrimaryTexts = [
+      improvedPrimaryText,
+      safeStr(existingPrimaryTexts[1], ""),
+      safeStr(existingPrimaryTexts[2], ""),
+    ];
 
-  // Extract improved creative angle / hook from the improved draft.
-  const improvedAngle =
-    council.winningAngle ||
-    (improved.creativeDirection
-      ? improved.creativeDirection.split("\n")[0]
-      : existing.creativeDirection.angle);
-  const improvedHook = council.winningAngle || existing.creativeDirection.hook;
+    // creativeDirection
+    const existingAngle = safeStr(existing.creativeDirection?.angle, "");
+    const existingHook = safeStr(existing.creativeDirection?.hook, "");
+    const improvedAngle = safeStr(council.winningAngle, "") ||
+      safeStr(improved.creativeDirection, "").split("\n")[0] ||
+      existingAngle;
+    const improvedHook = safeStr(council.winningAngle, "") || existingHook;
 
-  return {
-    ...existing,
-    campaignName: existing.campaignName.startsWith("[Council]")
-      ? existing.campaignName
-      : `[Council] ${existing.campaignName}`,
-    status: "needs_review",
-    updatedAt: now,
-    adCopy: {
-      ...existing.adCopy,
-      primaryTexts: improvedPrimaryTexts,
-    },
-    creativeDirection: {
-      ...existing.creativeDirection,
-      angle: improvedAngle,
-      hook: improvedHook,
-      voiceoverScript: improved.creativeDirection
-        ? `${improved.creativeDirection}\n\n---\nCouncil improved. Previous: ${existing.creativeDirection.voiceoverScript}`
-        : existing.creativeDirection.voiceoverScript,
-    },
-    compliance: {
-      ...existing.compliance,
-      approvalWarnings: [
-        ...(existing.compliance.approvalWarnings ?? []),
-        ...(council.changesMade?.length ? [`Council applied changes: ${council.changesMade.slice(0, 3).join("; ")}`] : []),
-        ...(council.missingAssets?.length ? [`Missing assets noted: ${council.missingAssets.slice(0, 2).join("; ")}`] : []),
-      ],
-    },
-    strategicRationale: {
-      whyThisCampaign:
-        summary.winningAngle ||
-        council.winningAngle ||
-        existing.strategicRationale?.whyThisCampaign ||
-        "",
-      buyerInsightUsed: existing.strategicRationale?.buyerInsightUsed || "",
-      marketInsightUsed:
-        summary.localMarketNotes ||
-        existing.strategicRationale?.marketInsightUsed ||
-        "",
-      offerAngleUsed:
-        improved.overview ||
-        existing.strategicRationale?.offerAngleUsed ||
-        "",
-      creativeAngleUsed:
-        improved.creativeDirection ||
-        existing.strategicRationale?.creativeAngleUsed ||
-        "",
-      trustTriggerUsed: existing.strategicRationale?.trustTriggerUsed || "",
-      objectionAddressed: existing.strategicRationale?.objectionAddressed || "",
-      audienceRationale:
-        summary.mediaBuyerReasoning ||
-        existing.strategicRationale?.audienceRationale ||
-        "",
-      leadFormRationale:
-        improved.leadForm ||
-        existing.strategicRationale?.leadFormRationale ||
-        "",
-      followUpRationale:
-        improved.ghlWorkflow ||
-        existing.strategicRationale?.followUpRationale ||
-        "",
-    },
-  };
+    // compliance — only append warnings, don't replace existing
+    const existingWarnings = Array.isArray(existing.compliance?.approvalWarnings)
+      ? existing.compliance.approvalWarnings
+      : [];
+    const councilChanges = Array.isArray(council.changesMade) ? council.changesMade : [];
+    const councilMissing = Array.isArray(council.missingAssets) ? council.missingAssets : [];
+    const newWarnings = [
+      ...existingWarnings,
+      ...(councilChanges.length ? [`Council improvements applied: ${councilChanges.slice(0, 3).join("; ")}`] : []),
+      ...(councilMissing.length ? [`Missing assets: ${councilMissing.slice(0, 2).join("; ")}`] : []),
+    ];
+
+    // strategicRationale — access existing fields via optional chaining to avoid {} type issues
+    const er = existing.strategicRationale;
+    const newRationale = {
+      whyThisCampaign: safeStr(summary.winningAngle) || safeStr(council.winningAngle) || safeStr(er?.whyThisCampaign),
+      buyerInsightUsed: safeStr(er?.buyerInsightUsed),
+      marketInsightUsed: safeStr(summary.localMarketNotes) || safeStr(er?.marketInsightUsed),
+      offerAngleUsed: safeStr(improved.overview) || safeStr(er?.offerAngleUsed),
+      creativeAngleUsed: safeStr(improved.creativeDirection) || safeStr(er?.creativeAngleUsed),
+      trustTriggerUsed: safeStr(er?.trustTriggerUsed),
+      objectionAddressed: safeStr(er?.objectionAddressed),
+      audienceRationale: safeStr(summary.mediaBuyerReasoning) || safeStr(er?.audienceRationale),
+      leadFormRationale: safeStr(improved.leadForm) || safeStr(er?.leadFormRationale),
+      followUpRationale: safeStr(improved.ghlWorkflow) || safeStr(er?.followUpRationale),
+    };
+
+    // Build existing name safely
+    const existingName = safeStr(existing.campaignName, "Campaign");
+    const newName = existingName.startsWith("[Council]") ? existingName : `[Council] ${existingName}`;
+
+    return {
+      ...existing,
+      campaignName: newName,
+      status: "needs_review",
+      updatedAt: now,
+      adCopy: {
+        ...existing.adCopy,
+        primaryTexts: newPrimaryTexts,
+        headlines: safeStrArray(existing.adCopy?.headlines),
+        descriptions: safeStrArray(existing.adCopy?.descriptions),
+        cta: safeStr(existing.adCopy?.cta),
+      },
+      metaStructure: {
+        ...existing.metaStructure,
+        adSetNames: safeStrArray(existing.metaStructure?.adSetNames),
+        placements: safeStrArray(existing.metaStructure?.placements),
+      },
+      creativeDirection: {
+        ...existing.creativeDirection,
+        angle: improvedAngle,
+        hook: improvedHook,
+        shotList: safeStrArray(existing.creativeDirection?.shotList),
+        textOverlays: safeStrArray(existing.creativeDirection?.textOverlays),
+        recommendedPlacements: safeStrArray(existing.creativeDirection?.recommendedPlacements),
+        voiceoverScript: improved.creativeDirection
+          ? `${safeStr(improved.creativeDirection).slice(0, 500)}\n\n---\nPrevious: ${safeStr(existing.creativeDirection?.voiceoverScript).slice(0, 200)}`
+          : safeStr(existing.creativeDirection?.voiceoverScript),
+      },
+      compliance: {
+        ...existing.compliance,
+        disallowedPhrases: safeStrArray(existing.compliance?.disallowedPhrases),
+        approvalWarnings: newWarnings,
+      },
+      optimization: {
+        ...existing.optimization,
+        humanApprovalTriggers: safeStrArray(existing.optimization?.humanApprovalTriggers),
+      },
+      ghlWorkflow: {
+        ...existing.ghlWorkflow,
+        steps: safeStrArray(existing.ghlWorkflow?.steps),
+        tags: safeStrArray(existing.ghlWorkflow?.tags),
+      },
+      leadForm: {
+        ...existing.leadForm,
+        qualificationQuestions: safeStrArray(existing.leadForm?.qualificationQuestions),
+        contactFields: safeStrArray(existing.leadForm?.contactFields),
+      },
+      strategicRationale: newRationale,
+      // Preserve adVariations only if it's a real array
+      adVariations: Array.isArray(existing.adVariations) ? existing.adVariations : undefined,
+    };
+  } catch (err) {
+    // Never throw — return original draft if anything goes wrong
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[Council] applyCouncilToDraft failed, preserving original:", err);
+    }
+    return existing;
+  }
 }

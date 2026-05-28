@@ -150,6 +150,7 @@ interface TheCouncilProps {
   assetNotes: Record<string, string>;
   assetAnalyses: Record<string, StoredAssetAnalysis>;
   onApplyImprovedDraft: (council: CouncilResponse) => void;
+  onAnalysesUpdated: (updates: Record<string, StoredAssetAnalysis>) => void;
 }
 
 export function TheCouncil({
@@ -163,6 +164,7 @@ export function TheCouncil({
   assetNotes,
   assetAnalyses,
   onApplyImprovedDraft,
+  onAnalysesUpdated,
 }: TheCouncilProps) {
   const [councilMode, setCouncilMode] = useState<CouncilMode>("campaign_build");
   const [running, setRunning] = useState(false);
@@ -187,44 +189,75 @@ export function TheCouncil({
   const [copied, setCopied] = useState(false);
   const [autoSkillCreated, setAutoSkillCreated] = useState(false);
   const [showModes, setShowModes] = useState(false);
+  // Pre-analysis tracking
+  const [preAnalysisPhase, setPreAnalysisPhase] = useState(false);
+  const [analyzingAssetCount, setAnalyzingAssetCount] = useState(0);
+  const [analyzedAssetCount, setAnalyzedAssetCount] = useState(0);
+  const [analysisWarnings, setAnalysisWarnings] = useState<string[]>([]);
 
   const hasContext = !!(selectedClient && goal && service) || !!displayPlan;
   const activeMode = COUNCIL_MODES.find((m) => m.id === councilMode) ?? COUNCIL_MODES[0];
 
-  async function runCouncil() {
-    if (running || !hasContext) return;
+  // Runs /api/creatives/analyze for any selected assets that have no analysis yet.
+  // Returns a map of freshly fetched analyses (id → StoredAssetAnalysis).
+  // Gracefully continues on failure — returns partial results.
+  async function runPreAnalysis(): Promise<Record<string, StoredAssetAnalysis>> {
+    const missing = selectedAssets.filter((a) => !assetAnalyses[a.id]);
+    if (missing.length === 0) return {};
 
-    // Map StoredAssetAnalysis fields to the prompt builder's expected shape
-    const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
-    for (const [id, a] of Object.entries(assetAnalyses)) {
-      mappedAnalyses[id] = {
-        visualSummary: a.visual_summary,
-        analysisSource: a.analysis_source,
-      };
+    setPreAnalysisPhase(true);
+    setAnalyzingAssetCount(missing.length);
+    setAnalyzedAssetCount(0);
+    setAnalysisWarnings([]);
+
+    const fresh: Record<string, StoredAssetAnalysis> = {};
+    const failedNames: string[] = [];
+
+    // Process in batches of 5 (route allows up to 10; 5 is safe for timeout)
+    const BATCH = 5;
+    for (let i = 0; i < missing.length; i += BATCH) {
+      const batch = missing.slice(i, i + BATCH);
+      try {
+        const res = await fetch("/api/creatives/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assets: batch.map((a) => ({
+              id: a.id,
+              assetType: a.assetType,
+              service: service || String(a.assetType),
+              market: market || undefined,
+              notes: assetNotes[a.id] || a.notes || undefined,
+              approvedForAds: a.approvedForAds,
+              fileName: a.fileName,
+              clientName: selectedClient?.name,
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as {
+          results?: Array<{ assetId: string; analysis: StoredAssetAnalysis }>;
+        };
+        for (const r of data.results ?? []) {
+          if (r.assetId && r.analysis) fresh[r.assetId] = r.analysis;
+        }
+      } catch {
+        for (const a of batch) failedNames.push(a.fileName ?? a.id);
+      }
+      setAnalyzedAssetCount((prev) => prev + batch.length);
     }
 
-    const prompt = buildCouncilPrompt(
-      {
-        client: selectedClient
-          ? {
-              id: selectedClient.id,
-              name: selectedClient.name,
-              market: (selectedClient as { market?: string }).market,
-              monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
-              services: (selectedClient as { services?: string[] }).services,
-            }
-          : null,
-        goal,
-        service,
-        market,
-        budget,
-        displayPlan,
-        selectedAssets,
-        assetNotes,
-        assetAnalyses: mappedAnalyses,
-      },
-      councilMode
-    );
+    if (failedNames.length > 0) setAnalysisWarnings(failedNames);
+
+    // Notify parent so its assetAnalyses state stays in sync
+    if (Object.keys(fresh).length > 0) onAnalysesUpdated(fresh);
+
+    setPreAnalysisPhase(false);
+    return fresh;
+  }
+
+  async function runCouncil() {
+    if (running || !hasContext) return;
 
     setRunning(true);
     setRunStatus("idle");
@@ -242,8 +275,51 @@ export function TheCouncil({
     setShowImprovedDraft(false);
     setShowSummary(false);
     setShowAssetAnalysis(false);
+    setAnalysisWarnings([]);
 
     try {
+      // Phase 1: analyze any assets that are missing a visual summary
+      const freshAnalyses = await runPreAnalysis();
+
+      // Merge fresh results with existing analyses for the prompt
+      const mergedAnalyses: Record<string, StoredAssetAnalysis> = {
+        ...assetAnalyses,
+        ...freshAnalyses,
+      };
+
+      // Map to the shape buildCouncilPrompt expects
+      const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
+      for (const [id, a] of Object.entries(mergedAnalyses)) {
+        mappedAnalyses[id] = {
+          visualSummary: a.visual_summary,
+          analysisSource: a.analysis_source,
+        };
+      }
+
+      // Phase 2: build and send the council prompt
+      const prompt = buildCouncilPrompt(
+        {
+          client: selectedClient
+            ? {
+                id: selectedClient.id,
+                name: selectedClient.name,
+                market: (selectedClient as { market?: string }).market,
+                monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
+                services: (selectedClient as { services?: string[] }).services,
+              }
+            : null,
+          goal,
+          service,
+          market,
+          budget,
+          displayPlan,
+          selectedAssets,
+          assetNotes,
+          assetAnalyses: mappedAnalyses,
+        },
+        councilMode
+      );
+
       const res = await fetch("/api/veronica/hermes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,10 +338,7 @@ export function TheCouncil({
           const parsed = JSON.parse(clean) as CouncilResponse;
           setCouncilResult(parsed);
           setRunStatus("success");
-          // Auto-expand improved draft for improve_and_apply mode
-          if (councilMode === "improve_and_apply_draft") {
-            setShowImprovedDraft(true);
-          }
+          if (councilMode === "improve_and_apply_draft") setShowImprovedDraft(true);
         } catch {
           setParseError(true);
           setRunStatus("success");
@@ -276,6 +349,7 @@ export function TheCouncil({
       setErrorMsg("Network error. Hermes is unreachable.");
     } finally {
       setRunning(false);
+      setPreAnalysisPhase(false);
     }
   }
 
@@ -566,7 +640,9 @@ export function TheCouncil({
           {running ? (
             <>
               <Loader2 size={12} className="animate-spin" />
-              Council deliberating…
+              {preAnalysisPhase
+                ? `Analyzing assets… (${analyzedAssetCount}/${analyzingAssetCount})`
+                : "Council deliberating…"}
             </>
           ) : (
             <>
@@ -583,7 +659,23 @@ export function TheCouncil({
             style={{ backgroundColor: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", color: "#c9a84c" }}
           >
             <Loader2 size={10} className="animate-spin" />
-            The Council is deliberating on {activeMode.label.toLowerCase()}…
+            {preAnalysisPhase
+              ? `Analyzing creative assets… ${analyzedAssetCount}/${analyzingAssetCount} complete`
+              : `The Council is deliberating on ${activeMode.label.toLowerCase()}…`}
+          </div>
+        )}
+
+        {/* ── Analysis warnings (metadata fallback notice) ── */}
+        {!running && analysisWarnings.length > 0 && (
+          <div
+            className="flex items-start gap-1.5 px-2.5 py-2 rounded-lg text-[10px]"
+            style={{ backgroundColor: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}
+          >
+            <AlertTriangle size={9} className="flex-shrink-0 mt-0.5" />
+            <span>
+              Some assets used metadata fallback because visual analysis failed:{" "}
+              {analysisWarnings.join(", ")}
+            </span>
           </div>
         )}
 

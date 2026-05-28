@@ -247,6 +247,18 @@ export interface GHLOpportunitySnapshotRow {
   created_at: string;
 }
 
+export type HermesRunStatus = "success" | "error" | "unreachable";
+
+export interface VeronicaHermesRunRow {
+  id: string;
+  prompt: string;
+  output: string | null;
+  error: string | null;
+  status: HermesRunStatus;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface MetaCampaignSnapshotRow {
   id: string;
   client_id: string;
@@ -329,6 +341,19 @@ export interface Database {
         Row: GHLOpportunitySnapshotRow;
         Insert: Omit<GHLOpportunitySnapshotRow, "id" | "created_at">;
         Update: Partial<Omit<GHLOpportunitySnapshotRow, "id" | "created_at">>;
+      };
+      veronica_hermes_runs: {
+        Row: VeronicaHermesRunRow;
+        Insert: {
+          id?: string;
+          prompt: string;
+          output?: string | null;
+          error?: string | null;
+          status?: HermesRunStatus;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
       };
       // ── Victoria AI Sales Coach tables ─────────────────
       victoria_calls: {

@@ -60,7 +60,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
   return (
     <header
-      className="h-[68px] flex items-center justify-between px-4 sm:px-6 flex-shrink-0 border-b gap-3"
+      className="relative h-[64px] flex items-center justify-between px-4 sm:px-6 flex-shrink-0 border-b gap-3 vc-accent-top"
       style={{
         backgroundColor: "var(--t-header-bg)",
         borderColor: "var(--t-border-nav)",
@@ -84,12 +84,12 @@ export function Topbar({ onMenuClick }: TopbarProps) {
 
         <div className="min-w-0">
           <h1
-            className="text-[15px] sm:text-[16px] font-bold tracking-wide truncate"
+            className="text-[15px] font-bold tracking-wide truncate"
             style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}
           >
             {page?.title}
           </h1>
-          <p className="text-[11px] truncate hidden sm:block" style={{ color: "var(--t-muted)" }}>
+          <p className="text-[10px] truncate hidden sm:block" style={{ color: "var(--t-dim)" }}>
             {page?.subtitle}
           </p>
         </div>

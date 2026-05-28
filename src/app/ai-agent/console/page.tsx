@@ -2312,6 +2312,69 @@ function HermesCampaignAssist({
 }
 
 // ─────────────────────────────────────────────────────────────
+// Internal AI debug flag — set true in development only.
+// When false, Hermes and Council panels are hidden from UI.
+// ─────────────────────────────────────────────────────────────
+const SHOW_INTERNAL_AI_DEBUG = false;
+
+// ─────────────────────────────────────────────────────────────
+// normalizeCampaignDraft — coerce all array fields to arrays.
+// Hermes/AI can return unexpected shapes (strings, objects) for
+// fields the UI expects to be arrays. Always run this before
+// calling setCurrentPlan with Council-improved drafts.
+// ─────────────────────────────────────────────────────────────
+function toArr<T>(v: unknown, fallback: T[] = []): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (v == null) return fallback;
+  return fallback;
+}
+
+function normalizeCampaignDraft(draft: CampaignDraft): CampaignDraft {
+  return {
+    ...draft,
+    adCopy: {
+      ...draft.adCopy,
+      primaryTexts: toArr<string>(draft.adCopy?.primaryTexts, [""]),
+      headlines: toArr<string>(draft.adCopy?.headlines),
+      descriptions: toArr<string>(draft.adCopy?.descriptions),
+      cta: typeof draft.adCopy?.cta === "string" ? draft.adCopy.cta : "",
+    },
+    metaStructure: {
+      ...draft.metaStructure,
+      adSetNames: toArr<string>(draft.metaStructure?.adSetNames),
+      placements: toArr<string>(draft.metaStructure?.placements),
+      adSets: toArr(draft.metaStructure?.adSets),
+    },
+    creativeDirection: {
+      ...draft.creativeDirection,
+      shotList: toArr<string>(draft.creativeDirection?.shotList),
+      textOverlays: toArr<string>(draft.creativeDirection?.textOverlays),
+      recommendedPlacements: toArr<string>(draft.creativeDirection?.recommendedPlacements),
+    },
+    compliance: {
+      ...draft.compliance,
+      disallowedPhrases: toArr<string>(draft.compliance?.disallowedPhrases),
+      approvalWarnings: toArr<string>(draft.compliance?.approvalWarnings),
+    },
+    optimization: {
+      ...draft.optimization,
+      humanApprovalTriggers: toArr<string>(draft.optimization?.humanApprovalTriggers),
+    },
+    ghlWorkflow: {
+      ...draft.ghlWorkflow,
+      steps: toArr<string>(draft.ghlWorkflow?.steps),
+      tags: toArr<string>(draft.ghlWorkflow?.tags),
+    },
+    leadForm: {
+      ...draft.leadForm,
+      qualificationQuestions: toArr<string>(draft.leadForm?.qualificationQuestions),
+      contactFields: toArr<string>(draft.leadForm?.contactFields),
+    },
+    adVariations: Array.isArray(draft.adVariations) ? draft.adVariations : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────
 
@@ -2360,6 +2423,7 @@ function AICampaignBuilderContent() {
   const [councilWarning, setCouncilWarning] = useState<string | null>(null);
   const [showCouncilDebate, setShowCouncilDebate] = useState(false);
   const [showHermesAssist, setShowHermesAssist] = useState(false);
+  const [showStrategyDetails, setShowStrategyDetails] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<CampaignDraft | null>(null);
   // When user explicitly resets, stop showing the URL-param draft
   const [planResetByUser, setPlanResetByUser] = useState(false);
@@ -2561,7 +2625,7 @@ function AICampaignBuilderContent() {
     setMockModeNotice(null);
     setGenerationSource(null);
     setActiveSection("overview");
-    setPipelinePhase("Building initial campaign…");
+    setPipelinePhase("Veronica is building your campaign…");
     setCouncilIntelligence(null);
     setCouncilWarning(null);
 
@@ -2633,7 +2697,7 @@ function AICampaignBuilderContent() {
       let mergedAnalyses = { ...assetAnalyses };
 
       if (missingAssets.length > 0) {
-        setPipelinePhase("Analyzing creative assets…");
+        setPipelinePhase("Veronica is analyzing your creative assets…");
         try {
           const analysisRes = await fetch("/api/creatives/analyze", {
             method: "POST",
@@ -2673,7 +2737,7 @@ function AICampaignBuilderContent() {
       if (generationAttemptIdRef.current !== attemptId) return;
 
       // ── Phase 3: The Council deliberation ────────────────────────────────
-      setPipelinePhase("Convening The Council…");
+      setPipelinePhase("Veronica is refining the strategy…");
 
       const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
       for (const [id, a] of Object.entries(mergedAnalyses)) {
@@ -2721,7 +2785,7 @@ function AICampaignBuilderContent() {
       if (generationAttemptIdRef.current !== attemptId) return;
 
       // ── Phase 4: Parse Council JSON + apply improved draft ────────────────
-      setPipelinePhase("Applying Council improvements…");
+      setPipelinePhase("Veronica is applying strategic improvements…");
 
       let councilResult: CouncilResponse | null = null;
       try {
@@ -2736,9 +2800,9 @@ function AICampaignBuilderContent() {
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      setPipelinePhase("Finalizing draft…");
+      setPipelinePhase("Veronica is finalizing your campaign draft…");
       if (councilResult?.improvedDraft) {
-        const improved = applyCouncilToDraft(initialPlan, councilResult);
+        const improved = normalizeCampaignDraft(applyCouncilToDraft(initialPlan, councilResult));
         setCurrentPlan(improved);
       }
       setCouncilIntelligence(councilResult);
@@ -2923,7 +2987,7 @@ function AICampaignBuilderContent() {
 
   function handleApplyCouncilDraft(council: CouncilResponse) {
     if (!displayPlan) return;
-    const improved = applyCouncilToDraft(displayPlan, council);
+    const improved = normalizeCampaignDraft(applyCouncilToDraft(displayPlan, council));
     setCurrentPlan(improved);
   }
 
@@ -3697,9 +3761,11 @@ function AICampaignBuilderContent() {
                 <div className="w-14 h-14 rounded-xl bg-[#0081f2]/10 border border-[#0081f2]/25 flex items-center justify-center mb-4">
                   <Loader2 size={22} className="text-[#0081f2] animate-spin" />
                 </div>
-                <div className="text-[14px] font-semibold text-[var(--t-text)] mb-1.5">Veronica is building the campaign draft…</div>
+                <div className="text-[14px] font-semibold text-[var(--t-text)] mb-1.5">
+                  {pipelinePhase || "Veronica is building your campaign…"}
+                </div>
                 <p className="text-[12px] text-[var(--t-muted)]">
-                  Building copy, lead form, GHL workflow, creative direction &amp; compliance check
+                  Building campaign strategy, copy, lead form, follow-up workflows &amp; compliance
                 </p>
               </div>
             )}
@@ -3751,6 +3817,89 @@ function AICampaignBuilderContent() {
                     </div>
                   )}
                 </div>
+
+                {/* ── Strategy Intelligence summary (Veronica-branded, no internal labels) ── */}
+                {councilWarning && (
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[11px]" style={{ backgroundColor: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", color: "#f59e0b" }}>
+                    <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                    <span>{councilWarning}</span>
+                  </div>
+                )}
+                {councilIntelligence && (() => {
+                  const score = councilIntelligence.approvalReadinessScore ?? 0;
+                  const scoreColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
+                  const verdictMap = {
+                    ready: { label: "Ready", color: "#22c55e" },
+                    revise: { label: "Needs Revision", color: "#f59e0b" },
+                    rebuild: { label: "Rebuild", color: "#ff8400" },
+                    reject: { label: "Reconsidering Direction", color: "#ef4444" },
+                  };
+                  const v = verdictMap[councilIntelligence.finalVerdict ?? "revise"];
+                  return (
+                    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(201,168,76,0.2)", backgroundColor: "var(--t-surface)" }}>
+                      <div className="flex items-center gap-2.5 px-4 py-3 border-b" style={{ borderColor: "rgba(201,168,76,0.12)" }}>
+                        <Sparkles size={11} style={{ color: "#c9a84c" }} />
+                        <span className="text-[11px] font-semibold" style={{ color: "#c9a84c" }}>Strategy Intelligence</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full font-bold ml-1" style={{ color: v.color, backgroundColor: `${v.color}12`, border: `1px solid ${v.color}25` }}>
+                          {v.label}
+                        </span>
+                        <span className="ml-auto text-[12px] font-bold" style={{ color: scoreColor }}>
+                          {score}<span className="text-[9px] font-normal ml-0.5 text-[var(--t-dim)]">/100</span>
+                        </span>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        {councilIntelligence.winningAngle && (
+                          <p className="text-[12px] leading-snug" style={{ color: "var(--t-text)" }}>{councilIntelligence.winningAngle}</p>
+                        )}
+                        <button
+                          onClick={() => setShowStrategyDetails(prev => !prev)}
+                          className="text-[10px] transition-colors"
+                          style={{ color: "var(--t-muted)" }}
+                        >
+                          {showStrategyDetails ? "▲ Hide details" : "▼ Show improvements & next steps"}
+                        </button>
+                        {showStrategyDetails && (
+                          <div className="space-y-2 pt-1">
+                            {councilIntelligence.changesMade?.length > 0 && (
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#22c55e" }}>Improvements Applied</div>
+                                <ul className="space-y-0.5">
+                                  {councilIntelligence.changesMade.slice(0, 5).map((c, i) => (
+                                    <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
+                                      <CheckCircle2 size={9} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2 }} />{c}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {councilIntelligence.missingAssets?.length > 0 && (
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#f59e0b" }}>Missing Assets</div>
+                                <ul className="space-y-0.5">
+                                  {councilIntelligence.missingAssets.map((a, i) => (
+                                    <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
+                                      <AlertCircle size={9} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />{a}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {councilIntelligence.nextOperatorTasks?.length > 0 && (
+                              <div>
+                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#a78bfa" }}>Recommended Next Steps</div>
+                                <ul className="space-y-0.5">
+                                  {councilIntelligence.nextOperatorTasks.slice(0, 4).map((t, i) => (
+                                    <li key={i} className="text-[11px]" style={{ color: "var(--t-muted)" }}>{i + 1}. {t}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Section nav */}
                 <div className="bg-[var(--t-surface)] border border-[var(--t-border)] rounded-xl overflow-hidden">
@@ -4456,8 +4605,8 @@ function AICampaignBuilderContent() {
               </div>
             )}
 
-            {/* Hermes Campaign Builder Assist — shows when client+goal+service set or draft exists */}
-            {!isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
+            {/* Hermes + Council — internal orchestration, hidden in production */}
+            {SHOW_INTERNAL_AI_DEBUG && !isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
               <HermesCampaignAssist
                 selectedClient={selectedClient}
                 goal={goal}
@@ -4468,9 +4617,7 @@ function AICampaignBuilderContent() {
                 selectedAssets={selectedAssets}
               />
             )}
-
-            {/* The Council — strategy room attached to the campaign builder */}
-            {!isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
+            {SHOW_INTERNAL_AI_DEBUG && !isGenerating && ((!!selectedClient && !!goal && !!service) || !!displayPlan) && (
               <TheCouncil
                 selectedClient={selectedClient}
                 goal={goal}

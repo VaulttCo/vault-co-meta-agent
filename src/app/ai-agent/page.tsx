@@ -28,6 +28,7 @@ import {
 import { usePlans } from "@/components/PlanProvider";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
+import type { VeronicaHermesRunRow } from "@/lib/supabase/types";
 
 interface OperatorTask {
   id: string;
@@ -91,6 +92,8 @@ export default function VeronicaOverviewPage() {
   const [hermesError, setHermesError] = useState<string | null>(null);
   const [hermesLoading, setHermesLoading] = useState(false);
   const hermesOutputRef = useRef<HTMLDivElement>(null);
+  const [hermesRuns, setHermesRuns] = useState<VeronicaHermesRunRow[]>([]);
+  const [hermesRunsLoading, setHermesRunsLoading] = useState(true);
 
   useEffect(() => {
     getDataProvider()
@@ -111,6 +114,18 @@ export default function VeronicaOverviewPage() {
       })
       .catch(() => setLoadingTasks(false));
   }, []);
+
+  function fetchHermesRuns() {
+    fetch("/api/veronica/hermes")
+      .then((r) => r.json())
+      .then((d: { runs?: VeronicaHermesRunRow[] }) => {
+        setHermesRuns(d.runs ?? []);
+        setHermesRunsLoading(false);
+      })
+      .catch(() => setHermesRunsLoading(false));
+  }
+
+  useEffect(() => { fetchHermesRuns(); }, []);
 
   // ── Client stats ────────────────────────────────────────────
   const totalClients = clients.length;
@@ -176,6 +191,7 @@ export default function VeronicaOverviewPage() {
       setHermesError("Unable to reach Hermes. Check your connection and try again.");
     } finally {
       setHermesLoading(false);
+      fetchHermesRuns();
     }
   }
 
@@ -804,6 +820,96 @@ export default function VeronicaOverviewPage() {
               </div>
             </div>
           )}
+
+          {/* Recent runs */}
+          <div
+            className="pt-2 border-t space-y-2"
+            style={{ borderColor: "var(--t-border)" }}
+          >
+            <div
+              className="text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "rgba(107,122,153,0.55)" }}
+            >
+              Recent Runs
+            </div>
+
+            {hermesRunsLoading ? (
+              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                Loading…
+              </p>
+            ) : hermesRuns.length === 0 ? (
+              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
+                No runs yet. Submit a prompt above to get started.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {hermesRuns.map((run) => {
+                  const isSuccess = run.status === "success";
+                  const isUnreachable = run.status === "unreachable";
+                  const statusColor = isSuccess
+                    ? "#22c55e"
+                    : isUnreachable
+                    ? "#ff8400"
+                    : "#ef4444";
+                  const statusLabel = isSuccess ? "OK" : isUnreachable ? "UNREACHABLE" : "ERROR";
+                  const promptPreview =
+                    run.prompt.length > 80
+                      ? run.prompt.slice(0, 80) + "…"
+                      : run.prompt;
+                  const ts = new Date(run.created_at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
+
+                  return (
+                    <div
+                      key={run.id}
+                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg"
+                      style={{
+                        backgroundColor: "rgba(0,129,242,0.03)",
+                        border: "1px solid rgba(61,79,110,0.16)",
+                      }}
+                    >
+                      <span
+                        className="text-[8px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
+                        style={{
+                          color: statusColor,
+                          backgroundColor: `${statusColor}18`,
+                          border: `1px solid ${statusColor}30`,
+                        }}
+                      >
+                        {statusLabel}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className="text-[11px] leading-snug"
+                          style={{ color: "var(--t-text)" }}
+                        >
+                          {promptPreview}
+                        </div>
+                        {run.error && (
+                          <div
+                            className="text-[10px] mt-0.5 truncate"
+                            style={{ color: "#ef4444" }}
+                          >
+                            {run.error}
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className="text-[10px] flex-shrink-0 tabular-nums"
+                        style={{ color: "rgba(107,122,153,0.50)" }}
+                      >
+                        {ts}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

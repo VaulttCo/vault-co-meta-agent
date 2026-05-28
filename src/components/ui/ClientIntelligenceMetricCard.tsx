@@ -20,9 +20,9 @@ export interface ClientIntelligenceMetricData {
 export interface ClientIntelligenceMetricCardProps {
   clientName: string;
   vertical: string;
-  phase: string;
-  tier: Tier;
-  intelligenceScore: number;
+  phase?: string;
+  tier?: Tier;
+  intelligenceScore?: number;
   metrics: [
     ClientIntelligenceMetricData,
     ClientIntelligenceMetricData,
@@ -188,7 +188,7 @@ export function ClientIntelligenceMetricCard({
   lastUpdated,
 }: ClientIntelligenceMetricCardProps) {
   const reduced = useReducedMotion();
-  const tc = TIER_CFG[tier];
+  const tc = TIER_CFG[tier ?? "standard"];
   const sc = STATUS_CFG[status];
 
   return (
@@ -217,39 +217,40 @@ export function ClientIntelligenceMetricCard({
               </div>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <VCChip label={vertical} />
-                <VCChip label={phase} color={tc.color} />
+                {phase && <VCChip label={phase} color={tc.color} />}
               </div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-            <VCStatusBadge label={tc.label} variant={tc.badgeVariant} />
+            {tier && <VCStatusBadge label={tc.label} variant={tc.badgeVariant} />}
             <VCStatusBadge label={sc.label} variant={sc.variant} dot />
           </div>
         </div>
 
-        {/* Intelligence score */}
-        <div
-          className="flex items-center gap-4 px-5 py-4"
-          style={{ borderBottom: "1px solid var(--t-border-subtle)" }}
-        >
-          <ScoreGauge score={intelligenceScore} color={tc.color} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <Brain size={11} style={{ color: tc.color }} />
-              <span
-                className="text-[10px] font-semibold uppercase tracking-widest"
-                style={{ color: "var(--t-dim)" }}
-              >
-                Intelligence Score
-              </span>
-            </div>
-            <HealthBar score={intelligenceScore} color={tc.color} />
-            <div className="flex justify-between mt-1">
-              <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>0</span>
-              <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>100</span>
+        {intelligenceScore !== undefined && (
+          <div
+            className="flex items-center gap-4 px-5 py-4"
+            style={{ borderBottom: "1px solid var(--t-border-subtle)" }}
+          >
+            <ScoreGauge score={intelligenceScore} color={tc.color} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Brain size={11} style={{ color: tc.color }} />
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-widest"
+                  style={{ color: "var(--t-dim)" }}
+                >
+                  Intelligence Score
+                </span>
+              </div>
+              <HealthBar score={intelligenceScore} color={tc.color} />
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>0</span>
+                <span className="text-[10px]" style={{ color: "var(--t-dim)" }}>100</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Metrics grid */}
         <div

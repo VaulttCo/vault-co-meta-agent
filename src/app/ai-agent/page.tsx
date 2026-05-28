@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Bot,
@@ -21,6 +21,9 @@ import {
   XCircle,
   Sparkles,
   Clock,
+  Terminal,
+  Play,
+  AlertTriangle,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { getDataProvider } from "@/lib/data/data-provider";
@@ -81,6 +84,13 @@ export default function VeronicaOverviewPage() {
   const [tasks, setTasks] = useState<OperatorTask[]>([]);
   const [loadingClients, setLoadingClients] = useState(true);
   const [loadingTasks, setLoadingTasks] = useState(true);
+
+  // Hermes Operator state
+  const [hermesPrompt, setHermesPrompt] = useState("");
+  const [hermesOutput, setHermesOutput] = useState<string | null>(null);
+  const [hermesError, setHermesError] = useState<string | null>(null);
+  const [hermesLoading, setHermesLoading] = useState(false);
+  const hermesOutputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getDataProvider()
@@ -143,6 +153,31 @@ export default function VeronicaOverviewPage() {
       return (order[a.priority] ?? 2) - (order[b.priority] ?? 2);
     })
     .slice(0, 5);
+
+  async function runHermes() {
+    if (!hermesPrompt.trim() || hermesLoading) return;
+    setHermesLoading(true);
+    setHermesOutput(null);
+    setHermesError(null);
+    try {
+      const res = await fetch("/api/veronica/hermes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: hermesPrompt }),
+      });
+      const data: { output?: string | null; error?: string | null } = await res.json();
+      if (data.error) {
+        setHermesError(data.error);
+      } else {
+        setHermesOutput(data.output ?? null);
+        setTimeout(() => hermesOutputRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 80);
+      }
+    } catch {
+      setHermesError("Unable to reach Hermes. Check your connection and try again.");
+    } finally {
+      setHermesLoading(false);
+    }
+  }
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -607,6 +642,168 @@ export default function VeronicaOverviewPage() {
             Settings
           </Link>{" "}
           to unlock live campaign and audience data.
+        </div>
+      </div>
+
+      {/* ── Hermes Operator ───────────────────────────────────── */}
+      <div
+        className="rounded-xl overflow-hidden"
+        style={{
+          backgroundColor: "var(--t-input-bg)",
+          border: "1px solid var(--t-border)",
+        }}
+      >
+        {/* Card header */}
+        <div
+          className="px-5 py-4 border-b flex items-center justify-between"
+          style={{ borderColor: "var(--t-border)" }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{
+                background: "linear-gradient(135deg, rgba(0,129,242,0.18) 0%, rgba(0,79,176,0.10) 100%)",
+                border: "1px solid rgba(0,129,242,0.28)",
+              }}
+            >
+              <Terminal size={13} style={{ color: "#4aabff" }} />
+            </div>
+            <div>
+              <div
+                className="text-[13px] font-semibold leading-tight"
+                style={{ color: "var(--t-text)" }}
+              >
+                Hermes Operator
+              </div>
+              <div
+                className="text-[10px] mt-0.5"
+                style={{ color: "var(--t-muted)" }}
+              >
+                Execution layer connected to Veronica
+              </div>
+            </div>
+          </div>
+          <span
+            className="text-[9px] font-bold px-2 py-0.5 rounded"
+            style={{
+              color: "rgba(107,122,153,0.55)",
+              backgroundColor: "rgba(61,79,110,0.10)",
+              border: "1px solid rgba(61,79,110,0.16)",
+            }}
+          >
+            External
+          </span>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Safety warning */}
+          <div
+            className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-[11px] leading-relaxed"
+            style={{
+              backgroundColor: "rgba(255,132,0,0.05)",
+              border: "1px solid rgba(255,132,0,0.16)",
+              color: "rgba(255,160,50,0.85)",
+            }}
+          >
+            <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" style={{ color: "#ff8400" }} />
+            <span>
+              Hermes can prepare drafts, SOPs, audits, and operator plans. It cannot launch ads,
+              change budgets, send emails, delete data, or modify production systems without approval.
+            </span>
+          </div>
+
+          {/* Prompt textarea */}
+          <div className="space-y-2">
+            <label
+              className="text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "rgba(107,122,153,0.65)" }}
+            >
+              Prompt
+            </label>
+            <textarea
+              rows={4}
+              placeholder="Describe the task for Hermes — e.g. &quot;Draft a 30-day onboarding SOP for a new roofing client&quot;"
+              value={hermesPrompt}
+              onChange={(e) => setHermesPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runHermes();
+              }}
+              className="w-full rounded-lg px-3.5 py-3 text-[12px] resize-none outline-none transition-all"
+              style={{
+                backgroundColor: "rgba(0,129,242,0.04)",
+                border: "1px solid rgba(61,79,110,0.28)",
+                color: "var(--t-text)",
+                lineHeight: "1.6",
+              }}
+            />
+          </div>
+
+          {/* Run button */}
+          <button
+            onClick={runHermes}
+            disabled={hermesLoading || !hermesPrompt.trim()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[12px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              backgroundColor: "rgba(0,129,242,0.14)",
+              border: "1px solid rgba(0,129,242,0.30)",
+              color: "#4aabff",
+            }}
+          >
+            {hermesLoading ? (
+              <>
+                <span
+                  className="w-3.5 h-3.5 rounded-full border-2 border-t-transparent animate-spin"
+                  style={{ borderColor: "rgba(74,171,255,0.4)", borderTopColor: "transparent" }}
+                />
+                Running Hermes…
+              </>
+            ) : (
+              <>
+                <Play size={12} />
+                Run Hermes
+              </>
+            )}
+          </button>
+
+          {/* Error state */}
+          {hermesError && (
+            <div
+              className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg text-[11px] leading-relaxed"
+              style={{
+                backgroundColor: "rgba(239,68,68,0.06)",
+                border: "1px solid rgba(239,68,68,0.16)",
+                color: "#ef4444",
+              }}
+            >
+              <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+              <span>{hermesError}</span>
+            </div>
+          )}
+
+          {/* Output panel */}
+          {hermesOutput !== null && !hermesError && (
+            <div ref={hermesOutputRef} className="space-y-1.5">
+              <div
+                className="text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: "rgba(107,122,153,0.65)" }}
+              >
+                Output
+              </div>
+              <div
+                className="rounded-lg px-4 py-4 text-[12px] leading-relaxed whitespace-pre-wrap"
+                style={{
+                  backgroundColor: "rgba(0,129,242,0.04)",
+                  border: "1px solid rgba(0,129,242,0.12)",
+                  color: "var(--t-text)",
+                  fontFamily: "inherit",
+                  maxHeight: "420px",
+                  overflowY: "auto",
+                }}
+              >
+                {hermesOutput}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

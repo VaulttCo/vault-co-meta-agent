@@ -9,47 +9,57 @@ interface StatCardProps {
   changeType?: "up" | "down" | "neutral";
   icon: LucideIcon;
   iconColor?: string;
+  /** Optional top-border accent color — highlight priority metrics */
+  accent?: string;
 }
 
-export function StatCard({ label, value, change, changeType = "neutral", icon: Icon, iconColor = "#0081f2" }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  change,
+  changeType = "neutral",
+  icon: Icon,
+  iconColor = "#0081f2",
+  accent,
+}: StatCardProps) {
   return (
     <div
-      className="rounded-xl p-5 transition-all duration-150"
-      style={{
-        backgroundColor: "var(--t-surface)",
-        border: "1px solid var(--t-border)",
-        boxShadow: "var(--t-card-shadow)",
-      }}
+      className="vc-stat-card"
+      style={
+        accent
+          ? { borderTopColor: accent, borderTopWidth: "2px" }
+          : undefined
+      }
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center"
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
           style={{
             backgroundColor: `${iconColor}14`,
-            border: `1px solid ${iconColor}28`,
+            border: `1px solid ${iconColor}26`,
           }}
         >
-          <Icon size={16} style={{ color: iconColor }} />
+          <Icon size={14} style={{ color: iconColor }} />
         </div>
         {change && (
           <div
-            className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+            className="flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full"
             style={
               changeType === "up"
-                ? { backgroundColor: "rgba(34, 197, 94, 0.10)", color: "#22c55e" }
+                ? { backgroundColor: "rgba(34,197,94,0.10)", color: "#22c55e" }
                 : changeType === "down"
-                ? { backgroundColor: "rgba(239, 68, 68, 0.10)", color: "#ef4444" }
-                : { backgroundColor: "rgba(107, 122, 153, 0.10)", color: "#6b7a99" }
+                ? { backgroundColor: "rgba(239,68,68,0.10)", color: "#ef4444" }
+                : { backgroundColor: "rgba(107,122,153,0.10)", color: "#6b7a99" }
             }
           >
-            {changeType === "up" && <TrendingUp size={10} />}
-            {changeType === "down" && <TrendingDown size={10} />}
+            {changeType === "up" && <TrendingUp size={9} />}
+            {changeType === "down" && <TrendingDown size={9} />}
             {change}
           </div>
         )}
       </div>
       <div
-        className="text-2xl font-bold mb-1 tracking-wide"
+        className="text-[26px] font-bold leading-none mb-1.5 tracking-wide"
         style={{
           fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif",
           color: "var(--t-text)",
@@ -57,7 +67,9 @@ export function StatCard({ label, value, change, changeType = "neutral", icon: I
       >
         {value}
       </div>
-      <div className="text-xs font-medium" style={{ color: "var(--t-muted)" }}>{label}</div>
+      <div className="text-[11px] font-medium" style={{ color: "var(--t-muted)" }}>
+        {label}
+      </div>
     </div>
   );
 }

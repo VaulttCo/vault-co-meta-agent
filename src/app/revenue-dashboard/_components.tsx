@@ -54,10 +54,7 @@ export function PageErrorState({
 
 export function SectionCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div
-      className={`rounded-xl overflow-hidden ${className}`}
-      style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)", boxShadow: "var(--t-card-shadow)" }}
-    >
+    <div className={`vc-panel ${className}`}>
       {children}
     </div>
   );

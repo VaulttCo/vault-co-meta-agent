@@ -70,8 +70,8 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson } from "@/lib/council/buildCouncilPrompt";
-import type { CouncilResponse } from "@/lib/council/types";
+import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
+import type { CouncilResponse, CampaignImprovementPatch } from "@/lib/council/types";
 
 // ─────────────────────────────────────────────────────────────
 // Mock generation engine (client-side fallback)
@@ -2419,7 +2419,7 @@ function AICampaignBuilderContent() {
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [pipelinePhase, setPipelinePhase] = useState("");
-  const [councilIntelligence, setCouncilIntelligence] = useState<CouncilResponse | null>(null);
+  const [councilIntelligence, setCouncilIntelligence] = useState<CampaignImprovementPatch | null>(null);
   const [councilWarning, setCouncilWarning] = useState<string | null>(null);
   const [showCouncilDebate, setShowCouncilDebate] = useState(false);
   const [showHermesAssist, setShowHermesAssist] = useState(false);
@@ -2736,7 +2736,7 @@ function AICampaignBuilderContent() {
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 3: The Council deliberation ────────────────────────────────
+      // ── Phase 3: Internal strategy refinement (patch approach) ───────────
       setPipelinePhase("Veronica is refining the strategy…");
 
       const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
@@ -2744,30 +2744,31 @@ function AICampaignBuilderContent() {
         mappedAnalyses[id] = { visualSummary: a.visual_summary, analysisSource: a.analysis_source };
       }
 
-      const councilPrompt = buildCouncilPrompt(
-        {
-          client: {
-            id: selectedClient.id,
-            name: selectedClient.name,
-            market: (selectedClient as { market?: string }).market,
-            monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
-            services: (selectedClient as { services?: string[] }).services,
-          },
-          goal, service, market, budget,
-          displayPlan: initialPlan,
-          selectedAssets,
-          assetNotes,
-          assetAnalyses: mappedAnalyses,
+      const patchContext = {
+        client: {
+          id: selectedClient.id,
+          name: selectedClient.name,
+          market: (selectedClient as { market?: string }).market,
+          monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
+          services: (selectedClient as { services?: string[] }).services,
         },
-        "improve_and_apply_draft"
-      );
+        goal, service, market, budget,
+        displayPlan: initialPlan,
+        selectedAssets,
+        assetNotes,
+        assetAnalyses: mappedAnalyses,
+      };
 
-      // ── Phase 3b: Send to Hermes ─────────────────────────────────────────
-      // Sanitize prompt — strip control characters that may trip VPS validation
-      // Sanitize prompt — strip null bytes and non-printable control chars
-      const safePrompt = councilPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
+      // Use focused patch prompt — avoids full draft schema that trips VPS validation
+      const patchPrompt = buildImprovementPatchPrompt(patchContext);
+      // Strip null bytes and non-printable control chars before sending
+      const safePrompt = patchPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
 
-      let rawCouncilOutput = "";
+      if (process.env.NODE_ENV !== "production") {
+        console.info("[Patch] Prompt length:", safePrompt.length);
+      }
+
+      let rawPatchOutput = "";
       try {
         const hermesRes = await fetch("/api/veronica/hermes", {
           method: "POST",
@@ -2775,65 +2776,54 @@ function AICampaignBuilderContent() {
           body: JSON.stringify({ prompt: safePrompt }),
         });
 
-        // Try to parse the response body regardless of status
         let hermesData: { output?: string | null; error?: string | null } = {};
         try { hermesData = await hermesRes.json(); } catch { /* unparseable body */ }
 
         if (!hermesRes.ok || hermesData.error) {
-          // Surface a Veronica-branded warning, not the internal error details
           if (generationAttemptIdRef.current === attemptId) {
             setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
           }
           if (process.env.NODE_ENV !== "production") {
-            console.warn("[Council] Hermes error:", hermesData.error ?? `HTTP ${hermesRes.status}`);
+            console.warn("[Patch] Hermes error:", hermesData.error ?? `HTTP ${hermesRes.status}`);
           }
           return;
         }
-        rawCouncilOutput = (hermesData.output as string) ?? "";
+        rawPatchOutput = (hermesData.output as string) ?? "";
+        if (process.env.NODE_ENV !== "production") {
+          console.info("[Patch] Hermes response length:", rawPatchOutput.length);
+        }
       } catch (hermesErr) {
         if (generationAttemptIdRef.current === attemptId) {
           setCouncilWarning("Veronica couldn't reach the strategy engine. Your original draft was preserved.");
         }
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Council] Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
+          console.warn("[Patch] Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
         }
         return;
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 4: Parse Council JSON + apply improved draft ────────────────
+      // ── Phase 4: Parse patch + apply field-by-field to draft ─────────────
       setPipelinePhase("Veronica is applying strategic improvements…");
 
-      let councilResult: CouncilResponse | null = null;
-      const jsonStr = safeExtractJson(rawCouncilOutput);
-      if (jsonStr) {
-        try {
-          councilResult = JSON.parse(jsonStr) as CouncilResponse;
-        } catch {
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[Council] JSON parse failed after extraction. Output length:", rawCouncilOutput.length);
-          }
-        }
-      } else if (process.env.NODE_ENV !== "production") {
-        console.warn("[Council] safeExtractJson returned null. Raw output length:", rawCouncilOutput.length);
-      }
+      const patch = safeExtractImprovementPatch(rawPatchOutput);
 
-      if (!councilResult) {
+      if (patch) {
+        setPipelinePhase("Veronica is finalizing your campaign draft…");
+        const improved = normalizeCampaignDraft(applyImprovementPatchToDraft(initialPlan, patch));
+        if (generationAttemptIdRef.current === attemptId) {
+          setCurrentPlan(improved);
+          setCouncilIntelligence(patch);
+        }
+      } else {
         if (generationAttemptIdRef.current === attemptId) {
           setCouncilWarning("Veronica applied strategic analysis with minor warnings. Original draft structure preserved.");
         }
-        return;
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Patch] Patch extraction returned null. Raw output:", rawPatchOutput.slice(0, 300));
+        }
       }
-
-      if (generationAttemptIdRef.current !== attemptId) return;
-
-      setPipelinePhase("Veronica is finalizing your campaign draft…");
-      if (councilResult?.improvedDraft) {
-        const improved = normalizeCampaignDraft(applyCouncilToDraft(initialPlan, councilResult));
-        setCurrentPlan(improved);
-      }
-      setCouncilIntelligence(councilResult);
 
     } finally {
       setIsGenerating(false);
@@ -3854,26 +3844,25 @@ function AICampaignBuilderContent() {
                   </div>
                 )}
                 {councilIntelligence && (() => {
-                  const score = councilIntelligence.approvalReadinessScore ?? 0;
+                  const score = councilIntelligence.readinessScore ?? 0;
                   const scoreColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
-                  const verdictMap = {
-                    ready: { label: "Ready", color: "#22c55e" },
-                    revise: { label: "Needs Revision", color: "#f59e0b" },
-                    rebuild: { label: "Rebuild", color: "#ff8400" },
-                    reject: { label: "Reconsidering Direction", color: "#ef4444" },
-                  };
-                  const v = verdictMap[councilIntelligence.finalVerdict ?? "revise"];
+                  const scoreLabel = score >= 80 ? "Ready" : score >= 60 ? "Needs Revision" : "Improvements Needed";
+                  const scoreLabelColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ff8400";
                   return (
                     <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(201,168,76,0.2)", backgroundColor: "var(--t-surface)" }}>
                       <div className="flex items-center gap-2.5 px-4 py-3 border-b" style={{ borderColor: "rgba(201,168,76,0.12)" }}>
                         <Sparkles size={11} style={{ color: "#c9a84c" }} />
                         <span className="text-[11px] font-semibold" style={{ color: "#c9a84c" }}>Strategy Intelligence</span>
-                        <span className="text-[9px] px-2 py-0.5 rounded-full font-bold ml-1" style={{ color: v.color, backgroundColor: `${v.color}12`, border: `1px solid ${v.color}25` }}>
-                          {v.label}
-                        </span>
-                        <span className="ml-auto text-[12px] font-bold" style={{ color: scoreColor }}>
-                          {score}<span className="text-[9px] font-normal ml-0.5 text-[var(--t-dim)]">/100</span>
-                        </span>
+                        {score > 0 && (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full font-bold ml-1" style={{ color: scoreLabelColor, backgroundColor: `${scoreLabelColor}12`, border: `1px solid ${scoreLabelColor}25` }}>
+                            {scoreLabel}
+                          </span>
+                        )}
+                        {score > 0 && (
+                          <span className="ml-auto text-[12px] font-bold" style={{ color: scoreColor }}>
+                            {score}<span className="text-[9px] font-normal ml-0.5 text-[var(--t-dim)]">/100</span>
+                          </span>
+                        )}
                       </div>
                       <div className="px-4 py-3 space-y-2">
                         {councilIntelligence.winningAngle && (
@@ -3886,44 +3875,49 @@ function AICampaignBuilderContent() {
                         >
                           {showStrategyDetails ? "▲ Hide details" : "▼ Show improvements & next steps"}
                         </button>
-                        {showStrategyDetails && (
-                          <div className="space-y-2 pt-1">
-                            {councilIntelligence.changesMade?.length > 0 && (
-                              <div>
-                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#22c55e" }}>Improvements Applied</div>
-                                <ul className="space-y-0.5">
-                                  {councilIntelligence.changesMade.slice(0, 5).map((c, i) => (
-                                    <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
-                                      <CheckCircle2 size={9} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2 }} />{c}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {councilIntelligence.missingAssets?.length > 0 && (
-                              <div>
-                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#f59e0b" }}>Missing Assets</div>
-                                <ul className="space-y-0.5">
-                                  {councilIntelligence.missingAssets.map((a, i) => (
-                                    <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
-                                      <AlertCircle size={9} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />{a}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {councilIntelligence.nextOperatorTasks?.length > 0 && (
-                              <div>
-                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#a78bfa" }}>Recommended Next Steps</div>
-                                <ul className="space-y-0.5">
-                                  {councilIntelligence.nextOperatorTasks.slice(0, 4).map((t, i) => (
-                                    <li key={i} className="text-[11px]" style={{ color: "var(--t-muted)" }}>{i + 1}. {t}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        {showStrategyDetails && (() => {
+                          const patchChanges = councilIntelligence.changesMade ?? [];
+                          const patchMissing = councilIntelligence.missingAssets ?? [];
+                          const patchTasks = councilIntelligence.nextOperatorTasks ?? [];
+                          return (
+                            <div className="space-y-2 pt-1">
+                              {patchChanges.length > 0 && (
+                                <div>
+                                  <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#22c55e" }}>Improvements Applied</div>
+                                  <ul className="space-y-0.5">
+                                    {patchChanges.slice(0, 5).map((c, i) => (
+                                      <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
+                                        <CheckCircle2 size={9} style={{ color: "#22c55e", flexShrink: 0, marginTop: 2 }} />{c}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {patchMissing.length > 0 && (
+                                <div>
+                                  <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#f59e0b" }}>Missing Assets</div>
+                                  <ul className="space-y-0.5">
+                                    {patchMissing.map((a, i) => (
+                                      <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
+                                        <AlertCircle size={9} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />{a}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {patchTasks.length > 0 && (
+                                <div>
+                                  <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#a78bfa" }}>Recommended Next Steps</div>
+                                  <ul className="space-y-0.5">
+                                    {patchTasks.slice(0, 4).map((t, i) => (
+                                      <li key={i} className="text-[11px]" style={{ color: "var(--t-muted)" }}>{i + 1}. {t}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );

@@ -51,6 +51,9 @@ export interface Client {
   ghlPipelineId: string;
   stats: ClientStats;
   campaigns: Campaign[];
+  tier?: "elite" | "growth" | "standard";
+  intelligenceScore?: number;
+  phase?: string;
 }
 
 export interface Approval {
@@ -128,6 +131,9 @@ export const clients: Client[] = [
         booked: 1,
       },
     ],
+    tier: "growth",
+    intelligenceScore: 72,
+    phase: "Phase 2",
   },
 
   {
@@ -192,6 +198,9 @@ export const clients: Client[] = [
         booked: 2,
       },
     ],
+    tier: "elite",
+    intelligenceScore: 85,
+    phase: "Phase 3",
   },
 
   {

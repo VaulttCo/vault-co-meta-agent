@@ -44,6 +44,9 @@ export interface ClientRow {
   status: ClientStatus;
   created_at: string;
   updated_at: string;
+  tier?: "elite" | "growth" | "standard" | null;
+  intelligence_score?: number | null;
+  phase?: string | null;
 }
 
 export interface ClientIntelligenceRow {

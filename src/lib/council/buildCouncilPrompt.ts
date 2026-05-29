@@ -348,14 +348,13 @@ export function applyCouncilToDraft(
 // ─────────────────────────────────────────────────────────────
 // buildImprovementPatchPrompt
 // ─────────────────────────────────────────────────────────────
-// Builds a short, focused prompt for the hidden pipeline refinement step.
-// Asks Hermes to return only a CampaignImprovementPatch — not a full draft.
-// Plain text only — no JSON syntax in the prompt body to avoid VPS validation.
+// Builds a focused, plain-text prompt for the hidden pipeline refinement step.
+// Covers all major campaign sections. No JSON syntax in prompt body.
 export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
   const lines: string[] = [];
 
-  lines.push("CAMPAIGN IMPROVEMENT TASK");
-  lines.push("Improve specific campaign copy fields. Return a focused improvement patch.");
+  lines.push("CAMPAIGN COMPREHENSIVE IMPROVEMENT TASK");
+  lines.push("Improve all major campaign sections. Return a comprehensive improvement patch.");
   lines.push("Safety: Only improve copy and strategy. Cannot launch ads, change budgets, or push to Meta.");
   lines.push("");
 
@@ -373,7 +372,7 @@ export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
     lines.push("");
     lines.push("CURRENT CAMPAIGN DRAFT");
     const texts = Array.isArray(p.adCopy?.primaryTexts) ? p.adCopy.primaryTexts : [];
-    if (texts[0]) lines.push(`Primary Text 1: ${String(texts[0]).slice(0, 180)}`);
+    if (texts[0]) lines.push(`Primary Text 1: ${String(texts[0]).slice(0, 200)}`);
     if (texts[1]) lines.push(`Primary Text 2: ${String(texts[1]).slice(0, 180)}`);
     const heads = Array.isArray(p.adCopy?.headlines) ? p.adCopy.headlines : [];
     if (heads.length) lines.push(`Headlines: ${heads.slice(0, 3).join(" / ")}`);
@@ -382,12 +381,18 @@ export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
     if (p.creativeDirection?.hook) lines.push(`Hook: ${String(p.creativeDirection.hook).slice(0, 100)}`);
     if (p.leadForm?.introCopy) lines.push(`Lead Form Intro: ${String(p.leadForm.introCopy).slice(0, 120)}`);
     if (p.compliance?.metaRisk) lines.push(`Compliance: ${String(p.compliance.metaRisk).slice(0, 80)}`);
+    if (p.metaStructure?.campaignObjective) lines.push(`Objective: ${p.metaStructure.campaignObjective}`);
+    const adSetNames = Array.isArray(p.metaStructure?.adSetNames) ? p.metaStructure.adSetNames : [];
+    if (adSetNames.length) lines.push(`Ad Sets: ${adSetNames.join(", ")}`);
+    if (p.ghlWorkflow?.immediateSms) lines.push(`Immediate SMS: ${String(p.ghlWorkflow.immediateSms).slice(0, 100)}`);
+    if (p.optimization?.budgetScalingRule) lines.push(`Scaling Rule: ${String(p.optimization.budgetScalingRule).slice(0, 80)}`);
+    if (p.buyerPsychologyUsed?.buyerInsight) lines.push(`Buyer Insight: ${String(p.buyerPsychologyUsed.buyerInsight).slice(0, 100)}`);
   }
 
   if (ctx.selectedAssets && ctx.selectedAssets.length > 0) {
     lines.push("");
     lines.push("CREATIVE ASSETS");
-    ctx.selectedAssets.slice(0, 3).forEach((asset, i) => {
+    ctx.selectedAssets.slice(0, 4).forEach((asset, i) => {
       lines.push(`Asset ${i + 1}: ${asset.fileName} (${asset.fileType === "video" ? "VIDEO" : "IMAGE"}, ${asset.assetType})`);
       if (asset.notes) lines.push(`  Notes: ${String(asset.notes).slice(0, 100)}`);
       const analysis = ctx.assetAnalyses?.[asset.id];
@@ -400,36 +405,21 @@ export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
   }
 
   lines.push("");
-  lines.push("IMPROVEMENT TASK");
-  lines.push("Analyze this campaign and return improvements. Priority:");
-  lines.push("1. Rewrite primary text to be specific to this client and their actual creative assets. Avoid generic city-name filler.");
-  lines.push("2. Strengthen headlines and hook. Make them specific, not generic.");
-  lines.push("3. Improve lead form intro for higher conversion.");
-  lines.push("4. Identify missing assets and recommended next steps.");
-  lines.push("5. If vision analysis is available, use it to write asset-specific copy.");
+  lines.push("SECTIONS TO IMPROVE:");
+  lines.push("Ad Copy: Rewrite primary texts (specific to assets, no generic city filler), headlines, CTA, add hook bank variants, and retargeting copy.");
+  lines.push("Creative Direction: Best campaign angle, hook, shot list, text overlays, voiceover direction note.");
+  lines.push("Buyer Psychology: Core motivation, urgency trigger, trust triggers, objections addressed, hook rationale, CTA rationale.");
+  lines.push("Market Research: Market summary, competitor angle, audience rationale, location rationale, seasonality note.");
+  lines.push("Asset Matrix: For each creative asset, write specific angle, primary text, headline, CTA, best ad set assignment, temperature (cold/warm/hot), and reason.");
+  lines.push("Lead Form: Stronger intro copy, qualification questions, improved thank-you copy.");
+  lines.push("GHL Workflow: Workflow summary, follow-up steps, immediate SMS draft (speed-to-lead), GHL tags.");
+  lines.push("Compliance: Compliance warnings, disallowed phrases to remove, required disclaimers to add.");
+  lines.push("Optimization: KPIs to track, scaling rules, kill/pause rules, human approval triggers.");
+  lines.push("Meta Push Readiness: Status (not_ready, needs_review, or ready_for_validation), missing fields, payload notes, validation warnings.");
   lines.push("");
   lines.push("OUTPUT FORMAT");
-  lines.push("Return only valid JSON. No markdown fences. No text before or after the JSON.");
-  lines.push("Required fields in JSON object:");
-  lines.push("readinessScore: integer 0 to 100");
-  lines.push("winningAngle: string");
-  lines.push("campaignName: string");
-  lines.push("primaryTexts: array of up to 3 strings, each a complete ready-to-use ad copy paragraph");
-  lines.push("headlines: array of up to 3 strings");
-  lines.push("descriptions: array of up to 3 strings");
-  lines.push("cta: string");
-  lines.push("creativeDirectionSummary: string");
-  lines.push("shotList: array of strings");
-  lines.push("textOverlays: array of strings");
-  lines.push("leadFormIntro: string");
-  lines.push("qualificationQuestions: array of strings");
-  lines.push("ghlWorkflowSummary: string");
-  lines.push("followUpSteps: array of strings");
-  lines.push("complianceWarnings: array of strings");
-  lines.push("optimizationNotes: array of strings");
-  lines.push("missingAssets: array of strings");
-  lines.push("nextOperatorTasks: array of strings");
-  lines.push("changesMade: array of strings describing what was improved");
+  lines.push("Return valid JSON only. No markdown fences. No text before or after the JSON.");
+  lines.push("Top-level fields: readinessScore (0-100), winningAngle, campaignName, primaryTexts (array), headlines (array), descriptions (array), cta, hookBank (array), retargetingCopy (array), creativeDirectionSummary, shotList (array), textOverlays (array), voiceoverNote, buyerPsychology (object: insight, urgencyTrigger, trustTriggers array, objections array, hookRationale, ctaRationale), marketResearch (object: summary, competitorAngle, audienceRationale, locationRationale, seasonalityNote), assetMatrix (array of objects: assetId, assetName, angle, primaryText1, headline1, cta, adSet, adSetTemperature, reason, warnings array), leadFormIntro, qualificationQuestions (array), thankYouCopy, ghlWorkflowSummary, followUpSteps (array), immediateSmsDraft, ghlTags (array), complianceWarnings (array), disallowedPhrases (array), requiredDisclaimers (array), optimizationNotes (array), kpis (array), scalingRules (array), killRules (array), humanApprovalTriggers (array), metaPushReadiness (object: status, missingFields array, payloadNotes array, validationWarnings array), changesMade (array), missingAssets (array), nextOperatorTasks (array).");
 
   return lines.join("\n");
 }
@@ -438,7 +428,7 @@ export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
 // safeExtractImprovementPatch
 // ─────────────────────────────────────────────────────────────
 // Robustly parses Hermes output into a CampaignImprovementPatch.
-// Validates each field independently — bad fields are skipped.
+// Validates every field independently — bad fields are skipped.
 // Never throws. Returns null if unusable.
 export function safeExtractImprovementPatch(raw: string): CampaignImprovementPatch | null {
   const jsonStr = safeExtractJson(raw);
@@ -484,7 +474,6 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
         .map((x) => x.trim().slice(0, maxLen));
       if (result.length > 0) { applied.push(field); return result; }
     } else if (typeof v === "string" && v.trim()) {
-      // Single string where array was expected — wrap it
       applied.push(field);
       return [v.trim().slice(0, maxLen)];
     }
@@ -492,66 +481,159 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
     return undefined;
   }
 
+  function tryNestedObj(field: string): Record<string, string | string[]> | undefined {
+    const v = parsed[field];
+    if (typeof v !== "object" || v === null || Array.isArray(v)) {
+      if (v != null) skipped.push(field);
+      return undefined;
+    }
+    const obj = v as Record<string, unknown>;
+    const result: Record<string, string | string[]> = {};
+    let hasData = false;
+    for (const [k, val] of Object.entries(obj)) {
+      if (typeof val === "string" && val.trim()) {
+        result[k] = val.trim().slice(0, 600);
+        hasData = true;
+      } else if (Array.isArray(val)) {
+        const arr = val
+          .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+          .slice(0, 10)
+          .map((x) => x.trim().slice(0, 400));
+        if (arr.length) { result[k] = arr; hasData = true; }
+      }
+    }
+    if (hasData) { applied.push(field); return result; }
+    return undefined;
+  }
+
   try {
+    // ── Core ──────────────────────────────────────────────────────
     const scoreRaw = parsed["readinessScore"];
     if (typeof scoreRaw === "number" && !isNaN(scoreRaw)) {
       patch.readinessScore = Math.max(0, Math.min(100, Math.round(scoreRaw)));
       applied.push("readinessScore");
     }
+    const wa = tryStr("winningAngle", 500); if (wa) patch.winningAngle = wa;
+    const cn = tryStr("campaignName", 120); if (cn) patch.campaignName = cn;
 
-    const wa = tryStr("winningAngle", 500);
-    if (wa) patch.winningAngle = wa;
+    // ── Ad Copy ───────────────────────────────────────────────────
+    const pt = tryStrArr("primaryTexts", 3, 800); if (pt) patch.primaryTexts = pt;
+    const hl = tryStrArr("headlines", 5, 120); if (hl) patch.headlines = hl;
+    const ds = tryStrArr("descriptions", 5, 200); if (ds) patch.descriptions = ds;
+    const cta = tryStr("cta", 80); if (cta) patch.cta = cta;
+    const hb = tryStrArr("hookBank", 5, 200); if (hb) patch.hookBank = hb;
+    const rc = tryStrArr("retargetingCopy", 3, 500); if (rc) patch.retargetingCopy = rc;
 
-    const cn = tryStr("campaignName", 120);
-    if (cn) patch.campaignName = cn;
+    // ── Creative Direction ─────────────────────────────────────────
+    const cd = tryStr("creativeDirectionSummary", 500); if (cd) patch.creativeDirectionSummary = cd;
+    const sl = tryStrArr("shotList", 10, 200); if (sl) patch.shotList = sl;
+    const to = tryStrArr("textOverlays", 8, 100); if (to) patch.textOverlays = to;
+    const vn = tryStr("voiceoverNote", 400); if (vn) patch.voiceoverNote = vn;
 
-    const pt = tryStrArr("primaryTexts", 3, 800);
-    if (pt) patch.primaryTexts = pt;
+    // ── Lead Form ─────────────────────────────────────────────────
+    const lfi = tryStr("leadFormIntro", 600); if (lfi) patch.leadFormIntro = lfi;
+    const qq = tryStrArr("qualificationQuestions", 5, 200); if (qq) patch.qualificationQuestions = qq;
+    const ty = tryStr("thankYouCopy", 300); if (ty) patch.thankYouCopy = ty;
 
-    const hl = tryStrArr("headlines", 5, 120);
-    if (hl) patch.headlines = hl;
+    // ── GHL Workflow ───────────────────────────────────────────────
+    const ghl = tryStr("ghlWorkflowSummary", 500); if (ghl) patch.ghlWorkflowSummary = ghl;
+    const fs = tryStrArr("followUpSteps", 10, 300); if (fs) patch.followUpSteps = fs;
+    const sms = tryStr("immediateSmsDraft", 300); if (sms) patch.immediateSmsDraft = sms;
+    const gt = tryStrArr("ghlTags", 10, 60); if (gt) patch.ghlTags = gt;
 
-    const ds = tryStrArr("descriptions", 5, 200);
-    if (ds) patch.descriptions = ds;
+    // ── Compliance ────────────────────────────────────────────────
+    const cw = tryStrArr("complianceWarnings", 8, 300); if (cw) patch.complianceWarnings = cw;
+    const dp = tryStrArr("disallowedPhrases", 10, 100); if (dp) patch.disallowedPhrases = dp;
+    const rd = tryStrArr("requiredDisclaimers", 5, 300); if (rd) patch.requiredDisclaimers = rd;
 
-    const cta = tryStr("cta", 80);
-    if (cta) patch.cta = cta;
+    // ── Optimization ──────────────────────────────────────────────
+    const on = tryStrArr("optimizationNotes", 5, 300); if (on) patch.optimizationNotes = on;
+    const kpi = tryStrArr("kpis", 8, 200); if (kpi) patch.kpis = kpi;
+    const sr = tryStrArr("scalingRules", 5, 300); if (sr) patch.scalingRules = sr;
+    const kr = tryStrArr("killRules", 5, 300); if (kr) patch.killRules = kr;
+    const hat = tryStrArr("humanApprovalTriggers", 8, 200); if (hat) patch.humanApprovalTriggers = hat;
 
-    const cd = tryStr("creativeDirectionSummary", 500);
-    if (cd) patch.creativeDirectionSummary = cd;
+    // ── Misc ──────────────────────────────────────────────────────
+    const ma = tryStrArr("missingAssets", 8, 200); if (ma) patch.missingAssets = ma;
+    const nt = tryStrArr("nextOperatorTasks", 8, 300); if (nt) patch.nextOperatorTasks = nt;
+    const cm = tryStrArr("changesMade", 10, 200); if (cm) patch.changesMade = cm;
 
-    const sl = tryStrArr("shotList", 10, 200);
-    if (sl) patch.shotList = sl;
+    // ── Nested: Buyer Psychology ───────────────────────────────────
+    const bpRaw = tryNestedObj("buyerPsychology");
+    if (bpRaw) {
+      const bp: CampaignImprovementPatch["buyerPsychology"] = {};
+      if (typeof bpRaw.insight === "string") bp.insight = bpRaw.insight;
+      if (typeof bpRaw.urgencyTrigger === "string") bp.urgencyTrigger = bpRaw.urgencyTrigger;
+      if (Array.isArray(bpRaw.trustTriggers)) bp.trustTriggers = bpRaw.trustTriggers as string[];
+      if (Array.isArray(bpRaw.objections)) bp.objections = bpRaw.objections as string[];
+      if (typeof bpRaw.hookRationale === "string") bp.hookRationale = bpRaw.hookRationale;
+      if (typeof bpRaw.ctaRationale === "string") bp.ctaRationale = bpRaw.ctaRationale;
+      patch.buyerPsychology = bp;
+    }
 
-    const to = tryStrArr("textOverlays", 8, 100);
-    if (to) patch.textOverlays = to;
+    // ── Nested: Market Research ────────────────────────────────────
+    const mrRaw = tryNestedObj("marketResearch");
+    if (mrRaw) {
+      const mr: CampaignImprovementPatch["marketResearch"] = {};
+      if (typeof mrRaw.summary === "string") mr.summary = mrRaw.summary;
+      if (typeof mrRaw.competitorAngle === "string") mr.competitorAngle = mrRaw.competitorAngle;
+      if (typeof mrRaw.audienceRationale === "string") mr.audienceRationale = mrRaw.audienceRationale;
+      if (typeof mrRaw.locationRationale === "string") mr.locationRationale = mrRaw.locationRationale;
+      if (typeof mrRaw.seasonalityNote === "string") mr.seasonalityNote = mrRaw.seasonalityNote;
+      patch.marketResearch = mr;
+    }
 
-    const lfi = tryStr("leadFormIntro", 600);
-    if (lfi) patch.leadFormIntro = lfi;
+    // ── Array of objects: Asset Matrix ─────────────────────────────
+    const amRaw = parsed["assetMatrix"];
+    if (Array.isArray(amRaw) && amRaw.length > 0) {
+      const matrix: NonNullable<CampaignImprovementPatch["assetMatrix"]> = [];
+      for (const item of amRaw) {
+        if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+        const obj = item as Record<string, unknown>;
+        const entry: NonNullable<CampaignImprovementPatch["assetMatrix"]>[number] = {};
+        if (typeof obj.assetId === "string" && obj.assetId.trim()) entry.assetId = obj.assetId.trim();
+        if (typeof obj.assetName === "string" && obj.assetName.trim()) entry.assetName = obj.assetName.trim().slice(0, 120);
+        if (typeof obj.angle === "string" && obj.angle.trim()) entry.angle = obj.angle.trim().slice(0, 300);
+        if (typeof obj.primaryText1 === "string" && obj.primaryText1.trim()) entry.primaryText1 = obj.primaryText1.trim().slice(0, 800);
+        if (typeof obj.headline1 === "string" && obj.headline1.trim()) entry.headline1 = obj.headline1.trim().slice(0, 120);
+        if (typeof obj.cta === "string" && obj.cta.trim()) entry.cta = obj.cta.trim().slice(0, 60);
+        if (typeof obj.adSet === "string" && obj.adSet.trim()) entry.adSet = obj.adSet.trim().slice(0, 100);
+        const temp = obj.adSetTemperature;
+        if (temp === "cold" || temp === "warm" || temp === "hot") entry.adSetTemperature = temp;
+        if (typeof obj.reason === "string" && obj.reason.trim()) entry.reason = obj.reason.trim().slice(0, 400);
+        if (Array.isArray(obj.warnings)) {
+          entry.warnings = (obj.warnings as unknown[])
+            .filter((w): w is string => typeof w === "string" && w.trim().length > 0)
+            .slice(0, 5);
+        }
+        if (entry.assetName || entry.assetId || entry.primaryText1) matrix.push(entry);
+      }
+      if (matrix.length > 0) { patch.assetMatrix = matrix; applied.push("assetMatrix"); }
+    }
 
-    const qq = tryStrArr("qualificationQuestions", 5, 200);
-    if (qq) patch.qualificationQuestions = qq;
-
-    const ghl = tryStr("ghlWorkflowSummary", 500);
-    if (ghl) patch.ghlWorkflowSummary = ghl;
-
-    const fs = tryStrArr("followUpSteps", 10, 300);
-    if (fs) patch.followUpSteps = fs;
-
-    const cw = tryStrArr("complianceWarnings", 5, 300);
-    if (cw) patch.complianceWarnings = cw;
-
-    const on = tryStrArr("optimizationNotes", 5, 300);
-    if (on) patch.optimizationNotes = on;
-
-    const ma = tryStrArr("missingAssets", 8, 200);
-    if (ma) patch.missingAssets = ma;
-
-    const nt = tryStrArr("nextOperatorTasks", 8, 300);
-    if (nt) patch.nextOperatorTasks = nt;
-
-    const cm = tryStrArr("changesMade", 10, 200);
-    if (cm) patch.changesMade = cm;
+    // ── Nested: Meta Push Readiness ────────────────────────────────
+    const mprRaw = parsed["metaPushReadiness"];
+    if (typeof mprRaw === "object" && mprRaw !== null && !Array.isArray(mprRaw)) {
+      const obj = mprRaw as Record<string, unknown>;
+      const mpr: CampaignImprovementPatch["metaPushReadiness"] = {};
+      const status = obj.status;
+      if (status === "not_ready" || status === "needs_review" || status === "ready_for_validation") {
+        mpr.status = status;
+      }
+      if (Array.isArray(obj.missingFields)) {
+        mpr.missingFields = (obj.missingFields as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10);
+      }
+      if (Array.isArray(obj.payloadNotes)) {
+        mpr.payloadNotes = (obj.payloadNotes as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10);
+      }
+      if (Array.isArray(obj.validationWarnings)) {
+        mpr.validationWarnings = (obj.validationWarnings as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10);
+      }
+      if (mpr.status || mpr.missingFields?.length || mpr.payloadNotes?.length) {
+        patch.metaPushReadiness = mpr;
+        applied.push("metaPushReadiness");
+      }
+    }
 
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
@@ -564,8 +646,7 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
     if (skipped.length) console.warn("[Patch] skipped (wrong type):", skipped.join(", "));
   }
 
-  // Require at least a winning angle or primary texts to consider it usable
-  const usable = !!(patch.winningAngle || (patch.primaryTexts && patch.primaryTexts.length > 0));
+  const usable = !!(patch.winningAngle || (patch.primaryTexts && patch.primaryTexts.length > 0) || patch.readinessScore);
   return usable ? patch : null;
 }
 
@@ -573,8 +654,8 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
 // applyImprovementPatchToDraft
 // ─────────────────────────────────────────────────────────────
 // Merges a CampaignImprovementPatch into an existing valid CampaignDraft.
-// Preserves all original typed structure. Each field is updated only if the
-// patch provides a valid value. Never throws — returns original on any error.
+// Every section is applied only if the patch provides valid data.
+// Never throws — returns original on any error.
 export function applyImprovementPatchToDraft(
   original: CampaignDraft,
   patch: CampaignImprovementPatch
@@ -584,7 +665,7 @@ export function applyImprovementPatchToDraft(
       month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
     });
 
-    // adCopy
+    // ── adCopy ─────────────────────────────────────────────────────
     const existingPT = Array.isArray(original.adCopy?.primaryTexts) ? original.adCopy.primaryTexts : [""];
     const patchPT = patch.primaryTexts;
     const newPrimaryTexts = (patchPT && patchPT.length > 0)
@@ -599,7 +680,7 @@ export function applyImprovementPatchToDraft(
 
     const newCta = (patch.cta && patch.cta.trim()) ? patch.cta : (original.adCopy?.cta ?? "");
 
-    // creativeDirection
+    // ── creativeDirection ─────────────────────────────────────────
     const existingSL = Array.isArray(original.creativeDirection?.shotList) ? original.creativeDirection.shotList : [];
     const newShotList = (patch.shotList && patch.shotList.length > 0) ? patch.shotList : existingSL;
 
@@ -607,60 +688,141 @@ export function applyImprovementPatchToDraft(
     const newTextOverlays = (patch.textOverlays && patch.textOverlays.length > 0) ? patch.textOverlays : existingTO;
 
     const newAngle = (patch.winningAngle && patch.winningAngle.trim())
-      ? patch.winningAngle
-      : (original.creativeDirection?.angle ?? "");
+      ? patch.winningAngle : (original.creativeDirection?.angle ?? "");
     const newHook = (patch.winningAngle && patch.winningAngle.trim())
-      ? patch.winningAngle
-      : (original.creativeDirection?.hook ?? "");
+      ? patch.winningAngle : (original.creativeDirection?.hook ?? "");
 
-    // leadForm
+    const existingVoiceover = original.creativeDirection?.voiceoverScript ?? "";
+    const newVoiceover = (patch.voiceoverNote && patch.voiceoverNote.trim())
+      ? (existingVoiceover ? `${patch.voiceoverNote}\n\n---\n${existingVoiceover.slice(0, 200)}` : patch.voiceoverNote)
+      : existingVoiceover;
+
+    // ── leadForm ──────────────────────────────────────────────────
     const newLeadFormIntro = (patch.leadFormIntro && patch.leadFormIntro.trim())
-      ? patch.leadFormIntro
-      : (original.leadForm?.introCopy ?? "");
+      ? patch.leadFormIntro : (original.leadForm?.introCopy ?? "");
 
     const existingQQ = Array.isArray(original.leadForm?.qualificationQuestions) ? original.leadForm.qualificationQuestions : [];
-    const newQQ = (patch.qualificationQuestions && patch.qualificationQuestions.length > 0) ? patch.qualificationQuestions : existingQQ;
+    const newQQ = (patch.qualificationQuestions && patch.qualificationQuestions.length > 0)
+      ? patch.qualificationQuestions : existingQQ;
 
-    // ghlWorkflow
+    const newThankYou = (patch.thankYouCopy && patch.thankYouCopy.trim())
+      ? patch.thankYouCopy : (original.leadForm?.thankYouCopy ?? "");
+
+    // ── ghlWorkflow ───────────────────────────────────────────────
     const existingSteps = Array.isArray(original.ghlWorkflow?.steps) ? original.ghlWorkflow.steps : [];
     const newSteps = (patch.followUpSteps && patch.followUpSteps.length > 0) ? patch.followUpSteps : existingSteps;
 
-    // compliance — append patch warnings, don't replace existing
+    const newImmediateSms = (patch.immediateSmsDraft && patch.immediateSmsDraft.trim())
+      ? patch.immediateSmsDraft : (original.ghlWorkflow?.immediateSms ?? "");
+
+    const existingTags = Array.isArray(original.ghlWorkflow?.tags) ? original.ghlWorkflow.tags : [];
+    const newTags = (patch.ghlTags && patch.ghlTags.length > 0) ? patch.ghlTags : existingTags;
+
+    // ── compliance — append, never replace ────────────────────────
     const existingWarnings = Array.isArray(original.compliance?.approvalWarnings) ? original.compliance.approvalWarnings : [];
-    const patchWarnings = Array.isArray(patch.complianceWarnings) ? patch.complianceWarnings : [];
+    const patchWarnings = [
+      ...(Array.isArray(patch.complianceWarnings) ? patch.complianceWarnings : []),
+      ...(Array.isArray(patch.requiredDisclaimers) ? patch.requiredDisclaimers : []),
+    ];
     const newWarnings = [...existingWarnings, ...patchWarnings.filter((w) => !existingWarnings.includes(w))];
 
-    // optimization — append notes
-    const existingTriggers = Array.isArray(original.optimization?.humanApprovalTriggers) ? original.optimization.humanApprovalTriggers : [];
-    const patchNotes = Array.isArray(patch.optimizationNotes) ? patch.optimizationNotes : [];
-    const newTriggers = [...existingTriggers, ...patchNotes.filter((n) => !existingTriggers.includes(n))];
+    const existingDisallowed = Array.isArray(original.compliance?.disallowedPhrases) ? original.compliance.disallowedPhrases : [];
+    const patchDisallowed = Array.isArray(patch.disallowedPhrases) ? patch.disallowedPhrases : [];
+    const newDisallowed = [...existingDisallowed, ...patchDisallowed.filter((d) => !existingDisallowed.includes(d))];
 
-    // campaignName — only update if patch provides a meaningfully different name
+    // ── optimization ──────────────────────────────────────────────
+    const existingTriggers = Array.isArray(original.optimization?.humanApprovalTriggers) ? original.optimization.humanApprovalTriggers : [];
+    const patchTriggers = [
+      ...(Array.isArray(patch.humanApprovalTriggers) ? patch.humanApprovalTriggers : []),
+      ...(Array.isArray(patch.kpis) ? patch.kpis.slice(0, 3).map(k => `KPI: ${k}`) : []),
+    ];
+    const newTriggers = [...existingTriggers, ...patchTriggers.filter((t) => !existingTriggers.includes(t))];
+
+    const newScalingRule = (patch.scalingRules && patch.scalingRules.length > 0)
+      ? patch.scalingRules.join("; ").slice(0, 300) : (original.optimization?.budgetScalingRule ?? "");
+
+    const newPauseRule = (patch.killRules && patch.killRules.length > 0)
+      ? patch.killRules.join("; ").slice(0, 300) : (original.optimization?.pauseRule ?? "");
+
+    // ── buyerPsychologyUsed ───────────────────────────────────────
+    const bp = patch.buyerPsychology;
+    const existingBP = original.buyerPsychologyUsed;
+    const newBP = bp ? {
+      buyerInsight: (bp.insight && bp.insight.trim()) ? bp.insight : (existingBP?.buyerInsight ?? ""),
+      urgencyTrigger: (bp.urgencyTrigger && bp.urgencyTrigger.trim()) ? bp.urgencyTrigger : (existingBP?.urgencyTrigger ?? ""),
+      trustTriggerUsed: (Array.isArray(bp.trustTriggers) && bp.trustTriggers.length > 0)
+        ? bp.trustTriggers.join("; ") : (existingBP?.trustTriggerUsed ?? ""),
+      objectionAddressed: (Array.isArray(bp.objections) && bp.objections.length > 0)
+        ? bp.objections.join("; ") : (existingBP?.objectionAddressed ?? ""),
+      hookRationale: (bp.hookRationale && bp.hookRationale.trim()) ? bp.hookRationale : (existingBP?.hookRationale ?? ""),
+      ctaRationale: (bp.ctaRationale && bp.ctaRationale.trim()) ? bp.ctaRationale : (existingBP?.ctaRationale ?? ""),
+    } : existingBP;
+
+    // ── marketResearchUsed ────────────────────────────────────────
+    const mr = patch.marketResearch;
+    const existingMR = original.marketResearchUsed;
+    const newMR = mr ? {
+      marketSummary: (mr.summary && mr.summary.trim()) ? mr.summary : (existingMR?.marketSummary ?? ""),
+      competitorAngle: (mr.competitorAngle && mr.competitorAngle.trim()) ? mr.competitorAngle : (existingMR?.competitorAngle ?? ""),
+      audienceRationale: (mr.audienceRationale && mr.audienceRationale.trim()) ? mr.audienceRationale : (existingMR?.audienceRationale ?? ""),
+      locationRationale: (mr.locationRationale && mr.locationRationale.trim()) ? mr.locationRationale : (existingMR?.locationRationale ?? ""),
+      seasonalityNote: (mr.seasonalityNote && mr.seasonalityNote.trim()) ? mr.seasonalityNote : (existingMR?.seasonalityNote ?? ""),
+    } : existingMR;
+
+    // ── strategicRationale ────────────────────────────────────────
+    const er = original.strategicRationale;
+    const newRationale = {
+      whyThisCampaign: (patch.winningAngle && patch.winningAngle.trim()) ? patch.winningAngle : (er?.whyThisCampaign ?? ""),
+      buyerInsightUsed: (bp?.insight && bp.insight.trim()) ? bp.insight : (er?.buyerInsightUsed ?? ""),
+      marketInsightUsed: (mr?.summary && mr.summary.trim()) ? mr.summary : (er?.marketInsightUsed ?? ""),
+      offerAngleUsed: (patch.winningAngle && patch.winningAngle.trim()) ? patch.winningAngle : (er?.offerAngleUsed ?? ""),
+      creativeAngleUsed: (patch.creativeDirectionSummary && patch.creativeDirectionSummary.trim())
+        ? patch.creativeDirectionSummary : (er?.creativeAngleUsed ?? ""),
+      trustTriggerUsed: (Array.isArray(bp?.trustTriggers) && bp.trustTriggers.length > 0)
+        ? bp.trustTriggers[0] : (er?.trustTriggerUsed ?? ""),
+      objectionAddressed: (Array.isArray(bp?.objections) && bp.objections.length > 0)
+        ? bp.objections[0] : (er?.objectionAddressed ?? ""),
+      audienceRationale: (mr?.audienceRationale && mr.audienceRationale.trim()) ? mr.audienceRationale : (er?.audienceRationale ?? ""),
+      leadFormRationale: (patch.leadFormIntro && patch.leadFormIntro.trim())
+        ? `Improved intro: ${patch.leadFormIntro.slice(0, 150)}` : (er?.leadFormRationale ?? ""),
+      followUpRationale: (patch.ghlWorkflowSummary && patch.ghlWorkflowSummary.trim())
+        ? patch.ghlWorkflowSummary : (er?.followUpRationale ?? ""),
+    };
+
+    // ── adVariations (Asset Matrix) ───────────────────────────────
+    // Find and update matching variations by assetId or fileName
+    const existingVariations = Array.isArray(original.adVariations) ? original.adVariations : undefined;
+    let newVariations = existingVariations;
+    const assetMatrixPatch = patch.assetMatrix;
+    if (assetMatrixPatch && assetMatrixPatch.length > 0 && existingVariations && existingVariations.length > 0) {
+      newVariations = existingVariations.map((existing) => {
+        const match = assetMatrixPatch.find((p) =>
+          (p.assetId && p.assetId === existing.assetId) ||
+          (p.assetName && existing.fileName && (
+            p.assetName === existing.fileName ||
+            existing.fileName.toLowerCase().includes(p.assetName.toLowerCase().split(".")[0]) ||
+            p.assetName.toLowerCase().includes(existing.fileName.toLowerCase().split(".")[0])
+          ))
+        );
+        if (!match) return existing;
+        return {
+          ...existing,
+          creativeAngle: (match.angle && match.angle.trim()) ? match.angle : existing.creativeAngle,
+          primaryText1: (match.primaryText1 && match.primaryText1.trim()) ? match.primaryText1 : existing.primaryText1,
+          headline1: (match.headline1 && match.headline1.trim()) ? match.headline1 : existing.headline1,
+          cta: (match.cta && match.cta.trim()) ? match.cta : existing.cta,
+          adSetAssignment: (match.adSet && match.adSet.trim()) ? match.adSet : existing.adSetAssignment,
+          adSetAudienceTemperature: match.adSetTemperature ?? existing.adSetAudienceTemperature,
+          whyThisCopyMatchesCreative: (match.reason && match.reason.trim()) ? match.reason : existing.whyThisCopyMatchesCreative,
+        };
+      });
+    }
+
+    // ── campaignName ──────────────────────────────────────────────
     const existingName = original.campaignName ?? "";
     const newName = (patch.campaignName && patch.campaignName.trim() && patch.campaignName.trim() !== existingName)
       ? patch.campaignName.trim()
       : existingName;
-
-    // strategicRationale
-    const er = original.strategicRationale;
-    const newRationale = {
-      whyThisCampaign: (patch.winningAngle && patch.winningAngle.trim()) ? patch.winningAngle : (er?.whyThisCampaign ?? ""),
-      buyerInsightUsed: er?.buyerInsightUsed ?? "",
-      marketInsightUsed: er?.marketInsightUsed ?? "",
-      offerAngleUsed: er?.offerAngleUsed ?? "",
-      creativeAngleUsed: (patch.creativeDirectionSummary && patch.creativeDirectionSummary.trim())
-        ? patch.creativeDirectionSummary
-        : (er?.creativeAngleUsed ?? ""),
-      trustTriggerUsed: er?.trustTriggerUsed ?? "",
-      objectionAddressed: er?.objectionAddressed ?? "",
-      audienceRationale: er?.audienceRationale ?? "",
-      leadFormRationale: (patch.leadFormIntro && patch.leadFormIntro.trim())
-        ? `Improved: ${patch.leadFormIntro.slice(0, 120)}`
-        : (er?.leadFormRationale ?? ""),
-      followUpRationale: (patch.ghlWorkflowSummary && patch.ghlWorkflowSummary.trim())
-        ? patch.ghlWorkflowSummary
-        : (er?.followUpRationale ?? ""),
-    };
 
     return {
       ...original,
@@ -686,25 +848,25 @@ export function applyImprovementPatchToDraft(
         hook: newHook,
         shotList: newShotList,
         textOverlays: newTextOverlays,
+        voiceoverScript: newVoiceover,
         recommendedPlacements: Array.isArray(original.creativeDirection?.recommendedPlacements) ? original.creativeDirection.recommendedPlacements : [],
-        voiceoverScript: original.creativeDirection?.voiceoverScript ?? "",
         recommendedFormat: original.creativeDirection?.recommendedFormat ?? "",
       },
       leadForm: {
         ...original.leadForm,
         introCopy: newLeadFormIntro,
         qualificationQuestions: newQQ,
+        thankYouCopy: newThankYou,
         contactFields: Array.isArray(original.leadForm?.contactFields) ? original.leadForm.contactFields : [],
         formName: original.leadForm?.formName ?? "",
         consentLanguage: original.leadForm?.consentLanguage ?? "",
-        thankYouCopy: original.leadForm?.thankYouCopy ?? "",
       },
       ghlWorkflow: {
         ...original.ghlWorkflow,
         steps: newSteps,
-        tags: Array.isArray(original.ghlWorkflow?.tags) ? original.ghlWorkflow.tags : [],
+        tags: newTags,
+        immediateSms: newImmediateSms,
         pipelineStage: original.ghlWorkflow?.pipelineStage ?? "",
-        immediateSms: original.ghlWorkflow?.immediateSms ?? "",
         immediateEmail: original.ghlWorkflow?.immediateEmail ?? { subject: "", body: "" },
         internalNotification: original.ghlWorkflow?.internalNotification ?? "",
         setterTask: original.ghlWorkflow?.setterTask ?? "",
@@ -714,7 +876,7 @@ export function applyImprovementPatchToDraft(
       compliance: {
         ...original.compliance,
         approvalWarnings: newWarnings,
-        disallowedPhrases: Array.isArray(original.compliance?.disallowedPhrases) ? original.compliance.disallowedPhrases : [],
+        disallowedPhrases: newDisallowed,
         metaRisk: original.compliance?.metaRisk ?? "",
         smsCompliance: original.compliance?.smsCompliance ?? "",
         insuranceRisk: original.compliance?.insuranceRisk ?? "",
@@ -722,15 +884,17 @@ export function applyImprovementPatchToDraft(
       optimization: {
         ...original.optimization,
         humanApprovalTriggers: newTriggers,
+        budgetScalingRule: newScalingRule,
+        pauseRule: newPauseRule,
         cplThreshold: original.optimization?.cplThreshold ?? "",
         cpbaThreshold: original.optimization?.cpbaThreshold ?? "",
         bookingRateFloor: original.optimization?.bookingRateFloor ?? "",
         creativeFatigueTrigger: original.optimization?.creativeFatigueTrigger ?? "",
-        budgetScalingRule: original.optimization?.budgetScalingRule ?? "",
-        pauseRule: original.optimization?.pauseRule ?? "",
       },
       strategicRationale: newRationale,
-      adVariations: Array.isArray(original.adVariations) ? original.adVariations : undefined,
+      buyerPsychologyUsed: newBP,
+      marketResearchUsed: newMR,
+      adVariations: newVariations,
     };
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {

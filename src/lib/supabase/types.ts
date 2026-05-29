@@ -279,6 +279,50 @@ export interface VeronicaHermesSkillRow {
   auto_created: boolean;
 }
 
+export interface MetaConnectionRow {
+  id: string;
+  client_id: string;
+  ad_account_id: string | null;
+  business_id: string | null;
+  page_id: string | null;
+  pixel_id: string | null;
+  token_status: string;
+  // access_token_encrypted intentionally omitted — never returned to frontend
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaPushDraftRow {
+  id: string;
+  client_id: string;
+  campaign_draft_id: string | null;
+  campaign_name: string | null;
+  objective: string | null;
+  budget_type: string | null;
+  daily_budget: number | null;
+  lifetime_budget: number | null;
+  payload: Json;
+  validation_status: string;
+  validation_errors: Json | null;
+  approval_status: string;
+  meta_push_status: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MetaPushLogRow {
+  id: string;
+  draft_id: string | null;
+  client_id: string | null;
+  action: string;
+  request_payload: Json | null;
+  response_payload: Json | null;
+  status: string | null;
+  error: string | null;
+  created_at: string;
+}
+
 export interface MetaCampaignSnapshotRow {
   id: string;
   client_id: string;
@@ -351,6 +395,21 @@ export interface Database {
         Row: IntegrationConnectionRow;
         Insert: Omit<IntegrationConnectionRow, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<IntegrationConnectionRow, "id" | "created_at" | "updated_at">>;
+      };
+      meta_connections: {
+        Row: MetaConnectionRow;
+        Insert: Omit<MetaConnectionRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<MetaConnectionRow, "id" | "created_at" | "updated_at">>;
+      };
+      meta_push_drafts: {
+        Row: MetaPushDraftRow;
+        Insert: Omit<MetaPushDraftRow, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<MetaPushDraftRow, "id" | "created_at" | "updated_at">>;
+      };
+      meta_push_logs: {
+        Row: MetaPushLogRow;
+        Insert: Omit<MetaPushLogRow, "id" | "created_at">;
+        Update: never;
       };
       meta_campaign_snapshots: {
         Row: MetaCampaignSnapshotRow;

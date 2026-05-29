@@ -21,7 +21,7 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
   "/approvals": { title: "Approvals", subtitle: "Pending items awaiting human review" },
   "/settings": { title: "Settings", subtitle: "Account, integrations & AI provider settings" },
   "/revenue-dashboard": { title: "Revenue Dashboard", subtitle: "Leadership view — client status, fulfillment health, launch blockers, and revenue visibility" },
-  "/victoria": { title: "Victoria AI Sales Coach", subtitle: "Sales coaching system for Vault Co and future client teams — coming soon" },
+  "/victoria": { title: "Victoria AI Sales Coach", subtitle: "Real-time sales coaching · Post-call review · Rep scoring · AI follow-up automation" },
   "/operator-queue": { title: "Operator Queue", subtitle: "Open tasks, urgent items, and fulfillment workload" },
 };
 

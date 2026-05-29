@@ -563,9 +563,10 @@ export async function processTranscriptChunk(
   session.transcript.push(chunk);
   session.current_chunk_index = chunk.chunk_index + 1;
 
-  // 4. Detect phase transition
+  // 4. Detect phase transition — capture old phase BEFORE updating
+  const oldPhase = session.phase;
   const newPhase = detectPhaseTransition(session);
-  if (newPhase && newPhase !== session.phase) {
+  if (newPhase && newPhase !== oldPhase) {
     session.phase = newPhase;
   }
 
@@ -573,18 +574,21 @@ export async function processTranscriptChunk(
   session.discovery = updateDiscoveryState(session);
 
   // 6. Handle objection event registration
-  if (preprocessed.should_trigger_objection_agent && chunk.speaker === "prospect") {
+  // Push a placeholder event; category is updated to the AI-classified value
+  // after the objection Intel agent result is processed below.
+  const objectionRegistered = preprocessed.should_trigger_objection_agent && chunk.speaker === "prospect";
+  if (objectionRegistered) {
     const objEvent: ObjectionEvent = {
       id: generateCardId(),
       chunk_index: chunk.chunk_index,
       raw_text: chunk.text,
-      category: (chunk.objection_keywords_found[0] ? "unknown" : "unknown") as ObjectionCategory,
+      category: "unknown" as ObjectionCategory, // Overwritten by AI agent result below
       detected_at: Date.now(),
     };
     session.objections.raised.push(objEvent);
-    if (!session.objections.unresolved.includes(chunk.text)) {
-      session.objections.unresolved.push(chunk.text);
-    }
+    // Push a short placeholder — replaced with the actual category string below.
+    // Never store full chunk text here; it breaks the follow-up display.
+    session.objections.unresolved.push("objection");
   }
 
   // 7. Run fast-path agents IN PARALLEL
@@ -662,26 +666,34 @@ export async function processTranscriptChunk(
     ).catch(console.error);
   }
 
-  // Process objection result
-  if (
-    objectionResult.status === "fulfilled" &&
-    objectionResult.value !== null
-  ) {
+  // Process objection result — back-fill the actual AI-classified category
+  if (objectionResult.status === "fulfilled" && objectionResult.value) {
     const or = objectionResult.value;
-    if (or) {
-      session.agent_outputs.objection_intel = or.output;
+    session.agent_outputs.objection_intel = or.output;
 
-      const objCard = buildObjectionCard(session, chunk, or.output);
-      candidateCards.push(objCard);
-
-      // Persist objection event
-      persistObjectionEvent(session.call_id, chunk, or.output).catch(console.error);
-      persistAgentOutput(
-        session.call_id, "objection_intel", chunk.chunk_index,
-        or.output as unknown as Record<string, unknown>,
-        or.latency_ms, or.model, or.input_tokens, or.output_tokens
-      ).catch(console.error);
+    // Update the preliminary "unknown" objection event with the real category
+    if (objectionRegistered) {
+      const lastRaised = session.objections.raised[session.objections.raised.length - 1];
+      if (lastRaised && lastRaised.category === "unknown") {
+        lastRaised.category = or.output.category;
+      }
+      // Replace the placeholder "objection" in unresolved with the real category label
+      const placeholderIdx = session.objections.unresolved.lastIndexOf("objection");
+      if (placeholderIdx !== -1) {
+        session.objections.unresolved[placeholderIdx] = or.output.category.replace(/_/g, " ");
+      }
     }
+
+    const objCard = buildObjectionCard(session, chunk, or.output);
+    candidateCards.push(objCard);
+
+    // Persist objection event
+    persistObjectionEvent(session.call_id, chunk, or.output).catch(console.error);
+    persistAgentOutput(
+      session.call_id, "objection_intel", chunk.chunk_index,
+      or.output as unknown as Record<string, unknown>,
+      or.latency_ms, or.model, or.input_tokens, or.output_tokens
+    ).catch(console.error);
   }
 
   // Process deal risk result — update scores + optionally emit a card
@@ -791,12 +803,12 @@ export async function processTranscriptChunk(
     session.prev_scores = { ...prevScores };
   }
 
-  // Add phase transition event if phase changed
-  if (newPhase && newPhase !== session.phase) {
+  // Add phase transition event if phase changed (compare against captured oldPhase)
+  if (newPhase && newPhase !== oldPhase) {
     newTimelineEvents.unshift(buildPhaseTransitionEvent(
       chunk.chunk_index,
-      session.phase,
-      newPhase
+      oldPhase,      // from: the phase before this chunk
+      session.phase  // to: the phase after update (equals newPhase)
     ));
   }
 

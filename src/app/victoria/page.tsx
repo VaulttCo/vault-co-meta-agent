@@ -9,7 +9,7 @@ import {
   ChevronRight, Activity, Target, MessageSquare, Zap,
   Radio, User, Users, Clock, BarChart2, RefreshCw,
   BookOpen, UserCircle, Plus, Trash2, Search, ChevronDown, ChevronUp,
-  FileText, Loader,
+  FileText, Loader, Link2, Video, Mic2,
 } from "lucide-react";
 import { useVictoriaTranscription } from "@/lib/victoria/transcription/useVictoriaTranscription";
 import type {
@@ -21,6 +21,8 @@ import type {
 } from "@/lib/victoria/types";
 import { KB_DOMAINS } from "@/lib/victoria/types";
 import type { KBSearchResult, VictoriaProspectRow, PreCallBriefing } from "@/lib/victoria/types";
+import type { FathomIngestion, CallSpeakerIntelligence, ReconciliationResult } from "@/lib/victoria/fathom/types";
+import type { RepProfile } from "@/lib/victoria/reps/types";
 
 type PageMode = "live_call" | "knowledge_base" | "prospects";
 
@@ -1268,7 +1270,15 @@ function TimelinePanel({ events }: { events: TimelineEvent[] }) {
 // Shows every transcript chunk in real time with inline event highlights.
 // ─────────────────────────────────────────────────────────────
 
-function TranscriptTimeline({ entries }: { entries: TranscriptFeedEntry[] }) {
+function TranscriptTimeline({
+  entries,
+  repName,
+  prospectName,
+}: {
+  entries: TranscriptFeedEntry[];
+  repName?: string;
+  prospectName?: string;
+}) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1313,16 +1323,19 @@ function TranscriptTimeline({ entries }: { entries: TranscriptFeedEntry[] }) {
               {formatElapsed(entry.elapsed_s)}
             </span>
 
-            {/* Speaker badge */}
+            {/* Speaker badge — shows real name when available */}
             <span
-              className="text-[8px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 h-fit leading-tight"
+              className="text-[8px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 h-fit leading-tight whitespace-nowrap"
               style={{
                 backgroundColor: isRep ? "rgba(107,114,128,0.15)" : "rgba(34,197,94,0.1)",
                 color: isRep ? "#9ca3af" : "#22c55e",
                 border: `1px solid ${isRep ? "rgba(107,114,128,0.2)" : "rgba(34,197,94,0.2)"}`,
               }}
+              title={isRep ? "Sales rep" : "Prospect"}
             >
-              {isRep ? "REP" : "PRO"}
+              {isRep
+                ? (repName ? repName.split(" ")[0].toUpperCase() : "REP")
+                : (prospectName ? prospectName.split(" ")[0].toUpperCase() : "PRO")}
             </span>
 
             {/* Content */}
@@ -1773,7 +1786,7 @@ function PostCallReplayTab({ replay }: { replay: ReplayMoment[] }) {
   );
 }
 
-type ReviewTab = "summary" | "scorecard" | "missed" | "turning_points" | "replay" | "action";
+type ReviewTab = "summary" | "scorecard" | "missed" | "turning_points" | "replay" | "action" | "fathom";
 
 // ─────────────────────────────────────────────────────────────
 // Post-Call Action Tab — Follow-up kit, CRM sync, tasks, deal health
@@ -2027,6 +2040,332 @@ function PostCallActionTab({ actionPlan, loading }: { actionPlan: ActionPlan | n
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Post-Call Fathom Tab — recording link, speaker metrics, enriched transcript
+// ─────────────────────────────────────────────────────────────
+
+function SpeakerBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px]" style={{ color: "var(--t-muted)" }}>{label}</span>
+        <span className="text-[11px] font-bold tabular-nums" style={{ color }}>{pct}%</span>
+      </div>
+      <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
+        <div className="h-2 rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function PostCallFathomTab({
+  ingestion,
+  loading,
+  callId,
+  onIngest,
+}: {
+  ingestion: FathomIngestion | null;
+  loading: boolean;
+  callId: string | null;
+  onIngest: (url: string) => void;
+}) {
+  const [fathomUrl, setFathomUrl] = useState("");
+  const [showInput, setShowInput] = useState(!ingestion);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Loader size={22} className="animate-spin mb-3" style={{ color: "#a78bfa" }} />
+        <p className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>Ingesting Fathom recording…</p>
+        <p className="text-[11px] mt-1" style={{ color: "var(--t-muted)" }}>
+          Fetching transcript, diarizing speakers, reconciling with live data.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Ingest button / form */}
+      {(showInput || !ingestion) && (
+        <div
+          className="rounded-xl p-4 space-y-3"
+          style={{ backgroundColor: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.2)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Video size={14} style={{ color: "#a78bfa" }} />
+            <p className="text-[12px] font-semibold" style={{ color: "#a78bfa" }}>
+              Link Fathom Recording
+            </p>
+          </div>
+          <p className="text-[11px]" style={{ color: "var(--t-muted)" }}>
+            Paste a Fathom share link or recording URL to enrich this review with speaker diarization, accurate timestamps, and the authoritative transcript.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              placeholder="https://fathom.video/calls/... or share link"
+              value={fathomUrl}
+              onChange={(e) => setFathomUrl(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-lg text-[12px] outline-none"
+              style={{
+                backgroundColor: "var(--t-surface-2)",
+                border: "1px solid var(--t-border)",
+                color: "var(--t-text)",
+              }}
+            />
+            <button
+              onClick={() => {
+                onIngest(fathomUrl.trim());
+                setShowInput(false);
+              }}
+              disabled={!fathomUrl.trim() && !callId}
+              className="px-4 py-2 rounded-lg text-[12px] font-semibold flex-shrink-0"
+              style={{
+                backgroundColor: "rgba(167,139,250,0.18)",
+                color: "#a78bfa",
+                border: "1px solid rgba(167,139,250,0.35)",
+              }}
+            >
+              Ingest
+            </button>
+          </div>
+          {callId && (
+            <button
+              onClick={() => { onIngest(""); setShowInput(false); }}
+              className="text-[10px] underline"
+              style={{ color: "var(--t-dim)" }}
+            >
+              Use mock data (no Fathom URL needed)
+            </button>
+          )}
+        </div>
+      )}
+
+      {ingestion && (
+        <>
+          {/* Recording link */}
+          {(ingestion.recording_url || ingestion.share_url) && (
+            <div
+              className="flex items-center gap-3 px-4 py-3 rounded-xl"
+              style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+            >
+              <Video size={16} style={{ color: "#a78bfa" }} />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-semibold" style={{ color: "var(--t-text)" }}>
+                  {ingestion.title ?? "Call Recording"}
+                </p>
+                {ingestion.duration_seconds && (
+                  <p className="text-[10px]" style={{ color: "var(--t-muted)" }}>
+                    {Math.floor(ingestion.duration_seconds / 60)}m {ingestion.duration_seconds % 60}s
+                  </p>
+                )}
+              </div>
+              <a
+                href={ingestion.share_url ?? ingestion.recording_url ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                style={{ backgroundColor: "rgba(167,139,250,0.15)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}
+              >
+                <Link2 size={11} /> Open
+              </a>
+              <button
+                onClick={() => setShowInput(true)}
+                className="text-[10px] px-2 py-1 rounded"
+                style={{ color: "var(--t-dim)", border: "1px solid var(--t-border)" }}
+              >
+                Re-link
+              </button>
+            </div>
+          )}
+
+          {/* Speaker metrics */}
+          {ingestion.speaker_metrics && (
+            <div
+              className="rounded-xl p-4 space-y-4"
+              style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+            >
+              <div className="flex items-center gap-2">
+                <Mic2 size={13} style={{ color: "#a78bfa" }} />
+                <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--t-muted)" }}>
+                  Speaker Intelligence
+                </p>
+                <span className="ml-auto text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ backgroundColor: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
+                  Fathom
+                </span>
+              </div>
+
+              {/* Talk ratio */}
+              <div className="space-y-2">
+                <SpeakerBar
+                  label={`Rep talk (${ingestion.speaker_metrics.rep_talk_percentage}%)`}
+                  pct={ingestion.speaker_metrics.rep_talk_percentage}
+                  color="#9ca3af"
+                />
+                <SpeakerBar
+                  label={`Prospect talk (${ingestion.speaker_metrics.prospect_talk_percentage}%)`}
+                  pct={ingestion.speaker_metrics.prospect_talk_percentage}
+                  color="#22c55e"
+                />
+              </div>
+
+              {/* Per-speaker breakdown */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                {ingestion.speaker_metrics.metrics.map((m) => (
+                  <div
+                    key={m.speaker_id}
+                    className="rounded-lg px-3 py-2.5 space-y-1.5"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.03)",
+                      border: `1px solid ${m.speaker_role === "rep" ? "rgba(107,114,128,0.2)" : "rgba(34,197,94,0.2)"}`,
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: m.speaker_role === "rep" ? "rgba(107,114,128,0.15)" : "rgba(34,197,94,0.1)",
+                          color: m.speaker_role === "rep" ? "#9ca3af" : "#22c55e",
+                        }}
+                      >
+                        {m.speaker_role.toUpperCase()}
+                      </span>
+                      <span className="text-[11px] font-semibold truncate" style={{ color: "var(--t-text)" }}>
+                        {m.speaker_name}
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 text-[10px]" style={{ color: "var(--t-muted)" }}>
+                      <div className="flex justify-between">
+                        <span>Talk time</span>
+                        <span className="font-semibold" style={{ color: "var(--t-text)" }}>
+                          {m.talk.total_talk_seconds}s ({m.talk.talk_percentage}%)
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Segments</span>
+                        <span className="font-semibold" style={{ color: "var(--t-text)" }}>{m.talk.segment_count}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Avg length</span>
+                        <span className="font-semibold" style={{ color: "var(--t-text)" }}>{m.talk.avg_segment_duration_seconds}s</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Interruptions</span>
+                        <span
+                          className="font-semibold"
+                          style={{ color: m.interruption_count > 3 ? "#ef4444" : m.interruption_count > 0 ? "#f59e0b" : "#22c55e" }}
+                        >
+                          {m.interruption_count}
+                        </span>
+                      </div>
+                      {m.speaker_role === "prospect" && (
+                        <>
+                          <div className="flex justify-between">
+                            <span>Buying signals</span>
+                            <span className="font-semibold" style={{ color: m.buying_signal_count > 0 ? "#22c55e" : "var(--t-text)" }}>
+                              {m.buying_signal_count}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Objections</span>
+                            <span className="font-semibold" style={{ color: m.objection_count > 0 ? "#f59e0b" : "var(--t-text)" }}>
+                              {m.objection_count}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Interruption summary */}
+              {ingestion.speaker_metrics.total_interruptions > 0 && (
+                <div
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-[11px]"
+                  style={{
+                    backgroundColor: ingestion.speaker_metrics.rep_interruption_count > 2 ? "rgba(239,68,68,0.06)" : "rgba(107,114,128,0.06)",
+                    border: `1px solid ${ingestion.speaker_metrics.rep_interruption_count > 2 ? "rgba(239,68,68,0.2)" : "rgba(107,114,128,0.15)"}`,
+                  }}
+                >
+                  <AlertTriangle size={11} style={{ color: ingestion.speaker_metrics.rep_interruption_count > 2 ? "#ef4444" : "#6b7280" }} />
+                  <span style={{ color: "var(--t-text)" }}>
+                    Rep interrupted {ingestion.speaker_metrics.rep_interruption_count} time{ingestion.speaker_metrics.rep_interruption_count !== 1 ? "s" : ""}.
+                    {ingestion.speaker_metrics.longest_rep_monologue_seconds > 30 && (
+                      <> Longest rep monologue: {ingestion.speaker_metrics.longest_rep_monologue_seconds}s.</>
+                    )}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fathom action items */}
+          {ingestion.action_items.length > 0 && (
+            <div
+              className="rounded-xl p-4 space-y-2"
+              style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+            >
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--t-muted)" }}>
+                Fathom Action Items
+              </p>
+              <ul className="space-y-1.5">
+                {ingestion.action_items.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[12px]" style={{ color: "var(--t-text)" }}>
+                    <span className="text-[8px] mt-1.5 flex-shrink-0" style={{ color: "#a78bfa" }}>▸</span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Fathom summary */}
+          {ingestion.summary && (
+            <div
+              className="rounded-xl p-4 space-y-2"
+              style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+            >
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--t-muted)" }}>
+                Fathom Meeting Summary
+              </p>
+              <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-text)" }}>
+                {ingestion.summary}
+              </p>
+            </div>
+          )}
+
+          {/* Reconciliation stats */}
+          {ingestion.reconciliation && (
+            <div
+              className="rounded-xl p-3"
+              style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid var(--t-border)" }}
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: "var(--t-dim)" }}>
+                Transcript Reconciliation
+              </p>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {([
+                  ["Live chunks",   ingestion.reconciliation.live_chunk_count,    "var(--t-text)"],
+                  ["Fathom segs",   ingestion.reconciliation.fathom_segment_count,"var(--t-text)"],
+                  ["Matched",       ingestion.reconciliation.matched_count,        "#22c55e"],
+                  ["Gaps filled",   ingestion.reconciliation.gap_count,            "#f59e0b"],
+                ] as [string, number, string][]).map(([label, value, color]) => (
+                  <div key={label}>
+                    <div className="text-[14px] font-bold tabular-nums" style={{ color }}>{value}</div>
+                    <div className="text-[9px]" style={{ color: "var(--t-dim)" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function PostCallReviewPage({
   review,
   callInfo,
@@ -2034,6 +2373,10 @@ function PostCallReviewPage({
   onNewCall,
   actionPlan,
   actionLoading,
+  fathomIngestion,
+  fathomLoading,
+  callId,
+  onFathomIngest,
 }: {
   review: PostCallReview | null;
   callInfo: { prospect_name: string; company: string } | null;
@@ -2041,6 +2384,10 @@ function PostCallReviewPage({
   onNewCall: () => void;
   actionPlan: ActionPlan | null;
   actionLoading: boolean;
+  fathomIngestion: FathomIngestion | null;
+  fathomLoading: boolean;
+  callId: string | null;
+  onFathomIngest: (url: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState<ReviewTab>("summary");
 
@@ -2051,6 +2398,7 @@ function PostCallReviewPage({
     { id: "turning_points", label: "Turning Pts", badge: review?.turning_points.length },
     { id: "replay", label: "Replay", badge: review?.replay_timeline.length },
     { id: "action", label: "Action", dot: actionPlan ? DEAL_HEALTH_META[actionPlan.deal_health]?.color : actionLoading ? "#f59e0b" : undefined },
+    { id: "fathom", label: "Fathom", dot: fathomIngestion ? "#22c55e" : fathomLoading ? "#f59e0b" : undefined },
   ];
 
   return (
@@ -2138,7 +2486,7 @@ function PostCallReviewPage({
               const hasCritical =
                 tab.id === "missed" &&
                 review.missed_opportunities.some((m) => m.severity === "critical");
-              const activeColor = tab.id === "action" ? "#c9a84c" : "#a78bfa";
+              const activeColor = tab.id === "action" ? "#c9a84c" : tab.id === "fathom" ? "#22c55e" : "#a78bfa";
               return (
                 <button
                   key={tab.id}
@@ -2177,6 +2525,7 @@ function PostCallReviewPage({
             {activeTab === "turning_points" && <PostCallTurningPointsTab turningPoints={review.turning_points} />}
             {activeTab === "replay"         && <PostCallReplayTab        replay={review.replay_timeline} />}
             {activeTab === "action"         && <PostCallActionTab        actionPlan={actionPlan} loading={actionLoading} />}
+            {activeTab === "fathom"         && <PostCallFathomTab        ingestion={fathomIngestion} loading={fathomLoading} callId={callId} onIngest={onFathomIngest} />}
           </div>
         </div>
       )}
@@ -2239,7 +2588,19 @@ interface StartCallForm {
   prospect_id?: string;
 }
 
-function StartCallModal({ onStart, linkedProspect }: { onStart: (form: StartCallForm) => void; linkedProspect?: VictoriaProspectRow | null }) {
+function StartCallModal({
+  onStart,
+  linkedProspect,
+  repProfiles,
+  selectedRepId,
+  onRepChange,
+}: {
+  onStart: (form: StartCallForm) => void;
+  linkedProspect?: VictoriaProspectRow | null;
+  repProfiles: RepProfile[];
+  selectedRepId: string | null;
+  onRepChange: (id: string) => void;
+}) {
   const [form, setForm] = useState<StartCallForm>({
     prospect_name: linkedProspect?.name ?? "",
     prospect_company: linkedProspect?.company ?? "",
@@ -2298,6 +2659,42 @@ function StartCallModal({ onStart, linkedProspect }: { onStart: (form: StartCall
         className="rounded-xl p-6 space-y-4"
         style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border)" }}
       >
+        {/* Rep selector */}
+        {repProfiles.length > 0 && (
+          <div>
+            <label className="block text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "var(--t-muted)" }}>
+              Who&apos;s calling?
+            </label>
+            <div className="flex gap-2">
+              {repProfiles.map((rep) => {
+                const isSelected = rep.id === selectedRepId;
+                return (
+                  <button
+                    key={rep.id}
+                    type="button"
+                    onClick={() => onRepChange(rep.id)}
+                    className="flex items-center gap-2 flex-1 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all"
+                    style={{
+                      backgroundColor: isSelected ? "rgba(167,139,250,0.15)" : "var(--t-surface-2)",
+                      border: `1px solid ${isSelected ? "rgba(167,139,250,0.4)" : "var(--t-border)"}`,
+                      color: isSelected ? "#a78bfa" : "var(--t-muted)",
+                    }}
+                  >
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
+                      style={{ backgroundColor: isSelected ? "rgba(167,139,250,0.3)" : "rgba(107,114,128,0.2)", color: isSelected ? "#a78bfa" : "#6b7280" }}
+                    >
+                      {rep.avatar_initials}
+                    </div>
+                    {rep.name}
+                    {isSelected && <span className="ml-auto text-[8px]">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "var(--t-muted)" }}>
@@ -2453,6 +2850,15 @@ export default function VictoriaPage() {
   const [actionPlan, setActionPlan] = useState<ActionPlan | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // ── Fathom integration state ─────────────────────────────────
+  const [fathomIngestion, setFathomIngestion] = useState<FathomIngestion | null>(null);
+  const [fathomLoading, setFathomLoading] = useState(false);
+  const [completedCallId, setCompletedCallId] = useState<string | null>(null);
+
+  // ── Rep profiles ─────────────────────────────────────────────
+  const [repProfiles, setRepProfiles] = useState<RepProfile[]>([]);
+  const [selectedRepId, setSelectedRepId] = useState<string | null>(null);
+
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callStartRef = useRef<number>(0);
   const cardsEndRef = useRef<HTMLDivElement>(null);
@@ -2568,6 +2974,42 @@ export default function VictoriaPage() {
     };
   }, [transcription.state.status]);
 
+  // Load rep profiles on mount
+  useEffect(() => {
+    fetch("/api/victoria/reps")
+      .then((r) => r.json() as Promise<{ reps: RepProfile[] }>)
+      .then((data) => {
+        setRepProfiles(data.reps ?? []);
+        // Auto-select first rep
+        if (data.reps.length > 0 && !selectedRepId) {
+          setSelectedRepId(data.reps[0].id);
+        }
+      })
+      .catch(() => {/* non-critical */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fathom ingest handler — called from PostCallFathomTab
+  const handleFathomIngest = useCallback(async (fathomUrl: string) => {
+    if (!completedCallId) return;
+    setFathomLoading(true);
+    setFathomIngestion(null);
+    try {
+      const body = fathomUrl ? { fathom_url: fathomUrl } : {};
+      const r = await fetch(`/api/victoria/session/${completedCallId}/fathom`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json() as { ingestion: FathomIngestion };
+      setFathomIngestion(data.ingestion ?? null);
+    } catch (err) {
+      console.error("[Victoria] Fathom ingest failed:", err);
+    } finally {
+      setFathomLoading(false);
+    }
+  }, [completedCallId]);
+
   const formatDuration = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, "0");
     const s = (secs % 60).toString().padStart(2, "0");
@@ -2584,6 +3026,7 @@ export default function VictoriaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prospect_id: form.prospect_id,
+          rep_id: selectedRepId ?? undefined,
           prospect: {
             name: form.prospect_name,
             company: form.prospect_company,
@@ -2625,12 +3068,17 @@ export default function VictoriaPage() {
 
     transcription.stopListening();
 
+    // Mark session complete — best-effort, never blocks UI cleanup
     if (reviewCallId) {
-      await fetch("/api/victoria/session", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ call_id: reviewCallId, status: "completed" }),
-      });
+      try {
+        await fetch("/api/victoria/session", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ call_id: reviewCallId, status: "completed" }),
+        });
+      } catch (err) {
+        console.error("[Victoria] Session PATCH failed (continuing cleanup):", err instanceof Error ? err.message : err);
+      }
     }
 
     setCallId(null);
@@ -2652,6 +3100,9 @@ export default function VictoriaPage() {
       setReviewCallInfo(reviewInfo);
       setPostCallReview(null);
       setActionPlan(null);
+      setFathomIngestion(null);
+      setFathomLoading(false);
+      setCompletedCallId(reviewCallId);
       setReviewLoading(true);
       setActionLoading(true);
 
@@ -2696,6 +3147,9 @@ export default function VictoriaPage() {
     setReviewLoading(false);
     setActionPlan(null);
     setActionLoading(false);
+    setFathomIngestion(null);
+    setFathomLoading(false);
+    setCompletedCallId(null);
     setPageMode("live_call");
   }, []);
 
@@ -2714,6 +3168,10 @@ export default function VictoriaPage() {
           onNewCall={handleNewCall}
           actionPlan={actionPlan}
           actionLoading={actionLoading}
+          fathomIngestion={fathomIngestion}
+          fathomLoading={fathomLoading}
+          callId={completedCallId}
+          onFathomIngest={handleFathomIngest}
         />
       </div>
     );
@@ -2731,6 +3189,9 @@ export default function VictoriaPage() {
           <StartCallModal
             onStart={isStarting ? () => {} : handleStartCall}
             linkedProspect={linkedProspect}
+            repProfiles={repProfiles}
+            selectedRepId={selectedRepId}
+            onRepChange={setSelectedRepId}
           />
         )}
         {pageMode === "knowledge_base" && <KBView />}
@@ -2906,7 +3367,11 @@ export default function VictoriaPage() {
 
           {/* Feed */}
           <div className="flex-1 overflow-y-auto px-4 py-2">
-            <TranscriptTimeline entries={transcriptFeed} />
+            <TranscriptTimeline
+              entries={transcriptFeed}
+              repName={repProfiles.find((r) => r.id === selectedRepId)?.name}
+              prospectName={sessionInfo?.prospect_name}
+            />
           </div>
         </div>
 

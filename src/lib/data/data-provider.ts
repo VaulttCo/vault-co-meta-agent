@@ -30,6 +30,9 @@ export interface ClientCreateInput {
   brandTone?: string;
   notes?: string;
   status?: Client["status"];
+  tier?: "elite" | "growth" | "standard";
+  intelligenceScore?: number;
+  phase?: string;
 }
 export type ClientUpdateInput = Partial<ClientCreateInput>;
 export interface PersistedReport {

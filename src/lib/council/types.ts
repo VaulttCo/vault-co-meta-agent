@@ -1,5 +1,33 @@
 // The Council — shared types for campaign strategy analysis
 
+// ─────────────────────────────────────────────────────────────
+// CampaignImprovementPatch
+// ─────────────────────────────────────────────────────────────
+// Small, safe patch returned by the hidden strategy refinement step.
+// Only contains fields that can be merged into an existing typed CampaignDraft.
+// All fields are optional — missing fields are skipped during merge.
+export interface CampaignImprovementPatch {
+  readinessScore?: number;
+  winningAngle?: string;
+  campaignName?: string;
+  primaryTexts?: string[];
+  headlines?: string[];
+  descriptions?: string[];
+  cta?: string;
+  creativeDirectionSummary?: string;
+  shotList?: string[];
+  textOverlays?: string[];
+  leadFormIntro?: string;
+  qualificationQuestions?: string[];
+  ghlWorkflowSummary?: string;
+  followUpSteps?: string[];
+  complianceWarnings?: string[];
+  optimizationNotes?: string[];
+  missingAssets?: string[];
+  nextOperatorTasks?: string[];
+  changesMade?: string[];
+}
+
 export type CouncilMode =
   | "campaign_build"
   | "campaign_qa"

@@ -72,6 +72,7 @@ import {
 import { TheCouncil } from "@/components/council/TheCouncil";
 import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse, CampaignImprovementPatch } from "@/lib/council/types";
+import { MetaPushReadiness } from "@/components/meta/MetaPushReadiness";
 
 // ─────────────────────────────────────────────────────────────
 // Mock generation engine (client-side fallback)
@@ -3953,6 +3954,15 @@ function AICampaignBuilderContent() {
                     </div>
                   );
                 })()}
+
+                {/* ── Meta Push Readiness ── */}
+                {displayPlan && displayPlan.clientId && (
+                  <MetaPushReadiness
+                    clientId={displayPlan.clientId}
+                    clientName={displayPlan.clientName}
+                    campaignDraft={displayPlan}
+                  />
+                )}
 
                 {/* Section nav */}
                 <div className="bg-[var(--t-surface)] border border-[var(--t-border)] rounded-xl overflow-hidden">

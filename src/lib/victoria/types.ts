@@ -877,3 +877,154 @@ export interface PostCallReview {
   model: string;
   mock_mode: boolean;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Action Engine — automated follow-up, CRM sync, task generation
+// Victoria as autonomous AI sales manager driving next-step execution.
+// ─────────────────────────────────────────────────────────────
+
+export type FollowUpType =
+  | "hot_lead"        // High close readiness, ready to move
+  | "nurture"         // Interested but not ready yet
+  | "skeptical"       // Trust/agency skepticism blocker
+  | "authority_issue" // Need to loop in decision maker
+  | "budget_issue"    // Price/cash flow concern
+  | "timing_issue"    // Seasonal or "not right time" objection
+  | "ghosting_risk"   // Low engagement, likely to go dark
+  | "proposal_sent"   // Next call is a proposal review
+  | "follow_up_booked"; // Next step already scheduled
+
+export type DealHealth = "hot" | "warm" | "cold" | "at_risk" | "lost";
+
+export type UrgencyApproach =
+  | "seasonal_deadline"
+  | "cost_of_inaction"
+  | "competitor_threat"
+  | "scarcity"
+  | "milestone_based"
+  | "social_proof";
+
+export interface UrgencyStrategy {
+  approach: UrgencyApproach;
+  headline: string;
+  key_messages: string[];
+  timing: string;
+  what_to_avoid: string;
+}
+
+export interface FollowUpEmail {
+  subject: string;
+  body: string;
+  send_timing: string;  // e.g. "within 2 hours", "next morning"
+}
+
+export interface FollowUpSMS {
+  body: string;          // Max 160 chars
+  send_timing: string;
+}
+
+export interface FollowUpKit {
+  follow_up_type: FollowUpType;
+  email: FollowUpEmail;
+  sms: FollowUpSMS;
+  loom_talking_points: string[];       // 3–5 key points for a 2–3 min Loom
+  proposal_positioning: string;        // How to frame the proposal/offer
+  objection_specific_recap: string;    // Objection handling context for follow-up
+  next_step_recommendation: string;    // Exact recommended next action + timing
+}
+
+export interface CRMSyncObject {
+  deal_stage: string;
+  deal_health: DealHealth;
+  trust_score: number;
+  urgency_score: number;
+  close_probability: number;
+  primary_objection: string;
+  next_step: string;
+  followup_due: string;                // ISO datetime
+  recommended_owner_action: string;
+  probability_band: "high" | "medium" | "low";
+}
+
+export type TaskType =
+  | "send_sms"
+  | "send_email"
+  | "call_back"
+  | "send_proposal"
+  | "send_case_study"
+  | "schedule_meeting"
+  | "send_loom"
+  | "breakup_message"
+  | "crm_update";
+
+export type TaskPriority = "urgent" | "high" | "normal" | "low";
+
+export interface TaskItem {
+  id: string;
+  type: TaskType;
+  priority: TaskPriority;
+  title: string;
+  description: string;
+  due_by: string;          // ISO datetime or human string "within 2 hours"
+  due_offset_minutes: number; // Relative to call end, for sorting
+}
+
+export interface ActionPlan {
+  call_id: string;
+  generated_at: string;
+  prospect_name: string;
+  follow_up_type: FollowUpType;
+  deal_health: DealHealth;
+  deal_health_summary: string;
+  follow_up_kit: FollowUpKit;
+  crm_sync: CRMSyncObject;
+  tasks: TaskItem[];
+  urgency_strategy: UrgencyStrategy;
+  processing_time_ms: number;
+  model: string;
+  mock_mode: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shared Intelligence — Victoria ↔ Veronica cross-agent structures
+// Data interfaces for eventual cross-agent intelligence sharing.
+// DO NOT contain automation logic here — interfaces only.
+// ─────────────────────────────────────────────────────────────
+
+export type SharedIntelligenceCategory =
+  | "common_objections"
+  | "lead_quality_issues"
+  | "offer_resonance"
+  | "emotional_pain_patterns"
+  | "vertical_specific_trends"
+  | "trust_blockers";
+
+export type IntelligenceSource = "victoria" | "veronica" | "both";
+
+export interface SharedIntelligenceRecord {
+  id: string;
+  category: SharedIntelligenceCategory;
+  vertical: ContractorVertical | "all";
+  insight: string;
+  evidence: string;          // Specific evidence or example that supports this insight
+  frequency_count: number;   // How many calls/sessions surfaced this pattern
+  confidence: "high" | "medium" | "low";
+  source: IntelligenceSource;
+  created_at: string;
+  last_seen_at: string;
+}
+
+// Aggregated intelligence summary — what Victoria learned across all calls
+export interface VictoriaIntelligenceSummary {
+  vertical: ContractorVertical | "all";
+  period_start: string;
+  period_end: string;
+  call_count: number;
+  top_objections: { category: string; frequency: number; win_rate: number }[];
+  avg_close_probability: number;
+  avg_discovery_depth: number;
+  trust_blockers: string[];
+  emotional_pain_patterns: string[];
+  offer_resonance_signals: string[];
+  generated_at: string;
+}

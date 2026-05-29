@@ -50,6 +50,9 @@ function rowToClient(row: ClientRow): Client {
     instagramId: row.instagram_account_id ?? "",
     ghlLocationId: row.ghl_location_id ?? "",
     ghlPipelineId: row.ghl_pipeline_id ?? "",
+    tier: row.tier ?? undefined,
+    intelligenceScore: row.intelligence_score ?? undefined,
+    phase: row.phase ?? undefined,
     stats: {
       leads: 0, booked: 0, cpl: "$0", cpba: "$0",
       showRate: "0%", pipeline: "$0", revenue: "$0", spend: "$0",

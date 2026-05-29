@@ -3868,6 +3868,23 @@ function AICampaignBuilderContent() {
                         {councilIntelligence.winningAngle && (
                           <p className="text-[12px] leading-snug" style={{ color: "var(--t-text)" }}>{councilIntelligence.winningAngle}</p>
                         )}
+                        {/* Push readiness badge */}
+                        {councilIntelligence.metaPushReadiness?.status && (() => {
+                          const mpr = councilIntelligence.metaPushReadiness!;
+                          const mprMap = {
+                            ready_for_validation: { label: "Ready for Validation", color: "#22c55e" },
+                            needs_review: { label: "Needs Review Before Push", color: "#f59e0b" },
+                            not_ready: { label: "Not Ready for Meta Push", color: "#ef4444" },
+                          };
+                          const mprCfg = mprMap[mpr.status!] ?? mprMap.needs_review;
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] px-2 py-0.5 rounded-full font-semibold" style={{ color: mprCfg.color, backgroundColor: `${mprCfg.color}12`, border: `1px solid ${mprCfg.color}25` }}>
+                                Push: {mprCfg.label}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         <button
                           onClick={() => setShowStrategyDetails(prev => !prev)}
                           className="text-[10px] transition-colors"
@@ -3879,6 +3896,7 @@ function AICampaignBuilderContent() {
                           const patchChanges = councilIntelligence.changesMade ?? [];
                           const patchMissing = councilIntelligence.missingAssets ?? [];
                           const patchTasks = councilIntelligence.nextOperatorTasks ?? [];
+                          const mpr = councilIntelligence.metaPushReadiness;
                           return (
                             <div className="space-y-2 pt-1">
                               {patchChanges.length > 0 && (
@@ -3911,6 +3929,19 @@ function AICampaignBuilderContent() {
                                   <ul className="space-y-0.5">
                                     {patchTasks.slice(0, 4).map((t, i) => (
                                       <li key={i} className="text-[11px]" style={{ color: "var(--t-muted)" }}>{i + 1}. {t}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {/* Push readiness detail */}
+                              {mpr && ((mpr.missingFields?.length ?? 0) > 0 || (mpr.validationWarnings?.length ?? 0) > 0) && (
+                                <div>
+                                  <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: "#ef4444" }}>Before Meta Push</div>
+                                  <ul className="space-y-0.5">
+                                    {[...(mpr.missingFields ?? []), ...(mpr.validationWarnings ?? [])].slice(0, 5).map((item, i) => (
+                                      <li key={i} className="flex items-start gap-1.5 text-[11px]" style={{ color: "var(--t-muted)" }}>
+                                        <AlertCircle size={9} style={{ color: "#ef4444", flexShrink: 0, marginTop: 2 }} />{item}
+                                      </li>
                                     ))}
                                   </ul>
                                 </div>

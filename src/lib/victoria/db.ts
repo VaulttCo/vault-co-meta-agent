@@ -361,3 +361,59 @@ export async function getProspectLastSnapshot(
   if (error) return null;
   return (data as { snapshot: Record<string, unknown> } | null)?.snapshot ?? null;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Fathom Ingestions
+// ─────────────────────────────────────────────────────────────
+
+export async function upsertFathomIngestion(
+  data: Omit<import("./types").VictoriaFathomIngestionRow, "id">
+): Promise<string | null> {
+  const db = getVictoriaDb();
+  if (!db) return null;
+
+  const { data: row, error } = await db
+    .from("victoria_fathom_ingestions")
+    .upsert(
+      {
+        call_id: data.call_id,
+        fathom_recording_id: data.fathom_recording_id,
+        recording_url: data.recording_url ?? null,
+        share_url: data.share_url ?? null,
+        duration_seconds: data.duration_seconds ?? null,
+        title: data.title ?? null,
+        speakers: data.speakers,
+        segments: data.segments,
+        summary: data.summary ?? "",
+        action_items: data.action_items ?? [],
+        speaker_metrics: data.speaker_metrics ?? null,
+        reconciliation: data.reconciliation ?? null,
+        ingested_at: data.ingested_at,
+      },
+      { onConflict: "call_id" }
+    )
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[Victoria:DB] upsertFathomIngestion:", error.message);
+    return null;
+  }
+  return (row as { id: string } | null)?.id ?? null;
+}
+
+export async function getFathomIngestion(
+  callId: string
+): Promise<import("./types").VictoriaFathomIngestionRow | null> {
+  const db = getVictoriaDb();
+  if (!db) return null;
+
+  const { data, error } = await db
+    .from("victoria_fathom_ingestions")
+    .select("*")
+    .eq("call_id", callId)
+    .single();
+
+  if (error) return null;
+  return data as import("./types").VictoriaFathomIngestionRow | null;
+}

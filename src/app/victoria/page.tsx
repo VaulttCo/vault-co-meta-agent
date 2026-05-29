@@ -17,6 +17,7 @@ import type {
   DealRiskOutput, EmotionalOutput, EmotionalState,
   RepPerformanceOutput, TimelineEvent, MomentumSnapshot, MomentumDirection,
   PostCallReview, MissedOpportunity, TurningPoint, ReplayMoment, RepScorecard,
+  ActionPlan, TaskItem, TaskPriority,
 } from "@/lib/victoria/types";
 import { KB_DOMAINS } from "@/lib/victoria/types";
 import type { KBSearchResult, VictoriaProspectRow, PreCallBriefing } from "@/lib/victoria/types";
@@ -1772,27 +1773,284 @@ function PostCallReplayTab({ replay }: { replay: ReplayMoment[] }) {
   );
 }
 
-type ReviewTab = "summary" | "scorecard" | "missed" | "turning_points" | "replay";
+type ReviewTab = "summary" | "scorecard" | "missed" | "turning_points" | "replay" | "action";
+
+// ─────────────────────────────────────────────────────────────
+// Post-Call Action Tab — Follow-up kit, CRM sync, tasks, deal health
+// ─────────────────────────────────────────────────────────────
+
+const DEAL_HEALTH_META = {
+  hot:     { color: "#22c55e", icon: "🔥", label: "Hot" },
+  warm:    { color: "#f59e0b", icon: "🟡", label: "Warm" },
+  cold:    { color: "#3b82f6", icon: "🔵", label: "Cold" },
+  at_risk: { color: "#ef4444", icon: "🔴", label: "At Risk" },
+  lost:    { color: "#6b7280", icon: "⚫", label: "Lost" },
+};
+
+const TASK_PRIORITY_META: Record<TaskPriority, { color: string; label: string }> = {
+  urgent: { color: "#ef4444", label: "Urgent" },
+  high:   { color: "#f59e0b", label: "High" },
+  normal: { color: "#3b82f6", label: "Normal" },
+  low:    { color: "#6b7280", label: "Low" },
+};
+
+const FOLLOWUP_TYPE_LABELS: Record<string, string> = {
+  hot_lead:        "Hot Lead",
+  nurture:         "Nurture",
+  skeptical:       "Skeptical",
+  authority_issue: "Authority Issue",
+  budget_issue:    "Budget Issue",
+  timing_issue:    "Timing Issue",
+  ghosting_risk:   "Ghosting Risk",
+  proposal_sent:   "Proposal Sent",
+  follow_up_booked:"Follow-Up Booked",
+};
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      className="text-[9px] px-2 py-0.5 rounded font-semibold flex-shrink-0 transition-colors"
+      style={{ backgroundColor: copied ? "rgba(34,197,94,0.15)" : "rgba(107,114,128,0.1)", color: copied ? "#22c55e" : "var(--t-dim)", border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : "rgba(107,114,128,0.2)"}` }}
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+function PostCallActionTab({ actionPlan, loading }: { actionPlan: ActionPlan | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader size={20} className="animate-spin mb-3" style={{ color: "#c9a84c" }} />
+        <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>Generating action plan…</p>
+      </div>
+    );
+  }
+
+  if (!actionPlan) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <AlertTriangle size={24} className="mb-2 opacity-30" style={{ color: "#f59e0b" }} />
+        <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>Action plan not yet generated.</p>
+      </div>
+    );
+  }
+
+  const { follow_up_kit, crm_sync, tasks, urgency_strategy, deal_health, deal_health_summary, follow_up_type } = actionPlan;
+  const healthMeta = DEAL_HEALTH_META[deal_health] ?? DEAL_HEALTH_META.cold;
+
+  return (
+    <div className="space-y-5">
+      {/* Deal Health Overview */}
+      <div
+        className="rounded-xl p-4 flex items-start gap-4"
+        style={{ backgroundColor: `${healthMeta.color}0D`, border: `1px solid ${healthMeta.color}30` }}
+      >
+        <div
+          className="w-12 h-12 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${healthMeta.color}15`, border: `1px solid ${healthMeta.color}30` }}
+        >
+          <span className="text-[18px] leading-none">{healthMeta.icon}</span>
+          <span className="text-[8px] font-bold uppercase tracking-wide mt-0.5" style={{ color: healthMeta.color }}>{healthMeta.label}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>Deal Health</p>
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ backgroundColor: "rgba(107,114,128,0.1)", color: "var(--t-dim)" }}>
+              {FOLLOWUP_TYPE_LABELS[follow_up_type] ?? follow_up_type}
+            </span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold" style={{ backgroundColor: "rgba(107,114,128,0.1)", color: "var(--t-dim)" }}>
+              {crm_sync.close_probability}% close
+            </span>
+          </div>
+          <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{deal_health_summary}</p>
+        </div>
+      </div>
+
+      {/* Follow-Up Email */}
+      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--t-border)" }}>
+        <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: "var(--t-surface-2)" }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>📧 Follow-Up Email</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px]" style={{ color: "var(--t-dim)" }}>Send {follow_up_kit.email.send_timing}</span>
+            <CopyButton text={`Subject: ${follow_up_kit.email.subject}\n\n${follow_up_kit.email.body}`} />
+          </div>
+        </div>
+        <div className="p-4 space-y-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[9px] font-bold uppercase tracking-wider flex-shrink-0" style={{ color: "var(--t-dim)" }}>Subject:</span>
+            <p className="text-[12px] font-semibold" style={{ color: "var(--t-text)" }}>{follow_up_kit.email.subject}</p>
+          </div>
+          <p className="text-[11px] leading-relaxed whitespace-pre-line" style={{ color: "var(--t-muted)" }}>{follow_up_kit.email.body}</p>
+        </div>
+      </div>
+
+      {/* SMS */}
+      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--t-border)" }}>
+        <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: "var(--t-surface-2)" }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>💬 SMS</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px]" style={{ color: "var(--t-dim)" }}>Send {follow_up_kit.sms.send_timing}</span>
+            <CopyButton text={follow_up_kit.sms.body} />
+          </div>
+        </div>
+        <div className="p-4">
+          <p className="text-[12px] leading-relaxed" style={{ color: "var(--t-text)" }}>{follow_up_kit.sms.body}</p>
+          <p className="text-[9px] mt-1.5" style={{ color: "var(--t-dim)" }}>{follow_up_kit.sms.body.length}/160 chars</p>
+        </div>
+      </div>
+
+      {/* Loom Talking Points */}
+      <div className="rounded-xl p-4" style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--t-muted)" }}>🎬 Loom Talking Points</p>
+        <div className="space-y-2">
+          {follow_up_kit.loom_talking_points.map((point, i) => (
+            <div key={i} className="flex items-start gap-2.5">
+              <span
+                className="text-[9px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ backgroundColor: "rgba(201,168,76,0.15)", color: "#c9a84c" }}
+              >
+                {i + 1}
+              </span>
+              <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{point}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Objection Recap + Proposal Positioning */}
+      <div className="grid grid-cols-1 gap-3">
+        {follow_up_kit.objection_specific_recap && (
+          <div className="rounded-xl p-4" style={{ backgroundColor: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)" }}>
+            <p className="text-[9px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "#ef4444" }}>Objection Recap</p>
+            <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{follow_up_kit.objection_specific_recap}</p>
+          </div>
+        )}
+        {follow_up_kit.proposal_positioning && (
+          <div className="rounded-xl p-4" style={{ backgroundColor: "rgba(167,139,250,0.05)", border: "1px solid rgba(167,139,250,0.2)" }}>
+            <p className="text-[9px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "#a78bfa" }}>Proposal Positioning</p>
+            <p className="text-[11px] leading-snug" style={{ color: "var(--t-text)" }}>{follow_up_kit.proposal_positioning}</p>
+          </div>
+        )}
+        {follow_up_kit.next_step_recommendation && (
+          <div className="rounded-xl p-4" style={{ backgroundColor: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)" }}>
+            <p className="text-[9px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "#22c55e" }}>Next Step</p>
+            <p className="text-[11px] leading-snug font-semibold" style={{ color: "var(--t-text)" }}>{follow_up_kit.next_step_recommendation}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Urgency Strategy */}
+      {urgency_strategy && (
+        <div className="rounded-xl p-4" style={{ backgroundColor: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.2)" }}>
+          <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: "#f59e0b" }}>⚡ Urgency Strategy — {urgency_strategy.approach.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</p>
+          <p className="text-[12px] font-semibold mb-2" style={{ color: "var(--t-text)" }}>{urgency_strategy.headline}</p>
+          <div className="space-y-1 mb-2">
+            {urgency_strategy.key_messages.map((msg, i) => (
+              <p key={i} className="text-[10px] flex gap-1.5" style={{ color: "var(--t-muted)" }}>
+                <span style={{ color: "#f59e0b" }}>→</span> {msg}
+              </p>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 pt-2" style={{ borderTop: "1px solid rgba(245,158,11,0.15)" }}>
+            <div>
+              <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: "var(--t-dim)" }}>Timing</p>
+              <p className="text-[10px]" style={{ color: "var(--t-muted)" }}>{urgency_strategy.timing}</p>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: "var(--t-dim)" }}>Avoid</p>
+              <p className="text-[10px]" style={{ color: "var(--t-muted)" }}>{urgency_strategy.what_to_avoid}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recommended Tasks */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: "var(--t-muted)" }}>Recommended Actions</p>
+        <div className="space-y-2">
+          {tasks.map((t: TaskItem) => {
+            const pm = TASK_PRIORITY_META[t.priority] ?? TASK_PRIORITY_META.normal;
+            return (
+              <div
+                key={t.id}
+                className="flex items-start gap-3 rounded-xl p-3"
+                style={{ backgroundColor: "var(--t-surface-2)", border: "1px solid var(--t-border)" }}
+              >
+                <span
+                  className="text-[8px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
+                  style={{ backgroundColor: `${pm.color}15`, color: pm.color, border: `1px solid ${pm.color}25` }}
+                >
+                  {pm.label.toUpperCase()}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold leading-snug" style={{ color: "var(--t-text)" }}>{t.title}</p>
+                  <p className="text-[10px] leading-snug mt-0.5" style={{ color: "var(--t-muted)" }}>{t.description}</p>
+                </div>
+                <span className="text-[9px] flex-shrink-0 mt-0.5" style={{ color: "var(--t-dim)" }}>{t.due_by}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* CRM Sync Preview */}
+      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--t-border)" }}>
+        <div className="px-4 py-2.5" style={{ backgroundColor: "var(--t-surface-2)" }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--t-muted)" }}>CRM Sync Preview</p>
+        </div>
+        <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2.5">
+          {([
+            ["Deal Stage", crm_sync.deal_stage],
+            ["Close Probability", `${crm_sync.close_probability}%`],
+            ["Probability Band", crm_sync.probability_band],
+            ["Trust Score", `${crm_sync.trust_score}/100`],
+            ["Urgency Score", `${crm_sync.urgency_score}/100`],
+            ["Primary Objection", crm_sync.primary_objection],
+            ["Follow-Up Due", new Date(crm_sync.followup_due).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })],
+            ["Next Step", crm_sync.next_step],
+          ] as [string, string][]).map(([label, value]) => (
+            <div key={label}>
+              <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: "var(--t-dim)" }}>{label}</p>
+              <p className="text-[10px] leading-snug mt-0.5" style={{ color: "var(--t-text)" }}>{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pb-3">
+          <p className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: "var(--t-dim)" }}>Recommended Owner Action</p>
+          <p className="text-[10px] leading-snug" style={{ color: "var(--t-muted)" }}>{crm_sync.recommended_owner_action}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PostCallReviewPage({
   review,
   callInfo,
   loading,
   onNewCall,
+  actionPlan,
+  actionLoading,
 }: {
   review: PostCallReview | null;
   callInfo: { prospect_name: string; company: string } | null;
   loading: boolean;
   onNewCall: () => void;
+  actionPlan: ActionPlan | null;
+  actionLoading: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<ReviewTab>("summary");
 
-  const reviewTabs: { id: ReviewTab; label: string; badge?: number }[] = [
+  const reviewTabs: { id: ReviewTab; label: string; badge?: number; dot?: string }[] = [
     { id: "summary", label: "Summary" },
     { id: "scorecard", label: "Scorecard" },
     { id: "missed", label: "Missed", badge: review?.missed_opportunities.length },
     { id: "turning_points", label: "Turning Pts", badge: review?.turning_points.length },
     { id: "replay", label: "Replay", badge: review?.replay_timeline.length },
+    { id: "action", label: "Action", dot: actionPlan ? DEAL_HEALTH_META[actionPlan.deal_health]?.color : actionLoading ? "#f59e0b" : undefined },
   ];
 
   return (
@@ -1880,15 +2138,16 @@ function PostCallReviewPage({
               const hasCritical =
                 tab.id === "missed" &&
                 review.missed_opportunities.some((m) => m.severity === "critical");
+              const activeColor = tab.id === "action" ? "#c9a84c" : "#a78bfa";
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-wider transition-colors relative"
                   style={{
-                    color: isActive ? "#a78bfa" : "var(--t-dim)",
-                    borderBottom: isActive ? "2px solid #a78bfa" : "2px solid transparent",
-                    backgroundColor: isActive ? "rgba(167,139,250,0.05)" : "transparent",
+                    color: isActive ? activeColor : "var(--t-dim)",
+                    borderBottom: isActive ? `2px solid ${activeColor}` : "2px solid transparent",
+                    backgroundColor: isActive ? `${activeColor}0D` : "transparent",
                   }}
                 >
                   {tab.label}
@@ -1904,6 +2163,7 @@ function PostCallReviewPage({
                     </span>
                   )}
                   {hasCritical && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
+                  {tab.dot && <span className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tab.dot }} />}
                 </button>
               );
             })}
@@ -1911,11 +2171,12 @@ function PostCallReviewPage({
 
           {/* Tab content */}
           <div className="p-5 overflow-y-auto" style={{ maxHeight: "calc(100vh - 260px)" }}>
-            {activeTab === "summary"       && <PostCallSummaryTab       review={review} />}
-            {activeTab === "scorecard"     && <PostCallScorecardTab     scorecard={review.rep_scorecard} />}
-            {activeTab === "missed"        && <PostCallMissedTab        missed={review.missed_opportunities} />}
+            {activeTab === "summary"        && <PostCallSummaryTab       review={review} />}
+            {activeTab === "scorecard"      && <PostCallScorecardTab     scorecard={review.rep_scorecard} />}
+            {activeTab === "missed"         && <PostCallMissedTab        missed={review.missed_opportunities} />}
             {activeTab === "turning_points" && <PostCallTurningPointsTab turningPoints={review.turning_points} />}
-            {activeTab === "replay"        && <PostCallReplayTab        replay={review.replay_timeline} />}
+            {activeTab === "replay"         && <PostCallReplayTab        replay={review.replay_timeline} />}
+            {activeTab === "action"         && <PostCallActionTab        actionPlan={actionPlan} loading={actionLoading} />}
           </div>
         </div>
       )}
@@ -2188,6 +2449,10 @@ export default function VictoriaPage() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewCallInfo, setReviewCallInfo] = useState<{ prospect_name: string; company: string } | null>(null);
 
+  // ── Post-call action plan state ─────────────────────────────
+  const [actionPlan, setActionPlan] = useState<ActionPlan | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const callStartRef = useRef<number>(0);
   const cardsEndRef = useRef<HTMLDivElement>(null);
@@ -2382,16 +2647,26 @@ export default function VictoriaPage() {
     callStartRef.current = 0;
     setActiveIntelTab("scores");
 
-    // ── Trigger post-call review ───────────────────────────────
+    // ── Trigger post-call review + action plan (parallel) ─────
     if (reviewCallId && reviewInfo) {
       setReviewCallInfo(reviewInfo);
       setPostCallReview(null);
+      setActionPlan(null);
       setReviewLoading(true);
+      setActionLoading(true);
+
+      // Review and action plan fire concurrently — neither blocks the other
       fetch(`/api/victoria/session/${reviewCallId}/review`, { method: "POST" })
         .then((r) => r.json() as Promise<{ review: PostCallReview }>)
         .then((data) => { setPostCallReview(data.review ?? null); })
         .catch((err) => { console.error("[Victoria] Post-call review failed:", err); })
         .finally(() => setReviewLoading(false));
+
+      fetch(`/api/victoria/session/${reviewCallId}/action-plan`, { method: "POST" })
+        .then((r) => r.json() as Promise<{ action_plan: ActionPlan }>)
+        .then((data) => { setActionPlan(data.action_plan ?? null); })
+        .catch((err) => { console.error("[Victoria] Action plan failed:", err); })
+        .finally(() => setActionLoading(false));
     }
   }, [callId, sessionInfo, transcription]);
 
@@ -2419,6 +2694,8 @@ export default function VictoriaPage() {
     setPostCallReview(null);
     setReviewCallInfo(null);
     setReviewLoading(false);
+    setActionPlan(null);
+    setActionLoading(false);
     setPageMode("live_call");
   }, []);
 
@@ -2426,7 +2703,7 @@ export default function VictoriaPage() {
   // Render: Post-call review (after call ends)
   // ─────────────────────────────────────────────────────────────
 
-  if (!callId && (reviewLoading || postCallReview)) {
+  if (!callId && (reviewLoading || postCallReview || actionLoading || actionPlan)) {
     return (
       <div>
         <ModeToggle mode="live_call" onChange={() => {}} callActive={false} />
@@ -2435,6 +2712,8 @@ export default function VictoriaPage() {
           callInfo={reviewCallInfo}
           loading={reviewLoading}
           onNewCall={handleNewCall}
+          actionPlan={actionPlan}
+          actionLoading={actionLoading}
         />
       </div>
     );

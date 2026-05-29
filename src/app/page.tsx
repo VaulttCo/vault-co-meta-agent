@@ -12,7 +12,6 @@ import {
   EyeOff,
   CheckSquare,
   ArrowRight,
-  Clock,
   LogOut,
 } from "lucide-react";
 import Image from "next/image";
@@ -452,18 +451,18 @@ export default function CommandHubPage() {
                   <div
                     className="icon-ring w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{
-                      background: "radial-gradient(circle at 40% 40%, rgba(167,139,250,0.24) 0%, rgba(167,139,250,0.06) 70%)",
-                      border: "1px solid rgba(167,139,250,0.30)",
-                      boxShadow: "0 0 22px rgba(167,139,250,0.20)",
+                      background: "radial-gradient(circle at 40% 40%, rgba(167,139,250,0.30) 0%, rgba(167,139,250,0.08) 70%)",
+                      border: "1px solid rgba(167,139,250,0.40)",
+                      boxShadow: "0 0 22px rgba(167,139,250,0.28)",
                     }}
                   >
                     <Mic2 size={26} style={{ color: "#b89eff" }} />
                   </div>
                   <span
                     className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex-shrink-0"
-                    style={{ color: "rgba(167,139,250,0.60)", backgroundColor: "rgba(61,79,110,0.12)", border: "1px solid rgba(61,79,110,0.24)" }}
+                    style={{ color: "#22c55e", backgroundColor: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.26)" }}
                   >
-                    Coming Soon
+                    Live
                   </span>
                 </div>
 
@@ -474,11 +473,11 @@ export default function CommandHubPage() {
                   >
                     Victoria AI Sales Coach
                   </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(184,158,255,0.45)" }}>
-                    Sales coaching system — in development
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(184,158,255,0.65)" }}>
+                    Enter the sales coaching portal
                   </p>
                   <p className="text-[12px] leading-relaxed" style={{ color: "rgba(255,255,255,0.40)" }}>
-                    Sales coaching system for Vault Co and future client teams. Victoria will guide discovery questions, objection handling, deal strategy, call review, call scoring, and follow-up recommendations using Vault Co sales frameworks.
+                    Real-time AI sales coaching for every call. Victoria listens, detects buying signals, surfaces objections, scores trust and urgency, and delivers full post-call reviews, missed opportunity analysis, rep scorecards, and automated follow-up kits.
                   </p>
                 </div>
               </div>
@@ -486,15 +485,16 @@ export default function CommandHubPage() {
               <div className="px-6 pb-6">
                 <button
                   onClick={() => enterModule("/victoria", "Activating Victoria AI Sales Coach...")}
-                  className="cta-btn flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[12px] font-semibold cursor-pointer"
+                  className="cta-btn flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold tracking-wide cursor-pointer"
                   style={{
-                    backgroundColor: "rgba(61,79,110,0.10)",
-                    border: "1px solid rgba(61,79,110,0.22)",
-                    color: "rgba(167,139,250,0.48)",
+                    background: "linear-gradient(90deg, rgba(167,139,250,0.26) 0%, rgba(167,139,250,0.14) 100%)",
+                    border: "1px solid rgba(167,139,250,0.42)",
+                    color: "#b89eff",
+                    boxShadow: "0 2px 14px rgba(167,139,250,0.18)",
                   }}
                 >
-                  <Clock size={12} />
-                  Preview Victoria
+                  Enter Victoria
+                  <ArrowRight size={14} />
                 </button>
               </div>
             </div>

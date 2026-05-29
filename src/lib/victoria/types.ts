@@ -986,6 +986,73 @@ export interface ActionPlan {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Fathom Integration DB Row Types
+// ─────────────────────────────────────────────────────────────
+
+export interface VictoriaFathomIngestionRow {
+  id: string;
+  call_id: string;
+  fathom_recording_id: string;
+  recording_url: string | null;
+  share_url: string | null;
+  duration_seconds: number | null;
+  title: string | null;
+  speakers: unknown;        // JSON — typed at application layer via fathom/types.ts
+  segments: unknown;
+  summary: string;
+  action_items: string[];
+  speaker_metrics: unknown | null;
+  reconciliation: unknown | null;
+  ingested_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Rep Profile DB Row Types
+// ─────────────────────────────────────────────────────────────
+
+export interface VictoriaRepProfileRow {
+  id: string;
+  name: string;
+  email: string | null;
+  avatar_initials: string;
+  fathom_speaker_names: string[];
+  total_calls: number;
+  avg_overall_score: number;
+  avg_talk_ratio_rep: number;
+  avg_discovery_depth: number;
+  avg_close_readiness: number;
+  skill_talk_ratio: number;
+  skill_question_quality: number;
+  skill_emotional_intelligence: number;
+  skill_objection_handling: number;
+  skill_closing: number;
+  skill_discovery_depth: number;
+  interruption_tendency: string;
+  overtalking_tendency: string;
+  strengths: string[];
+  weaknesses: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VictoriaRepCallLogRow {
+  id: string;
+  rep_id: string;
+  call_id: string;
+  overall_score: number;
+  grade: string;
+  talk_ratio_score: number;
+  question_quality_score: number;
+  emotional_intelligence_score: number;
+  discovery_score: number;
+  objection_handling_score: number;
+  closing_skill_score: number;
+  fathom_talk_ratio_rep: number | null;
+  fathom_interruption_count: number | null;
+  recorded_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Shared Intelligence — Victoria ↔ Veronica cross-agent structures
 // Data interfaces for eventual cross-agent intelligence sharing.
 // DO NOT contain automation logic here — interfaces only.

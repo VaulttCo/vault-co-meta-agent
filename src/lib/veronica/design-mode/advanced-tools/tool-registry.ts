@@ -13,6 +13,7 @@ export type InstallStatus =
   | "active"
   | "configured-pending-key"
   | "documented-not-installed"
+  | "audit-only"
   | "blocked";
 
 export interface DesignTool {
@@ -96,6 +97,30 @@ export const TOOL_REGISTRY = [
     approvalNeededBeforeProduction: true,
     notes:
       "Copy-paste model only — no npm package. Components live at ui.aceternity.com. Requires cn() utility (already present at src/lib/utils.ts) and framer-motion (already installed). Tailwind v4 compatibility must be verified per component.",
+  },
+  {
+    name: "Impeccable UI",
+    slug: "impeccable-ui",
+    purpose:
+      "Structured UI audit methodology for scoring components and page sections against Vault Co design standards. Not a package — a defined 8-category scoring workflow implemented in impeccable-audit.ts. Produces a 1–5 weighted score and a Level 1–4 recommendation.",
+    allowedUseCases: [
+      "Auditing sandbox components before promotion to src/components/ui/",
+      "Pre-redesign scoring of production page sections during Phase 3 review",
+      "Evaluating third-party component candidates (Magic UI, Aceternity) before integration",
+      "Generating structured pass/fail/conditional reports to accompany promotion proposals",
+    ],
+    forbiddenUseCases: [
+      "Auto-applying Level 3 or Level 4 recommendations without explicit user approval",
+      "Using a passing audit score as permission to bypass the promotion approval gate",
+      "Running broad page redesigns justified only by an audit score — proposals are still required",
+      "Treating a Level 1 recommendation as a green light to touch frozen pages",
+      "Direct redesign of any production page based on audit findings alone",
+    ],
+    installStatus: "audit-only" as InstallStatus,
+    riskLevel: "medium" as RiskLevel,
+    approvalNeededBeforeProduction: true,
+    notes:
+      "Audit-only methodology — no npm package, no CLI, no external dependency. All logic lives in src/lib/veronica/design-mode/advanced-tools/impeccable-audit.ts. Level 1–2 recommendations may proceed after standard build check. Level 3–4 require a written proposal and explicit user approval before any code is written. Direct redesign is always forbidden as an audit output.",
   },
 ] as const satisfies readonly DesignTool[];
 

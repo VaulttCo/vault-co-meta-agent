@@ -12,7 +12,7 @@ const VICTORIA_TIMEOUT_MS = 25_000; // 25 s — tighter than Veronica because la
 // ─────────────────────────────────────────────────────────────
 
 function resolveKey(): string | null {
-  const key = (process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPC_API_KEY)?.trim();
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
   return key || null;
 }
 

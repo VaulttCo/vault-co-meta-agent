@@ -1634,6 +1634,9 @@ export default function ClientProfilePage({ params }: { params: Promise<{ id: st
           <ClientIntelligenceMetricCard
             clientName={client.name}
             vertical={client.services[0] ?? "—"}
+            tier={client.tier}
+            intelligenceScore={client.intelligenceScore}
+            phase={client.phase}
             metrics={[
               { label: "ROAS",    value: "—" },
               { label: "Spend",   value: client.stats.spend },

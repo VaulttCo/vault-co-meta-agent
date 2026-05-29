@@ -267,6 +267,32 @@ export function Sidebar({ onClose }: SidebarProps) {
                 <NavLink key={href} label={label} href={href} icon={icon} />
               ))}
 
+            <SectionLabel label="Other Portals" />
+            <Link
+              href="/victoria"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+              style={{ color: "rgba(184,158,255,0.75)", border: "1px solid transparent" }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#b89eff";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(167,139,250,0.08)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.18)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "rgba(184,158,255,0.75)";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLElement).style.borderColor = "transparent";
+              }}
+            >
+              <Mic2 size={15} className="flex-shrink-0" style={{ color: "#a78bfa" }} />
+              <span className="truncate">Victoria AI</span>
+              <span
+                className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.10)", border: "1px solid rgba(167,139,250,0.20)" }}
+              >
+                Sales
+              </span>
+            </Link>
+
             <SectionLabel label="Coming Soon" />
             <ComingSoonItem icon={ClipboardList} label="Client Onboarding" />
           </>

@@ -1,0 +1,10 @@
+{
+  "crons": [
+    { "path": "/api/core/tick?tier=5min", "schedule": "*/5 * * * *" },
+    { "path": "/api/core/tick?tier=15min", "schedule": "*/15 * * * *" },
+    { "path": "/api/core/tick?tier=hourly", "schedule": "0 * * * *" },
+    { "path": "/api/core/tick?tier=daily", "schedule": "0 8 * * *" },
+    { "path": "/api/core/tick?tier=weekly", "schedule": "0 8 * * 1" },
+    { "path": "/api/core/tick?tier=monthly", "schedule": "0 8 1 * *" }
+  ]
+}

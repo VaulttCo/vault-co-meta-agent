@@ -31,6 +31,7 @@ import {
   CalendarCheck,
   Activity,
   Brain,
+  Lightbulb,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -47,6 +48,7 @@ interface NavItem {
 // ── Veronica portal nav ───────────────────────────────────────────────────────
 const veronicaNavItems: NavItem[] = [
   { label: "Vault Memory",      href: "/vault-memory",      icon: Brain,       permission: "canViewStrategyData" },
+  { label: "Recommendations",   href: "/recommendations",   icon: Lightbulb,   permission: "canViewApprovals" },
   { label: "Veronica Overview", href: "/ai-agent",         icon: Bot,         permission: "canViewAiBuilder" },
   { label: "Veronica Console",  href: "/ai-agent/console", icon: Sparkles,    permission: "canViewAiBuilder" },
   { label: "Clients",           href: "/clients",           icon: Users,       permission: "canViewClients"   },

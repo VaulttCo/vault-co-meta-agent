@@ -19,6 +19,7 @@ import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
+import { CommandHubRecommendationsPanel } from "@/components/core/CommandHubRecommendationsPanel";
 
 const statusStrip = [
   { label: "Auth Active",                 color: "#22c55e", bg: "rgba(34,197,94,0.10)",   border: "rgba(34,197,94,0.22)",   icon: Lock        },
@@ -527,6 +528,11 @@ export default function CommandHubPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Vault Core Recommendations (Layer 4 · Command Hub) ──────────── */}
+          <div className="hub-fade-up w-full text-left">
+            <CommandHubRecommendationsPanel />
           </div>
 
           {/* ── Footer ──────────────────────────────────────────────────────── */}

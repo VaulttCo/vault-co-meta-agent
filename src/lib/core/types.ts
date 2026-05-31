@@ -52,7 +52,21 @@ export type AgentTier = "5min" | "15min" | "hourly" | "daily" | "weekly" | "mont
 
 export type AgentRunStatus = "success" | "error" | "skipped";
 
-export type RecommendationStatus = "open" | "reviewed" | "accepted" | "dismissed";
+// Human-review workflow (Phase 2). `pending_review` is the entry state.
+export type RecommendationStatus =
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "archived"
+  | "implemented";
+
+// Actions a human operator can take in the Command Hub. None execute anything.
+export type ReviewAction =
+  | "approve"
+  | "reject"
+  | "archive"
+  | "implement"
+  | "request_revision";
 
 // ─────────────────────────────────────────────────────────────
 // Row types (what the DB returns on SELECT)
@@ -97,11 +111,33 @@ export interface VaultRecommendationRow {
   agent: string;
   title: string;
   body: string | null;
-  impact: string | null;
+  impact: string | null;             // estimated business impact (human-readable)
   priority_score: number;
   status: RecommendationStatus;
   node_id: string | null;
   metadata: Record<string, unknown>;
+  created_at: string;
+  // Phase 2 — traceability + review
+  influence_score: number;
+  revenue_impact: string | null;
+  related_clients: string[];
+  related_campaigns: string[];
+  related_conversations: string[];
+  related_node_ids: string[];
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  implemented_at: string | null;
+}
+
+export interface VaultRecommendationReviewRow {
+  id: string;
+  recommendation_id: string;
+  action: ReviewAction;
+  from_status: RecommendationStatus | null;
+  to_status: RecommendationStatus;
+  actor: string;
+  notes: string | null;
   created_at: string;
 }
 
@@ -160,6 +196,13 @@ export interface VaultRecommendationInput {
   priority_score?: number;
   node_id?: string | null;
   metadata?: Record<string, unknown>;
+  // Phase 2 traceability
+  influence_score?: number;
+  revenue_impact?: string | null;
+  related_clients?: string[];
+  related_campaigns?: string[];
+  related_conversations?: string[];
+  related_node_ids?: string[];
 }
 
 export interface VaultAgentRunInput {
@@ -207,6 +250,24 @@ export interface MemoryHealth {
   growthRate: number;            // 0..100
   confidence: number;            // 0..100 (avg node confidence)
   recommendationAccuracy: number;// 0..100
+}
+
+// Full traceability bundle for a single recommendation (Command Hub detail).
+export interface RecommendationTrace {
+  recommendation: VaultRecommendationRow;
+  relatedNodes: VaultNodeRow[];        // source intelligence behind the rec
+  contributingAgents: string[];
+  relatedRecommendations: VaultRecommendationRow[];
+  reviews: VaultRecommendationReviewRow[];
+}
+
+export interface RecommendationCounts {
+  pending_review: number;
+  approved: number;
+  rejected: number;
+  archived: number;
+  implemented: number;
+  total: number;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -32,6 +32,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { WORKFORCE } from "@/lib/core/agents/registry";
 import { styleFor } from "./categoryStyle";
+import { STATUS_META } from "./recommendationStatus";
 import { VaultMemoryGraph } from "./VaultMemoryGraph";
 import type {
   VaultGraph,
@@ -413,7 +414,7 @@ export function VaultMemoryView() {
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <VCChip label={`by ${r.agent}`} color="#22d3ee" />
                 {r.impact && <VCChip label={r.impact} color="#22c55e" />}
-                <VCStatusBadge label={r.status} variant={r.status === "open" ? "blue" : "neutral"} />
+                <VCStatusBadge label={STATUS_META[r.status].label} variant={STATUS_META[r.status].variant} />
               </div>
             </div>
           ))}

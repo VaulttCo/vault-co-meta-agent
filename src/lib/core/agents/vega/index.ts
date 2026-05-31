@@ -222,6 +222,9 @@ async function run(ctx: AgentRunContext): Promise<AgentRunResult> {
 
   // 7. Recommendation (open, for human review only) when the pattern is strong
   if (analysis.recommendation) {
+    const relatedClients = [analysis.best?.name, analysis.worst?.name].filter(
+      (n): n is string => !!n
+    );
     const recId = await insertRecommendation({
       agent: META.id,
       title: analysis.headline,
@@ -229,6 +232,11 @@ async function run(ctx: AgentRunContext): Promise<AgentRunResult> {
       impact: analysis.impact,
       priority_score: Math.min(0.95, analysis.confidence + 0.05),
       node_id: insightId,
+      influence_score: Math.min(0.9, analysis.confidence),
+      revenue_impact: analysis.impact, // best available estimate this cycle
+      related_clients: relatedClients,
+      related_node_ids: insightId ? [insightId] : [],
+      metadata: { confidence: analysis.confidence },
     });
     if (recId) {
       recommendationsCreated += 1;

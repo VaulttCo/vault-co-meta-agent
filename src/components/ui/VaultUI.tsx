@@ -700,3 +700,124 @@ export function VCPageWrapper({ children, className = "" }: { children: React.Re
     </div>
   );
 }
+
+// ─── VCBentoCell ─────────────────────────────────────────────────────────────
+// Promoted from src/components/sandbox/VaultCommandBentoGrid.tsx.
+// Bento grid cell with gradient border, spotlight hover, and staggered entry.
+// Cells assemble into a CSS grid on the consuming page (sm:grid-cols-3 pattern).
+//
+// Spotlight and stagger animations are fully gated on useReducedMotion().
+// Border radius: 12px outer / 11px inner — matches system maximum (rounded-xl).
+// Fixes from sandbox: borderRadius 16→12, 15→11.
+//
+// Usage:
+//   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+//     <VCBentoCell index={0} colSpan={2} accent="#0081f2" minHeight={320}>
+//       {children}
+//     </VCBentoCell>
+//     <VCBentoCell index={1} colSpan={1} rowSpan={2} accent="#22c55e">
+//       {children}
+//     </VCBentoCell>
+//   </div>
+
+import { useState, useRef, useCallback } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+
+interface VCBentoCellProps {
+  children: React.ReactNode;
+  /** Stagger index — cell N enters with delay N × 60ms. Default 0. */
+  index?: number;
+  colSpan?: 1 | 2 | 3;
+  rowSpan?: 1 | 2;
+  /** CSS color string for gradient border and spotlight. Default Vault Co blue. */
+  accent?: string;
+  minHeight?: number;
+  className?: string;
+}
+
+export function VCBentoCell({
+  children,
+  index = 0,
+  colSpan = 1,
+  rowSpan = 1,
+  accent = "#0081f2",
+  minHeight = 160,
+  className = "",
+}: VCBentoCellProps) {
+  const reduced = useReducedMotion() ?? false;
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const [hovered, setHovered] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (reduced || !ref.current) return;
+      const r = ref.current.getBoundingClientRect();
+      setMouse({ x: e.clientX - r.left, y: e.clientY - r.top });
+    },
+    [reduced]
+  );
+
+  const colClass =
+    colSpan === 3 ? "sm:col-span-3" :
+    colSpan === 2 ? "sm:col-span-2" :
+                   "sm:col-span-1";
+  const rowClass = rowSpan === 2 ? "sm:row-span-2" : "";
+
+  return (
+    <motion.div
+      className={`col-span-1 ${colClass} ${rowClass} ${className}`}
+      initial={reduced ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.06, ease: "easeOut" }}
+      style={{ minHeight }}
+    >
+      {/* 1px gradient border via padding trick */}
+      <div
+        style={{
+          height: "100%",
+          padding: "1px",
+          borderRadius: 12,
+          background: hovered && !reduced
+            ? `linear-gradient(135deg, ${accent}55 0%, ${accent}18 50%, transparent 100%)`
+            : `linear-gradient(135deg, ${accent}28 0%, transparent 60%)`,
+          transition: "background 0.3s ease",
+        }}
+      >
+        {/* Inner surface */}
+        <div
+          ref={ref}
+          onMouseMove={handleMouseMove}
+          onMouseEnter={() => !reduced && setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            position: "relative",
+            height: "100%",
+            borderRadius: 11,
+            backgroundColor: "var(--t-surface)",
+            overflow: "hidden",
+          }}
+        >
+          {/* Spotlight overlay — disabled when reduced motion or not hovered */}
+          {hovered && !reduced && (
+            <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 11,
+                background: `radial-gradient(280px at ${mouse.x}px ${mouse.y}px, ${accent}14, transparent 70%)`,
+                pointerEvents: "none",
+                zIndex: 0,
+              }}
+            />
+          )}
+          {/* Content above spotlight */}
+          <div style={{ position: "relative", zIndex: 1, height: "100%" }}>
+            {children}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}

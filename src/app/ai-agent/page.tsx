@@ -24,13 +24,12 @@ import {
   Terminal,
   Play,
   AlertTriangle,
-  BookOpen,
-  RotateCcw,
-  Sparkle,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { getDataProvider } from "@/lib/data/data-provider";
 import { VCStat, VCPanel, VCPanelHeader, VCActionLink } from "@/components/ui/VaultUI";
+import { VAIWorkforce } from "@/components/sandbox/VAIWorkforce";
+import { VOperationsFeed } from "@/components/sandbox/VOperationsFeed";
 import type { Client } from "@/lib/data";
 import type { VeronicaHermesRunRow, VeronicaHermesSkillRow } from "@/lib/supabase/types";
 
@@ -304,6 +303,16 @@ export default function VeronicaOverviewPage() {
           ))}
         </div>
       </div>
+
+      {/* ── AI Workforce ──────────────────────────────────────── */}
+      <VAIWorkforce
+        pendingPlans={pendingPlans}
+        draftPlans={draftPlans}
+        approvedPlans={approvedPlans}
+        hermesRuns={hermesRuns}
+        hermesSkills={hermesSkills}
+        hermesRunsLoading={hermesRunsLoading}
+      />
 
       {/* ── Client Intelligence + Fulfillment Pipeline ─────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -610,213 +619,18 @@ export default function VeronicaOverviewPage() {
             </div>
           )}
 
-          {/* Recent runs */}
-          <div
-            className="pt-2 border-t space-y-2"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div
-              className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "rgba(107,122,153,0.55)" }}
-            >
-              Recent Runs
-            </div>
-
-            {hermesRunsLoading ? (
-              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                Loading…
-              </p>
-            ) : hermesRuns.length === 0 ? (
-              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                No runs yet. Submit a prompt above to get started.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {hermesRuns.map((run) => {
-                  const isSuccess = run.status === "success";
-                  const isUnreachable = run.status === "unreachable";
-                  const statusColor = isSuccess
-                    ? "#22c55e"
-                    : isUnreachable
-                    ? "#ff8400"
-                    : "#ef4444";
-                  const statusLabel = isSuccess ? "OK" : isUnreachable ? "UNREACHABLE" : "ERROR";
-                  const promptPreview =
-                    run.prompt.length > 80
-                      ? run.prompt.slice(0, 80) + "…"
-                      : run.prompt;
-                  const ts = new Date(run.created_at).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  });
-
-                  return (
-                    <div
-                      key={run.id}
-                      className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg"
-                      style={{
-                        backgroundColor: "rgba(0,129,242,0.03)",
-                        border: "1px solid rgba(61,79,110,0.16)",
-                      }}
-                    >
-                      <span
-                        className="text-[8px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5"
-                        style={{
-                          color: statusColor,
-                          backgroundColor: `${statusColor}18`,
-                          border: `1px solid ${statusColor}30`,
-                        }}
-                      >
-                        {statusLabel}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div
-                          className="text-[11px] leading-snug"
-                          style={{ color: "var(--t-text)" }}
-                        >
-                          {promptPreview}
-                        </div>
-                        {run.error && (
-                          <div
-                            className="text-[10px] mt-0.5 truncate"
-                            style={{ color: "#ef4444" }}
-                          >
-                            {run.error}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {run.auto_skill_created && (
-                          <span
-                            className="text-[8px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1"
-                            style={{
-                              color: "#a78bfa",
-                              backgroundColor: "rgba(167,139,250,0.10)",
-                              border: "1px solid rgba(167,139,250,0.22)",
-                            }}
-                          >
-                            <Sparkle size={7} />
-                            Skill saved
-                          </span>
-                        )}
-                        <span
-                          className="text-[10px] tabular-nums"
-                          style={{ color: "rgba(107,122,153,0.50)" }}
-                        >
-                          {ts}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ── Saved Skills ───────────────────────────────── */}
-          <div
-            className="pt-2 border-t space-y-2"
-            style={{ borderColor: "var(--t-border)" }}
-          >
-            <div className="flex items-center gap-2">
-              <BookOpen size={11} style={{ color: "#a78bfa" }} />
-              <span
-                className="text-[10px] font-semibold uppercase tracking-widest"
-                style={{ color: "rgba(167,139,250,0.75)" }}
-              >
-                Saved Skills
-              </span>
-            </div>
-
-            {hermesSkillsLoading ? (
-              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                Loading…
-              </p>
-            ) : hermesSkills.length === 0 ? (
-              <p className="text-[11px]" style={{ color: "rgba(107,122,153,0.45)" }}>
-                No skills saved yet. Reusable outputs are auto-detected and saved here.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {hermesSkills.map((skill) => (
-                  <div
-                    key={skill.id}
-                    className="px-3 py-2.5 rounded-lg"
-                    style={{
-                      backgroundColor: "rgba(167,139,250,0.04)",
-                      border: "1px solid rgba(167,139,250,0.14)",
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div
-                          className="text-[12px] font-semibold leading-tight"
-                          style={{ color: "var(--t-text)" }}
-                        >
-                          {skill.name}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {skill.category && (
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                              style={{
-                                color: "#a78bfa",
-                                backgroundColor: "rgba(167,139,250,0.10)",
-                                border: "1px solid rgba(167,139,250,0.20)",
-                              }}
-                            >
-                              {skill.category}
-                            </span>
-                          )}
-                          <span
-                            className="text-[10px]"
-                            style={{ color: "rgba(107,122,153,0.55)" }}
-                          >
-                            {new Date(skill.created_at).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </span>
-                          {skill.usage_count > 0 && (
-                            <span
-                              className="text-[10px]"
-                              style={{ color: "rgba(107,122,153,0.55)" }}
-                            >
-                              {skill.usage_count} use{skill.usage_count !== 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => runSkill(skill)}
-                        disabled={runningSkillId === skill.id}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold flex-shrink-0 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{
-                          backgroundColor: "rgba(167,139,250,0.10)",
-                          border: "1px solid rgba(167,139,250,0.24)",
-                          color: "#a78bfa",
-                        }}
-                      >
-                        {runningSkillId === skill.id ? (
-                          <span
-                            className="w-3 h-3 rounded-full border-2 animate-spin flex-shrink-0"
-                            style={{ borderColor: "rgba(167,139,250,0.4)", borderTopColor: "transparent" }}
-                          />
-                        ) : (
-                          <RotateCcw size={11} />
-                        )}
-                        Run Skill
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
+
+      {/* ── Operations Feed ───────────────────────────────────── */}
+      <VOperationsFeed
+        runs={hermesRuns}
+        skills={hermesSkills}
+        runsLoading={hermesRunsLoading}
+        skillsLoading={hermesSkillsLoading}
+        runningSkillId={runningSkillId}
+        onRunSkill={runSkill}
+      />
 
       {/* ── Quick Actions ─────────────────────────────────────── */}
       <div>

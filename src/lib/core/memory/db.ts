@@ -15,6 +15,7 @@ import {
   buildMockGraph,
   buildMockActivity,
   buildMockRecommendations,
+  buildMockRecommendationReviews,
   buildMockAgentRuns,
 } from "./mock-graph";
 import type {
@@ -23,6 +24,7 @@ import type {
   VaultEdgeRow,
   VaultActivityRow,
   VaultRecommendationRow,
+  VaultRecommendationReviewRow,
   VaultAgentRunRow,
   VaultNodeInput,
   VaultEdgeInput,
@@ -31,6 +33,10 @@ import type {
   VaultAgentRunInput,
   MemoryOverview,
   MemoryHealth,
+  ReviewAction,
+  RecommendationStatus,
+  RecommendationTrace,
+  RecommendationCounts,
 } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,8 +183,10 @@ export async function getHealth(): Promise<MemoryHealth> {
   });
 
   const density = Math.min(1, graph.edges.length / nodeCount / 2);
-  const accepted = recs.filter((r) => r.status === "accepted").length;
-  const reviewed = recs.filter((r) => r.status !== "open").length || 1;
+  // "Accuracy" proxy: of the recommendations a human has acted on, how many were
+  // approved or implemented (vs rejected/archived).
+  const accepted = recs.filter((r) => r.status === "approved" || r.status === "implemented").length;
+  const reviewed = recs.filter((r) => r.status !== "pending_review").length || 1;
 
   const pct = (x: number) => Math.round(Math.max(0, Math.min(1, x)) * 100);
 
@@ -315,9 +323,15 @@ export async function insertRecommendation(
         body: input.body ?? null,
         impact: input.impact ?? null,
         priority_score: input.priority_score ?? 0.5,
-        status: "open", // always created as open — only humans advance it
+        status: "pending_review", // created for human review — only humans advance it
         node_id: input.node_id ?? null,
         metadata: input.metadata ?? {},
+        influence_score: input.influence_score ?? 0.5,
+        revenue_impact: input.revenue_impact ?? null,
+        related_clients: input.related_clients ?? [],
+        related_campaigns: input.related_campaigns ?? [],
+        related_conversations: input.related_conversations ?? [],
+        related_node_ids: input.related_node_ids ?? [],
       })
       .select("id")
       .single();
@@ -329,6 +343,187 @@ export async function insertRecommendation(
   } catch (e) {
     console.error(`${LOG} insertRecommendation threw:`, (e as Error).message);
     return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Recommendation review workflow (Phase 2 — Command Hub)
+// READ + human-driven status transitions. NOTHING here executes any external
+// action; a transition only updates Vault Memory + appends a review record.
+// ─────────────────────────────────────────────────────────────
+
+// Action → resulting status. Humans choose the action; this maps it to state.
+const ACTION_RESULT: Record<ReviewAction, RecommendationStatus> = {
+  approve: "approved",
+  reject: "rejected",
+  archive: "archived",
+  implement: "implemented",
+  request_revision: "pending_review",
+};
+
+export async function getRecommendation(
+  id: string
+): Promise<VaultRecommendationRow | null> {
+  const client = db();
+  if (!client) {
+    return buildMockRecommendations().find((r) => r.id === id) ?? null;
+  }
+  try {
+    const { data, error } = await client
+      .from("vault_recommendations")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as VaultRecommendationRow;
+  } catch {
+    return null;
+  }
+}
+
+export async function getRecommendationReviews(
+  recommendationId: string
+): Promise<VaultRecommendationReviewRow[]> {
+  const client = db();
+  if (!client) return buildMockRecommendationReviews(recommendationId);
+  try {
+    const { data, error } = await client
+      .from("vault_recommendation_reviews")
+      .select("*")
+      .eq("recommendation_id", recommendationId)
+      .order("created_at", { ascending: false });
+    if (error || !data) return [];
+    return data as VaultRecommendationReviewRow[];
+  } catch {
+    return [];
+  }
+}
+
+export async function getRecommendationCounts(): Promise<RecommendationCounts> {
+  const recs = await getRecommendations(500);
+  const counts: RecommendationCounts = {
+    pending_review: 0,
+    approved: 0,
+    rejected: 0,
+    archived: 0,
+    implemented: 0,
+    total: recs.length,
+  };
+  for (const r of recs) {
+    if (r.status in counts) counts[r.status] += 1;
+  }
+  return counts;
+}
+
+/**
+ * Build the full traceability bundle for the Command Hub detail view:
+ * the source intelligence (graph nodes), contributing agents, sibling
+ * recommendations, and the retained review history.
+ */
+export async function getRecommendationTrace(
+  id: string
+): Promise<RecommendationTrace | null> {
+  const recommendation = await getRecommendation(id);
+  if (!recommendation) return null;
+
+  const [graph, allRecs, reviews] = await Promise.all([
+    getGraph(),
+    getRecommendations(500),
+    getRecommendationReviews(id),
+  ]);
+
+  // Seed node ids from explicit links + the rec's primary node.
+  const seedIds = new Set<string>(recommendation.related_node_ids ?? []);
+  if (recommendation.node_id) seedIds.add(recommendation.node_id);
+
+  // Expand one hop through the graph so operators see the source intelligence.
+  const oneHop = new Set<string>(seedIds);
+  for (const e of graph.edges) {
+    if (seedIds.has(e.from_node)) oneHop.add(e.to_node);
+    if (seedIds.has(e.to_node)) oneHop.add(e.from_node);
+  }
+
+  const relatedNodes = graph.nodes.filter((n) => oneHop.has(n.id));
+  const contributingAgents = Array.from(
+    new Set<string>([
+      recommendation.agent,
+      ...relatedNodes.map((n) => n.source_agent).filter((a): a is string => !!a),
+    ])
+  );
+
+  const relatedRecommendations = allRecs
+    .filter((r) => r.id !== id && r.agent === recommendation.agent)
+    .slice(0, 5);
+
+  return { recommendation, relatedNodes, contributingAgents, relatedRecommendations, reviews };
+}
+
+export interface ReviewResult {
+  ok: boolean;
+  mockMode: boolean;
+  status: RecommendationStatus;
+}
+
+/**
+ * Apply a human review action. Updates the recommendation's status + review
+ * metadata and appends an immutable review-history row. Mock-safe: with no DB
+ * it returns mockMode:true (preview only — nothing persists).
+ */
+export async function reviewRecommendation(
+  id: string,
+  action: ReviewAction,
+  actor: string,
+  notes?: string | null
+): Promise<ReviewResult> {
+  const toStatus = ACTION_RESULT[action];
+  const client = db();
+  if (!client) {
+    // Preview mode — no persistence. Report the intended status so the UI can
+    // show an optimistic result, but flag that it didn't persist.
+    return { ok: true, mockMode: true, status: toStatus };
+  }
+
+  try {
+    const { data: current } = await client
+      .from("vault_recommendations")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle();
+    const fromStatus = (current as { status?: RecommendationStatus } | null)?.status ?? null;
+
+    const nowIso = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      status: toStatus,
+      reviewed_by: actor,
+      reviewed_at: nowIso,
+      review_notes: notes ?? null,
+    };
+    if (action === "implement") patch.implemented_at = nowIso;
+
+    const { error: updErr } = await client
+      .from("vault_recommendations")
+      .update(patch)
+      .eq("id", id);
+    if (updErr) {
+      console.error(`${LOG} reviewRecommendation update:`, updErr.message);
+      return { ok: false, mockMode: false, status: toStatus };
+    }
+
+    // Append review history (best-effort — the status change is the source of truth).
+    const { error: histErr } = await client.from("vault_recommendation_reviews").insert({
+      recommendation_id: id,
+      action,
+      from_status: fromStatus,
+      to_status: toStatus,
+      actor,
+      notes: notes ?? null,
+    });
+    if (histErr) console.error(`${LOG} reviewRecommendation history:`, histErr.message);
+
+    return { ok: true, mockMode: false, status: toStatus };
+  } catch (e) {
+    console.error(`${LOG} reviewRecommendation threw:`, (e as Error).message);
+    return { ok: false, mockMode: false, status: toStatus };
   }
 }
 

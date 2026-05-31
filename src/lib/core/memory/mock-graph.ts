@@ -17,6 +17,7 @@ import type {
   VaultEdgeRow,
   VaultActivityRow,
   VaultRecommendationRow,
+  VaultRecommendationReviewRow,
   VaultAgentRunRow,
   VaultNodeCategory,
 } from "../types";
@@ -225,6 +226,7 @@ export function buildMockActivity(limit = 30): VaultActivityRow[] {
 // ─────────────────────────────────────────────────────────────
 
 export function buildMockRecommendations(): VaultRecommendationRow[] {
+  const sampleClients = mockClients.slice(0, 2).map((c) => c.id);
   return [
     {
       id: nid("rec-1"),
@@ -233,10 +235,20 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       body: "Front-load roofing budgets ~2 weeks before forecasted storms based on the cross-client CPL pattern.",
       impact: "Est. 10–18% lower CPL during peak demand windows",
       priority_score: 0.82,
-      status: "open",
+      status: "pending_review",
       node_id: nid("rec-1"),
-      metadata: {},
+      metadata: { confidence: 0.73 },
       created_at: iso(2 * HOUR),
+      influence_score: 0.78,
+      revenue_impact: "+$8–14k/mo across roofing accounts",
+      related_clients: sampleClients,
+      related_campaigns: [],
+      related_conversations: [],
+      related_node_ids: [nid("insight-cpl"), nid("rec-1")],
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
+      implemented_at: null,
     },
     {
       id: nid("rec-2"),
@@ -245,12 +257,41 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       body: "Booking rate rises ~12% when first text lands under 5 minutes; recommend an SLA + alerting.",
       impact: "Est. +12% booked calls",
       priority_score: 0.74,
-      status: "open",
+      status: "approved",
       node_id: null,
-      metadata: {},
-      created_at: iso(6 * HOUR),
+      metadata: { confidence: 0.69 },
+      created_at: iso(26 * HOUR),
+      influence_score: 0.64,
+      revenue_impact: "+~$5k/mo pipeline",
+      related_clients: sampleClients.slice(0, 1),
+      related_campaigns: [],
+      related_conversations: [],
+      related_node_ids: [nid("insight-book")],
+      reviewed_by: "Nick (admin)",
+      reviewed_at: iso(3 * HOUR),
+      review_notes: "Approved — ops to draft the SLA. No external action taken.",
+      implemented_at: null,
     },
   ];
+}
+
+// Seeded review history for the mock recommendations (illustrates retention).
+export function buildMockRecommendationReviews(
+  recommendationId?: string
+): VaultRecommendationReviewRow[] {
+  const all: VaultRecommendationReviewRow[] = [
+    {
+      id: nid("review-1"),
+      recommendation_id: nid("rec-2"),
+      action: "approve",
+      from_status: "pending_review",
+      to_status: "approved",
+      actor: "Nick (admin)",
+      notes: "Approved — ops to draft the SLA. No external action taken.",
+      created_at: iso(3 * HOUR),
+    },
+  ];
+  return recommendationId ? all.filter((r) => r.recommendation_id === recommendationId) : all;
 }
 
 // ─────────────────────────────────────────────────────────────

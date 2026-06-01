@@ -70,7 +70,7 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
+import { buildCouncilPrompt, applyCouncilToDraft, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse, CampaignImprovementPatch } from "@/lib/council/types";
 import { MetaPushReadiness } from "@/components/meta/MetaPushReadiness";
 
@@ -2741,98 +2741,93 @@ function AICampaignBuilderContent() {
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 3: Internal strategy refinement (two-step patch) ──────────
+      // ── Phase 3: Campaign patch via /api/veronica/campaign-patch ──────────────
+      // Direct Anthropic call — no Hermes VPS, no external queue, no 4-minute waits.
+      // Draft is already visible; this runs as a background refinement.
       setPipelinePhase("Veronica is refining the strategy…");
 
-      const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
-      for (const [id, a] of Object.entries(mergedAnalyses)) {
-        mappedAnalyses[id] = { visualSummary: a.visual_summary, analysisSource: a.analysis_source };
-      }
-
-      const patchContext = {
-        client: {
-          id: selectedClient.id,
-          name: selectedClient.name,
-          market: (selectedClient as { market?: string }).market,
-          monthlyBudget: (selectedClient as { monthlyBudget?: string }).monthlyBudget,
-          services: (selectedClient as { services?: string[] }).services,
-        },
-        goal, service, market, budget,
-        displayPlan: initialPlan,
-        selectedAssets,
-        assetNotes,
-        assetAnalyses: mappedAnalyses,
+      const patchBody = {
+        clientName: selectedClient.name,
+        campaignName: initialPlan.campaignName,
+        goal,
+        service,
+        market,
+        budget,
+        primaryTexts: Array.isArray(initialPlan.adCopy?.primaryTexts)
+          ? initialPlan.adCopy.primaryTexts.slice(0, 2).map((t) => String(t).slice(0, 150))
+          : undefined,
+        headlines: Array.isArray(initialPlan.adCopy?.headlines)
+          ? initialPlan.adCopy.headlines.slice(0, 3)
+          : undefined,
+        cta: initialPlan.adCopy?.cta,
+        creativeSummary: initialPlan.creativeDirection?.hook
+          ? String(initialPlan.creativeDirection.hook).slice(0, 100)
+          : undefined,
+        assetSummaries: selectedAssets.length > 0
+          ? selectedAssets.slice(0, 4).map((a) => `${a.fileName}(${a.fileType === "video" ? "VIDEO" : "IMG"})`)
+          : undefined,
+        creativeNotes: creativeNotes || undefined,
       };
 
-      // ── Step A: Core patch (required — tight prompt ~1200 chars) ─────────
-      const corePatchPrompt = buildImprovementPatchPrompt(patchContext);
-      const safeCorePatch = corePatchPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
+      let corePatch: CampaignImprovementPatch | null = null;
+      let patchOk = false;
 
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[Patch] Core prompt length:", safeCorePatch.length);
-      }
-
-      let rawCoreOutput = "";
-      let coreHermesOk = false;
-
-      // 35-second client-side abort — draft already shown, this is a background call.
-      // Server-side timeout is 45s; Vercel maxDuration is 60s.
+      // 25-second client-side abort — draft already shown, patch is non-blocking
       const patchAbortCtrl = new AbortController();
-      const patchTimeout = setTimeout(() => patchAbortCtrl.abort(), 35000);
+      const patchTimeout = setTimeout(() => patchAbortCtrl.abort(), 25000);
 
       try {
-        const coreRes = await fetch("/api/veronica/hermes", {
+        const _patchT0 = Date.now();
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Patch] Calling /api/veronica/campaign-patch for:", patchBody.campaignName);
+        }
+
+        const patchRes = await fetch("/api/veronica/campaign-patch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: safeCorePatch }),
+          body: JSON.stringify(patchBody),
           signal: patchAbortCtrl.signal,
         });
         clearTimeout(patchTimeout);
 
-        let coreData: { output?: string | null; error?: string | null } = {};
-        try { coreData = await coreRes.json(); } catch { /* unparseable */ }
+        let patchData: { patch?: CampaignImprovementPatch | null; error?: string | null; rawTextPreview?: string } = {};
+        try { patchData = await patchRes.json(); } catch { /* unparseable */ }
 
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] Hermes HTTP status:", coreRes.status);
-          if (coreData.error) console.warn("[Patch] Hermes error field:", coreData.error);
-          console.warn("[Patch] Hermes output first 800:", String(coreData.output ?? "").slice(0, 800));
+          console.warn("[Patch] /campaign-patch HTTP:", patchRes.status, "elapsed:", Date.now() - _patchT0, "ms");
+          if (patchData.error) console.warn("[Patch] error:", patchData.error);
+          if (patchData.rawTextPreview) console.warn("[Patch] rawTextPreview:", patchData.rawTextPreview);
+          if (patchData.patch) console.warn("[Patch] keys received:", Object.keys(patchData.patch).join(", "));
         }
 
-        if (!coreRes.ok || coreData.error) {
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[Patch] Core Hermes failed. Status:", coreRes.status, "error:", coreData.error ?? "none");
-          }
-        } else {
-          rawCoreOutput = String(coreData.output ?? "");
-          coreHermesOk = true;
+        if (patchRes.ok && patchData.patch) {
+          corePatch = patchData.patch;
+          patchOk = true;
+        } else if (process.env.NODE_ENV !== "production") {
+          console.warn("[Patch] Failed. Status:", patchRes.status, "error:", patchData.error ?? "no error field");
         }
-      } catch (hermesErr) {
+      } catch (patchErr) {
         clearTimeout(patchTimeout);
-        const isAbort = hermesErr instanceof Error && hermesErr.name === "AbortError";
+        const isAbort = patchErr instanceof Error && patchErr.name === "AbortError";
         if (process.env.NODE_ENV !== "production") {
-          if (isAbort) console.warn("[Patch] Client-side timeout (20s) — preserving original draft.");
-          else console.warn("[Patch] Core Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
+          if (isAbort) console.warn("[Patch] Client timeout (25s) — draft preserved as-is.");
+          else console.warn("[Patch] Fetch error:", patchErr instanceof Error ? patchErr.message : patchErr);
         }
-        // On timeout or network error: original draft already shown — return cleanly
+        // Draft already shown — return cleanly, no user-facing warning needed
         return;
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 4: Extract + apply core patch ─────────────────────────────────────────
+      // ── Phase 4: Apply patch to draft ────────────────────────────────────────
       setPipelinePhase("Veronica is applying strategic improvements…");
 
-      const corePatch: CampaignImprovementPatch | null = rawCoreOutput
-        ? safeExtractImprovementPatch(rawCoreOutput)
-        : null;
-
       if (process.env.NODE_ENV !== "production") {
-        console.warn("[Patch] Core extraction:", corePatch ? "success" : "failed");
-        if (corePatch) console.warn("[Patch] Core patch keys:", Object.keys(corePatch).join(", "));
-        else if (rawCoreOutput) console.warn("[Patch] Core extraction failed. Raw:", rawCoreOutput.slice(0, 400));
+        console.warn("[Patch] corePatch:", corePatch ? "received" : "null", "| patchOk:", patchOk);
+        if (corePatch) console.warn("[Patch] Patch keys:", Object.keys(corePatch).join(", "));
+        else console.warn("[Patch] Failure:", patchOk ? "patch field was null in response" : "route returned error or no patch");
       }
 
-      if (generationAttemptIdRef.current !== attemptId) return;
 
       if (corePatch) {
         setPipelinePhase("Veronica is finalizing your campaign draft…");
@@ -2865,13 +2860,12 @@ function AICampaignBuilderContent() {
           }
         }
       } else {
-        if (generationAttemptIdRef.current === attemptId && !coreHermesOk) {
+        if (generationAttemptIdRef.current === attemptId && !patchOk) {
           setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
         }
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] No patch. coreHermesOk:", coreHermesOk, "rawOutput length:", rawCoreOutput.length);
-          if (!coreHermesOk) console.warn("[Patch] Reason: Hermes returned HTTP error or error field");
-          else console.warn("[Patch] Reason: extraction returned null:", rawCoreOutput.slice(0, 300));
+          console.warn("[Patch] No patch applied. patchOk:", patchOk);
+          if (!patchOk) console.warn("[Patch] Reason: /campaign-patch returned error or no patch field");
         }
       }
 

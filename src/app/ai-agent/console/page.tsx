@@ -70,7 +70,7 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
+import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, buildExtendedPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse, CampaignImprovementPatch } from "@/lib/council/types";
 import { MetaPushReadiness } from "@/components/meta/MetaPushReadiness";
 
@@ -2737,7 +2737,7 @@ function AICampaignBuilderContent() {
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 3: Internal strategy refinement (patch approach) ───────────
+      // ── Phase 3: Internal strategy refinement (two-step patch) ──────────
       setPipelinePhase("Veronica is refining the strategy…");
 
       const mappedAnalyses: Record<string, { visualSummary?: string; analysisSource?: string }> = {};
@@ -2760,69 +2760,160 @@ function AICampaignBuilderContent() {
         assetAnalyses: mappedAnalyses,
       };
 
-      // Use focused patch prompt — avoids full draft schema that trips VPS validation
-      const patchPrompt = buildImprovementPatchPrompt(patchContext);
-      // Strip null bytes and non-printable control chars before sending
-      const safePrompt = patchPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
+      // ── Step A: Core patch (required — tight prompt ~1200 chars) ─────────
+      const corePatchPrompt = buildImprovementPatchPrompt(patchContext);
+      const safeCorePatch = corePatchPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
 
       if (process.env.NODE_ENV !== "production") {
-        console.info("[Patch] Prompt length:", safePrompt.length);
+        console.warn("[Patch] Core prompt length:", safeCorePatch.length);
       }
 
-      let rawPatchOutput = "";
+      let rawCoreOutput = "";
+      let coreHermesOk = false;
+
       try {
-        const hermesRes = await fetch("/api/veronica/hermes", {
+        const coreRes = await fetch("/api/veronica/hermes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: safePrompt }),
+          body: JSON.stringify({ prompt: safeCorePatch }),
         });
 
-        let hermesData: { output?: string | null; error?: string | null } = {};
-        try { hermesData = await hermesRes.json(); } catch { /* unparseable body */ }
+        let coreData: { output?: string | null; error?: string | null } = {};
+        try { coreData = await coreRes.json(); } catch { /* unparseable */ }
 
-        if (!hermesRes.ok || hermesData.error) {
-          if (generationAttemptIdRef.current === attemptId) {
-            setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
-          }
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[Patch] Hermes error:", hermesData.error ?? `HTTP ${hermesRes.status}`);
-          }
-          return;
-        }
-        rawPatchOutput = (hermesData.output as string) ?? "";
         if (process.env.NODE_ENV !== "production") {
-          console.info("[Patch] Hermes response length:", rawPatchOutput.length);
+          console.warn("[Patch] Hermes HTTP status:", coreRes.status);
+          if (coreData.error) console.warn("[Patch] Hermes error field:", coreData.error);
+          console.warn("[Patch] Hermes output first 800:", String(coreData.output ?? "").slice(0, 800));
+        }
+
+        if (!coreRes.ok || coreData.error) {
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[Patch] Core Hermes failed. Status:", coreRes.status, "error:", coreData.error ?? "none");
+          }
+        } else {
+          rawCoreOutput = String(coreData.output ?? "");
+          coreHermesOk = true;
         }
       } catch (hermesErr) {
-        if (generationAttemptIdRef.current === attemptId) {
-          setCouncilWarning("Veronica couldn't reach the strategy engine. Your original draft was preserved.");
-        }
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
+          console.warn("[Patch] Core Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
         }
-        return;
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 4: Parse patch + apply field-by-field to draft ─────────────
+      // ── Phase 4: Extract core patch ───────────────────────────────────────
       setPipelinePhase("Veronica is applying strategic improvements…");
 
-      const patch = safeExtractImprovementPatch(rawPatchOutput);
+      let corePatch: CampaignImprovementPatch | null = null;
+      if (rawCoreOutput) {
+        corePatch = safeExtractImprovementPatch(rawCoreOutput);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Patch] Core extraction:", corePatch ? "success" : "failed");
+          if (corePatch) console.warn("[Patch] Core patch keys:", Object.keys(corePatch).join(", "));
+          else console.warn("[Patch] Core extraction failed. Raw:", rawCoreOutput.slice(0, 400));
+        }
+      }
 
-      if (patch) {
+      // ── Step B: Extended patch (optional — only if core succeeded + assets) ─
+      let extendedPatch: CampaignImprovementPatch | null = null;
+      if (corePatch && selectedAssets.length > 0) {
+        try {
+          const extPrompt = buildExtendedPatchPrompt(patchContext);
+          const safeExtPrompt = extPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
+
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[Patch] Extended prompt length:", safeExtPrompt.length);
+          }
+
+          const extRes = await fetch("/api/veronica/hermes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: safeExtPrompt }),
+          });
+
+          let extData: { output?: string | null; error?: string | null } = {};
+          try { extData = await extRes.json(); } catch { }
+
+          if (process.env.NODE_ENV !== "production") {
+            console.warn("[Patch] Extended HTTP:", extRes.status);
+            console.warn("[Patch] Extended output first 800:", String(extData.output ?? "").slice(0, 800));
+          }
+
+          if (extRes.ok && !extData.error && extData.output) {
+            extendedPatch = safeExtractImprovementPatch(String(extData.output));
+            if (process.env.NODE_ENV !== "production") {
+              console.warn("[Patch] Extended extraction:", extendedPatch ? "success" : "failed");
+              if (extendedPatch) console.warn("[Patch] Extended patch keys:", Object.keys(extendedPatch).join(", "));
+            }
+          }
+        } catch {
+          // Non-blocking — extended patch is optional
+        }
+      }
+
+      if (generationAttemptIdRef.current !== attemptId) return;
+
+      // ── Merge core + extended patches ─────────────────────────────────────
+      const mergedPatch: CampaignImprovementPatch | null = corePatch
+        ? {
+            ...corePatch,
+            ...(extendedPatch ?? {}),
+            primaryTexts: corePatch.primaryTexts ?? extendedPatch?.primaryTexts,
+            headlines: corePatch.headlines ?? extendedPatch?.headlines,
+            cta: corePatch.cta ?? extendedPatch?.cta,
+            changesMade: [
+              ...(corePatch.changesMade ?? []),
+              ...(extendedPatch?.changesMade ?? []),
+            ].filter(Boolean),
+          }
+        : extendedPatch;
+
+      if (mergedPatch) {
         setPipelinePhase("Veronica is finalizing your campaign draft…");
-        const improved = normalizeCampaignDraft(applyImprovementPatchToDraft(initialPlan, patch));
+        const patchResult = applyImprovementPatchToDraft(initialPlan, mergedPatch);
+
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Patch] Applied fields:", patchResult.appliedFields.join(", "));
+          console.warn("[Patch] Skipped fields:", patchResult.skippedFields.join(", "));
+          console.warn("[Patch] Success:", patchResult.success);
+          if (!patchResult.success && patchResult.appliedFields.length === 0) {
+            console.warn("[Patch] Warning reason: zero fields applied. mergedPatch:", JSON.stringify(mergedPatch).slice(0, 300));
+          }
+        }
+
+        const improved = normalizeCampaignDraft(patchResult.draft);
+
         if (generationAttemptIdRef.current === attemptId) {
-          setCurrentPlan(improved);
-          setCouncilIntelligence(patch);
+          if (patchResult.success) {
+            setCurrentPlan(improved);
+            setCouncilIntelligence(mergedPatch);
+            // No warning — optimization succeeded
+          } else if (patchResult.appliedFields.length > 0) {
+            setCurrentPlan(improved);
+            setCouncilIntelligence(mergedPatch);
+            setCouncilWarning("Veronica applied strategic improvements with minor limitations.");
+          } else {
+            // Zero fields applied — preserve original draft
+            setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
+            if (process.env.NODE_ENV !== "production") {
+              console.warn("[Patch] Zero applied fields — original draft preserved.");
+            }
+          }
         }
       } else {
         if (generationAttemptIdRef.current === attemptId) {
-          setCouncilWarning("Veronica applied strategic analysis with minor warnings. Original draft structure preserved.");
+          setCouncilWarning(
+            coreHermesOk
+              ? "Veronica applied strategic improvements with minor limitations."
+              : "Veronica couldn't fully optimize the strategy this time. Your original draft was preserved."
+          );
         }
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] Patch extraction returned null. Raw output:", rawPatchOutput.slice(0, 300));
+          console.warn("[Patch] No patch available. coreHermesOk:", coreHermesOk, "rawCoreOutput length:", rawCoreOutput.length);
+          if (!coreHermesOk) console.warn("[Patch] Reason: Hermes returned HTTP error or error field");
+          else console.warn("[Patch] Reason: extraction returned null from output:", rawCoreOutput.slice(0, 300));
         }
       }
 

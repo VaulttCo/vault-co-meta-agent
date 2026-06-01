@@ -185,7 +185,7 @@ export function VaultMemoryView() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Layer 1"
+        sectionLabel="Vault Core · Vault Memory"
         title="Vault Memory"
         description="The living intelligence layer of Vault Co — continuously expanded by the workforce."
         badge={
@@ -310,7 +310,7 @@ export function VaultMemoryView() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Workforce roster */}
         <VCPanel className="xl:col-span-2">
-          <VCPanelHeader icon={Users} label="Layer 2" title="Workforce" />
+          <VCPanelHeader icon={Users} label="Workforce" title="Contributors" />
           <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {WORKFORCE.map((agent) => {
               const run = lastRunByAgent.get(agent.id);
@@ -387,7 +387,7 @@ export function VaultMemoryView() {
       <VCPanel accent="orange">
         <VCPanelHeader
           icon={Lightbulb}
-          label="Layer 4 · Human review"
+          label="Human Review"
           title="Workforce Recommendations"
           action={<span className="text-[11px]" style={{ color: "var(--t-muted)" }}>{recommendations.length} open</span>}
         />

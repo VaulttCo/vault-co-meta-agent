@@ -37,6 +37,7 @@ import type {
   RecommendationStatus,
   RecommendationTrace,
   RecommendationCounts,
+  VanessaPriority,
 } from "../types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -332,6 +333,8 @@ export async function insertRecommendation(
         related_campaigns: input.related_campaigns ?? [],
         related_conversations: input.related_conversations ?? [],
         related_node_ids: input.related_node_ids ?? [],
+        vanessa_priority: input.vanessa_priority ?? null,
+        priority_reason: input.priority_reason ?? null,
       })
       .select("id")
       .single();
@@ -524,6 +527,33 @@ export async function reviewRecommendation(
   } catch (e) {
     console.error(`${LOG} reviewRecommendation threw:`, (e as Error).message);
     return { ok: false, mockMode: false, status: toStatus };
+  }
+}
+
+/**
+ * Set Vanessa's executive priority on a recommendation (Phase 5 Priority Engine).
+ * Updates Vault Memory only — never executes anything. Mock-safe (no-op without DB).
+ */
+export async function setRecommendationPriority(
+  id: string,
+  priority: VanessaPriority,
+  reason: string
+): Promise<boolean> {
+  const client = db();
+  if (!client) return false;
+  try {
+    const { error } = await client
+      .from("vault_recommendations")
+      .update({ vanessa_priority: priority, priority_reason: reason })
+      .eq("id", id);
+    if (error) {
+      console.error(`${LOG} setRecommendationPriority:`, error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`${LOG} setRecommendationPriority threw:`, (e as Error).message);
+    return false;
   }
 }
 

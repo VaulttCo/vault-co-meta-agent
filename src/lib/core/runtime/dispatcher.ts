@@ -7,6 +7,7 @@
 import { WORKFORCE } from "../agents/registry";
 import { getRunnableAgent } from "../agents";
 import { insertAgentRun } from "../memory/db";
+import { runCollaborationCycle, runSystemCreationCycle } from "../collab/orchestrator";
 import { setLastRun } from "./kv";
 import type { AgentTier } from "../types";
 
@@ -24,6 +25,12 @@ export interface TierRunSummary {
     durationMs: number;
     detail: string;
   }>;
+  collaboration?: {
+    processed: number;
+    responses: number;
+    jointRecommendations: number;
+    proposals: number;
+  };
 }
 
 /** Active + runnable agents scheduled for this tier. */
@@ -102,6 +109,25 @@ export async function runTier(
         detail,
       });
     }
+  }
+
+  // ── Collaboration engine: advance open collaborations into joint
+  // recommendations (self-guards to mock mode). Runs every tier so Vega can
+  // respond to Victoria's requests promptly.
+  try {
+    const collab = await runCollaborationCycle();
+    // System Creation Engine V1 runs on the daily tier (and manual ticks).
+    const sys = tier === "daily" || trigger === "manual"
+      ? await runSystemCreationCycle()
+      : { proposals: 0 };
+    summary.collaboration = {
+      processed: collab.processed,
+      responses: collab.responses,
+      jointRecommendations: collab.jointRecommendations,
+      proposals: collab.proposals + sys.proposals,
+    };
+  } catch (e) {
+    console.error(`[VaultCore:dispatcher] collaboration cycle failed:`, (e as Error).message);
   }
 
   await setLastRun(tier);

@@ -46,6 +46,21 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   workforce_performance_summary: { label: "Workforce Performance", color: "#a78bfa" },
   decision_support_brief: { label: "Decision Support", color: "#818cf8" },
   company_priority: { label: "Company Priority", color: "#c084fc" },
+  // Phase 6 — Conversation Intelligence (Veronica = blue/teal)
+  conversation_insight: { label: "Conversation Insight", color: "#0081f2" },
+  lead_conversion_signal: { label: "Lead Conversion", color: "#22c55e" },
+  sms_pattern: { label: "SMS Pattern", color: "#38bdf8" },
+  call_pattern: { label: "Call Pattern", color: "#2dd4bf" },
+  missed_opportunity: { label: "Missed Opportunity", color: "#f59e0b" },
+  reactivation_opportunity: { label: "Reactivation", color: "#34d399" },
+  booking_signal: { label: "Booking Signal", color: "#22c55e" },
+  objection_pattern: { label: "Objection Pattern", color: "#fb923c" },
+  follow_up_signal: { label: "Follow-Up Signal", color: "#60a5fa" },
+  appointment_risk: { label: "Appointment Risk", color: "#ef4444" },
+  nurture_sequence_draft: { label: "Nurture Draft", color: "#818cf8" },
+  sms_draft: { label: "SMS Draft", color: "#0070d4" },
+  hot_lead_signal: { label: "Hot Lead", color: "#ef4444" },
+  dead_conversation_signal: { label: "Dead Conversation", color: "#6b7a99" },
 };
 
 export function styleFor(category: string): CategoryStyle {

@@ -212,6 +212,32 @@ export function buildMockGraph(): VaultGraph {
   const riskClient = mockClients[0];
   if (riskClient) edges.push(edge("fin-risk", `client-${riskClient.id}`, "related_to", 0.7, "valerie"));
 
+  // Executive oversight nodes (Vanessa, Phase 5)
+  const executive: Array<[string, VaultNodeCategory, string, string]> = [
+    ["exec-brief", "executive_brief", `Daily Executive Brief — ${new Date().toISOString().slice(0, 10)}`, "Synthesized workforce intelligence: 3 open recommendations, 1 critical financial risk, 1 marketing opportunity."],
+    ["exec-priority-1", "executive_priority", "[CRITICAL] Review unpaid / open client invoices", "Prioritized critical — financial risk with revenue exposure. Source: valerie."],
+    ["risk-summary", "risk_summary", "Top risks (2)", "Open/past-due invoices ($7k) · revenue concentration 41%."],
+    ["opportunity-summary", "opportunity_summary", "Top opportunities (1)", "Replicate winning creative angle across lagging accounts."],
+    ["workforce-perf", "workforce_performance_summary", "Workforce performance summary", "Victoria (trust 94) · Vega (92) · Valerie (88) leading on trust + adoption."],
+  ];
+  executive.forEach(([id, cat, label, summary], i) => {
+    nodes.push(
+      node(id, cat, label, {
+        summary,
+        confidence: 0.8 - i * 0.02,
+        source_agent: "vanessa",
+        created_at: iso((i + 1) * 35 * MINUTE),
+        updated_at: iso((i + 1) * 10 * MINUTE),
+      })
+    );
+    edges.push(edge(id, "agent-vanessa", "contributed_by", 0.9, "vanessa"));
+    edges.push(edge(id, "memory-core", "influences", 0.7, "vanessa"));
+  });
+  // Vanessa synthesizes across the workforce: brief references the financial risk + a Vega insight
+  edges.push(edge("exec-priority-1", "fin-risk", "supports", 0.8, "vanessa"));
+  edges.push(edge("exec-brief", "insight-cpl", "related_to", 0.6, "vanessa"));
+  edges.push(edge("risk-summary", "fin-trend", "related_to", 0.7, "vanessa"));
+
   return { nodes, edges };
 }
 
@@ -272,6 +298,8 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       reviewed_at: null,
       review_notes: null,
       implemented_at: null,
+      vanessa_priority: "high",
+      priority_reason: "quantified revenue impact · high agent priority",
     },
     {
       id: nid("rec-2"),
@@ -294,6 +322,8 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       reviewed_at: iso(3 * HOUR),
       review_notes: "Approved — ops to draft the SLA. No external action taken.",
       implemented_at: null,
+      vanessa_priority: "medium",
+      priority_reason: "quantified revenue impact",
     },
     {
       id: nid("rec-fin-1"),
@@ -316,6 +346,32 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       reviewed_at: null,
       review_notes: null,
       implemented_at: null,
+      vanessa_priority: "critical",
+      priority_reason: "financial risk with revenue exposure · high agent priority · awaiting human review",
+    },
+    {
+      id: nid("rec-exec-1"),
+      agent: "vanessa",
+      title: "Executive priority: Review unpaid / open client invoices",
+      body: "Vanessa flagged this as the top executive priority (critical). Financial risk with revenue exposure, awaiting human review. Source agent: valerie. Recommend prioritizing human review.",
+      impact: "Highest-value item this cycle",
+      priority_score: 0.9,
+      status: "pending_review",
+      node_id: nid("exec-brief"),
+      metadata: { confidence: 0.85, executive: true, references_recommendation: nid("rec-fin-1") },
+      created_at: iso(30 * MINUTE),
+      influence_score: 0.85,
+      revenue_impact: "$7,000 at risk",
+      related_clients: sampleClients,
+      related_campaigns: [],
+      related_conversations: [],
+      related_node_ids: [nid("exec-brief"), nid("fin-risk")],
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
+      implemented_at: null,
+      vanessa_priority: "critical",
+      priority_reason: "financial risk with revenue exposure · cross-agent validated",
     },
   ];
 }

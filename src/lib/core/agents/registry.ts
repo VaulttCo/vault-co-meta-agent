@@ -1,8 +1,8 @@
 // Vault Core — Workforce roster (Layer 2).
 //
-// Active: VEGA (Phase 1) + VICTORIA (Phase 3) + VALERIE (Phase 4). The remaining
-// executives are metadata-only stubs so the UI can render the full workforce and
-// future phases can flip `active: true` and attach a runnable agent.
+// Active: VEGA (Phase 1) + VICTORIA (Phase 3) + VALERIE (Phase 4) + VANESSA (Phase 5).
+// Veronica + Vivian remain metadata-only stubs so the UI can render the full
+// workforce and future phases can flip `active: true` and attach a runnable agent.
 //
 // This module is PURE metadata — no DB, no AI, no side effects — so it is safe
 // to import from both server runtime and (indirectly) the mock graph.
@@ -67,10 +67,10 @@ export const WORKFORCE: AgentMeta[] = [
     id: "vanessa",
     name: "Vanessa",
     title: "Executive Director",
-    mission: "Coordinate the workforce and prioritize opportunities and risks.",
+    mission: "Coordinate the workforce and convert intelligence into executive priorities.",
     color: PURPLE,
-    active: false,
-    tiers: ["daily", "weekly", "monthly"],
+    active: true, // ← activated in Phase 5 (fourth active executive)
+    tiers: ["hourly", "daily"],
   },
 ];
 

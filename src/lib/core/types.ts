@@ -49,7 +49,22 @@ export type VaultNodeCategory =
   | "opportunity_summary"
   | "workforce_performance_summary"
   | "decision_support_brief"
-  | "company_priority";
+  | "company_priority"
+  // Phase 6 — Conversation Intelligence Layer (Veronica)
+  | "conversation_insight"
+  | "lead_conversion_signal"
+  | "sms_pattern"
+  | "call_pattern"
+  | "missed_opportunity"
+  | "reactivation_opportunity"
+  | "booking_signal"
+  | "objection_pattern"
+  | "follow_up_signal"
+  | "appointment_risk"
+  | "nurture_sequence_draft"
+  | "sms_draft"
+  | "hot_lead_signal"
+  | "dead_conversation_signal";
 
 export type VaultEdgeRelationship =
   | "connected_to"
@@ -58,7 +73,8 @@ export type VaultEdgeRelationship =
   | "impacts"
   | "derived_from"
   | "related_to"
-  | "supports";
+  | "supports"
+  | "requires_approval";
 
 export type VaultActivityKind =
   | "insight"
@@ -509,6 +525,65 @@ export interface ExecutivePriorityItem {
   influence: number;        // 0..1
   revenueImpact: string | null;
   status: RecommendationStatus;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 6 — Conversation Intelligence Layer (Veronica)
+// ─────────────────────────────────────────────────────────────
+
+export type DraftType =
+  | "sms_reply"
+  | "follow_up"
+  | "reactivation"
+  | "appointment_confirmation"
+  | "no_show_recovery"
+  | "objection_response"
+  | "lead_nurture";
+
+// Drafts are NEVER sent in Phase 6. Approving only marks the draft approved
+// internally — no outbound SMS, no GHL writes, no workflows.
+export type DraftStatusV = "draft" | "approved" | "edited" | "rejected";
+
+export type RiskLevel = "low" | "medium" | "high";
+
+export interface MessageDraftRow {
+  id: string;
+  agent: string;                 // "veronica"
+  draft_type: DraftType;
+  lead_name: string | null;      // lead context (no PII secrets)
+  conversation_summary: string | null;
+  rationale: string | null;      // why this message was drafted
+  body: string;                  // the draft message text
+  confidence: number;            // 0..1
+  risk_level: RiskLevel;
+  suggested_send_window: string | null;
+  status: DraftStatusV;
+  related_node_ids: string[];
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  created_at: string;
+}
+
+export interface MessageDraftInput {
+  agent: string;
+  draft_type: DraftType;
+  lead_name?: string | null;
+  conversation_summary?: string | null;
+  rationale?: string | null;
+  body: string;
+  confidence?: number;
+  risk_level?: RiskLevel;
+  suggested_send_window?: string | null;
+  related_node_ids?: string[];
+}
+
+export interface DraftCounts {
+  draft: number;
+  approved: number;
+  edited: number;
+  rejected: number;
+  total: number;
 }
 
 // The Daily Executive Brief — computed from current Vault Memory state.

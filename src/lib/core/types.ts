@@ -292,3 +292,177 @@ export interface AgentRunResult {
   activityCreated: number;
   detail: string;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Phase 3 — Workforce Collaboration Engine
+// ─────────────────────────────────────────────────────────────
+
+export type AgentMessageKind =
+  | "share_discovery"
+  | "request_analysis"
+  | "escalate"
+  | "share_context"
+  | "assign_investigation"
+  | "joint_proposal"
+  | "response";
+
+export interface AgentMessageRow {
+  id: string;
+  from_agent: string;
+  to_agent: string | null;
+  kind: AgentMessageKind;
+  subject: string;
+  body: string | null;
+  related_node_ids: string[];
+  collaboration_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+export interface AgentMessageInput {
+  from_agent: string;
+  to_agent?: string | null;
+  kind?: AgentMessageKind;
+  subject: string;
+  body?: string | null;
+  related_node_ids?: string[];
+  collaboration_id?: string | null;
+}
+
+export type AgentTaskStatus = "open" | "in_progress" | "done";
+export interface AgentTaskRow {
+  id: string;
+  assigned_to: string;
+  assigned_by: string;
+  title: string;
+  detail: string | null;
+  status: AgentTaskStatus;
+  collaboration_id: string | null;
+  related_node_ids: string[];
+  created_at: string;
+  completed_at: string | null;
+}
+export interface AgentTaskInput {
+  assigned_to: string;
+  assigned_by: string;
+  title: string;
+  detail?: string | null;
+  status?: AgentTaskStatus;
+  collaboration_id?: string | null;
+  related_node_ids?: string[];
+}
+
+export type CollaborationStatus = "open" | "in_progress" | "resolved";
+export interface AgentCollaborationRow {
+  id: string;
+  title: string;
+  initiator: string;
+  participants: string[];
+  status: CollaborationStatus;
+  summary: string | null;
+  joint_recommendation_id: string | null;
+  related_node_ids: string[];
+  created_at: string;
+  resolved_at: string | null;
+}
+export interface AgentCollaborationInput {
+  title: string;
+  initiator: string;
+  participants?: string[];
+  status?: CollaborationStatus;
+  summary?: string | null;
+  joint_recommendation_id?: string | null;
+  related_node_ids?: string[];
+}
+
+export interface AgentObjectiveRow {
+  id: string;
+  agent: string;
+  objective: string;
+  metric: string | null;
+  target: number;
+  progress: number; // 0..1
+  period: "week" | "month" | "quarter";
+  updated_at: string;
+}
+
+export interface AgentReputationRow {
+  agent: string;
+  trust_score: number;          // 0..100
+  accuracy_score: number;       // 0..100
+  adoption_rate: number;        // percent
+  influence_score: number;      // 0..100
+  knowledge_contributions: number;
+  revenue_influence: number;    // dollars
+  collaboration_score: number;  // 0..100
+  updated_at: string;
+}
+
+export type SystemProposalCategory =
+  | "missing_dashboard"
+  | "missing_workflow"
+  | "missing_automation"
+  | "missing_workforce_role"
+  | "missing_command_hub_module"
+  | "missing_intelligence_system";
+
+// System proposals share the human-review status model with recommendations.
+export type SystemProposalStatus = RecommendationStatus;
+
+export interface SystemProposalRow {
+  id: string;
+  agent: string;
+  title: string;
+  category: SystemProposalCategory;
+  problem: string | null;
+  impact: string | null;
+  opportunity: string | null;
+  solution: string | null;
+  technical_requirements: string | null;
+  ui_requirements: string | null;
+  estimated_effort: string | null;
+  priority_score: number;
+  expected_outcome: string | null;
+  status: SystemProposalStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  related_node_ids: string[];
+  collaboration_id: string | null;
+  created_at: string;
+}
+export interface SystemProposalInput {
+  agent: string;
+  title: string;
+  category?: SystemProposalCategory;
+  problem?: string | null;
+  impact?: string | null;
+  opportunity?: string | null;
+  solution?: string | null;
+  technical_requirements?: string | null;
+  ui_requirements?: string | null;
+  estimated_effort?: string | null;
+  priority_score?: number;
+  expected_outcome?: string | null;
+  related_node_ids?: string[];
+  collaboration_id?: string | null;
+}
+
+// ── Read models ──────────────────────────────────────────────
+
+// One unified, chronological entry for the Workforce Collaboration Feed.
+export interface CollaborationFeedItem {
+  id: string;
+  type: "message" | "collaboration" | "task";
+  agent: string;            // the actor (from_agent / initiator / assigned_by)
+  target: string | null;    // to_agent / assignee, when applicable
+  kind: string;             // message kind / collaboration status / task status
+  text: string;             // human-readable line
+  collaboration_id: string | null;
+  created_at: string;
+}
+
+export interface WorkforceMember {
+  meta: AgentMeta;
+  reputation: AgentReputationRow;
+  objectives: AgentObjectiveRow[];
+}

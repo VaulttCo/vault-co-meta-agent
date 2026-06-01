@@ -453,6 +453,28 @@ export function VCEmptyState({
   );
 }
 
+// ─── VCSkeleton ──────────────────────────────────────────────────────────────
+// Loading placeholder. Premium restraint — subtle pulsing rows instead of a bare
+// "Loading…" string. Use inside panels while data is being fetched.
+//
+// Usage:
+//   <VCSkeleton rows={3} />
+
+export function VCSkeleton({ rows = 3, className = "" }: { rows?: number; className?: string }) {
+  return (
+    <div className={`space-y-2.5 ${className}`} aria-busy="true" aria-live="polite">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className="h-3 rounded-full animate-pulse"
+          style={{ backgroundColor: "var(--t-surface-3)", width: `${92 - i * 14}%` }}
+        />
+      ))}
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
+
 // ─── VCDivider ───────────────────────────────────────────────────────────────
 // Subtle horizontal separator.
 

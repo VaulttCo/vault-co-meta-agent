@@ -200,3 +200,4 @@ npm run lint
 ```
 
 All 19 routes should appear in the build output. Any missing route is a regression.
+Deployment trigger: Vault Core top-level portal update.

@@ -18,6 +18,9 @@ Obsidian graph view stays connected.
 - [[ADR-0001-vault-core-architecture]] — Phase 1 foundation
 - [[ADR-0002-command-hub-integration]] — Phase 2 recommendation workflow
 - [[ADR-0003-obsidian-cognitive-layer]] — this vault's architecture
+- [[ADR-0004-workforce-collaboration-engine]] — collaboration + reputation + objectives
+- [[ADR-0005-financial-intelligence-layer]] — Valerie + financial intelligence
+- [[ADR-0006-executive-oversight-layer]] — Vanessa + executive oversight
 
 ## Workforce (Layer 2)
 - [[Veronica]] — Lead Acquisition Director
@@ -25,7 +28,7 @@ Obsidian graph view stays connected.
 - [[Vivian]] — Operations Director
 - [[Valerie]] — Financial Director *(active)*
 - [[Vega]] — Intelligence Director *(active)*
-- [[Vanessa]] — Executive Director
+- [[Vanessa]] — Executive Director *(active)*
 
 ## Knowledge domains
 - Executive Briefings → `/Executive Briefings`

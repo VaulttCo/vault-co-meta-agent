@@ -11,7 +11,7 @@ organizational brain (Vault Memory + Obsidian).
 
 ## Layers
 1. **Vault Memory** — permanent intelligence layer ✅ (Phase 1)
-2. **Workforce Agents** — specialized executives ◐ (Vega + Victoria + Valerie active; 3 stubs)
+2. **Workforce Agents** — specialized executives ◐ (Vega + Victoria + Valerie + Vanessa active; 2 stubs)
 3. **Collaboration Engine** — agents exchange knowledge ✅ (Phase 3)
 4. **Command Hub** — human review & approval ✅ (Phase 2 Part 1)
 5. **Portal Systems** — dashboards, tools, reports ◐ (pre-existing portal)
@@ -26,11 +26,13 @@ organizational brain (Vault Memory + Obsidian).
   Engine, Reputation + Objectives, System Creation Engine V1.
 - **Phase 4** — [[ADR-0005-financial-intelligence-layer]]: Valerie activated, Financial
   Intelligence Layer (revenue trends, payment risk, partner earnings), Valerie↔Vega collaboration.
+- **Phase 5** — [[ADR-0006-executive-oversight-layer]]: Vanessa activated, Executive Oversight
+  Layer (Priority Engine, Daily Executive Brief, Executive Queue), prioritizes across the workforce.
 
 ## Next (proposed order)
 
-1. **Activate executive #4** — Veronica (Lead Acquisition) or Vivian (Operations): read-only cycles.
-2. **Collaboration depth** — multi-round agent dialogue; Vanessa synthesizes joint recommendations.
+1. **Activate executive #5/#6** — Veronica (Lead Acquisition) + Vivian (Operations): read-only cycles.
+2. **Collaboration depth** — multi-round agent dialogue across all executives.
 3. **System Creation Engine V2** — data-aware gap detection (not a single canned proposal).
 4. **Knowledge graph depth** — filter/search/expand-collapse, Memory Timeline, dedup.
 5. **Obsidian runtime bridge** — optionally let the runtime auto-generate briefings into the

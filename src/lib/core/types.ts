@@ -40,7 +40,16 @@ export type VaultNodeCategory =
   | "partner_earnings_signal"
   | "forecast_signal"
   | "client_revenue_signal"
-  | "commission_signal";
+  | "commission_signal"
+  // Phase 5 — Executive Oversight Layer (Vanessa)
+  | "executive_brief"
+  | "executive_priority"
+  | "strategic_recommendation"
+  | "risk_summary"
+  | "opportunity_summary"
+  | "workforce_performance_summary"
+  | "decision_support_brief"
+  | "company_priority";
 
 export type VaultEdgeRelationship =
   | "connected_to"
@@ -78,6 +87,9 @@ export type ReviewAction =
   | "archive"
   | "implement"
   | "request_revision";
+
+// Vanessa's executive priority levels (Phase 5 Priority Engine).
+export type VanessaPriority = "critical" | "high" | "medium" | "low" | "watch";
 
 // ─────────────────────────────────────────────────────────────
 // Row types (what the DB returns on SELECT)
@@ -139,6 +151,9 @@ export interface VaultRecommendationRow {
   reviewed_at: string | null;
   review_notes: string | null;
   implemented_at: string | null;
+  // Phase 5 — Vanessa executive prioritization
+  vanessa_priority: VanessaPriority | null;
+  priority_reason: string | null;
 }
 
 export interface VaultRecommendationReviewRow {
@@ -214,6 +229,8 @@ export interface VaultRecommendationInput {
   related_campaigns?: string[];
   related_conversations?: string[];
   related_node_ids?: string[];
+  vanessa_priority?: VanessaPriority | null;
+  priority_reason?: string | null;
 }
 
 export interface VaultAgentRunInput {
@@ -476,4 +493,37 @@ export interface WorkforceMember {
   meta: AgentMeta;
   reputation: AgentReputationRow;
   objectives: AgentObjectiveRow[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 5 — Executive Oversight Layer (Vanessa)
+// ─────────────────────────────────────────────────────────────
+
+export interface ExecutivePriorityItem {
+  recommendationId: string | null;
+  title: string;
+  agent: string;
+  priority: VanessaPriority;
+  reason: string;
+  confidence: number;       // 0..1
+  influence: number;        // 0..1
+  revenueImpact: string | null;
+  status: RecommendationStatus;
+}
+
+// The Daily Executive Brief — computed from current Vault Memory state.
+export interface ExecutiveBrief {
+  generatedAt: string;
+  executiveSummary: string;
+  topPriorities: ExecutivePriorityItem[];   // top 3
+  topRisks: string[];
+  topOpportunities: string[];
+  agentActivitySummary: string;
+  financialSignals: string[];
+  marketingSignals: string[];
+  intelligenceSignals: string[];
+  openRecommendations: number;
+  suggestedHumanActions: string[];
+  systemHealth: string;
+  topPerformers: { agent: string; trust: number; adoption: number }[];
 }

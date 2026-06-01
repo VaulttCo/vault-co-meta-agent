@@ -468,12 +468,13 @@ function RecommendationDetail({
               {trace.contributingAgents.map((a) => <VCChip key={a} label={a} color="#22d3ee" />)}
             </div>
           </div>
-          {(r.related_clients.length > 0 || r.related_campaigns.length > 0) && (
+          {(r.related_clients.length > 0 || r.related_campaigns.length > 0 || r.related_conversations.length > 0) && (
             <div>
               <p className="vc-label mb-2 flex items-center gap-1.5"><Users size={12} /> Related</p>
               <div className="flex flex-wrap gap-1.5">
                 {r.related_clients.map((c) => <VCChip key={`c-${c}`} label={c} color="#0081f2" />)}
                 {r.related_campaigns.map((c) => <VCChip key={`cam-${c}`} label={c} color="#38bdf8" />)}
+                {r.related_conversations.map((c) => <VCChip key={`conv-${c}`} label={`conv ${c}`} color="#2dd4bf" />)}
               </div>
             </div>
           )}

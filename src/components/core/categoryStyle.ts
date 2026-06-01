@@ -37,6 +37,15 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   forecast_signal: { label: "Forecast", color: "#f59e0b" },
   client_revenue_signal: { label: "Client Revenue", color: "#d4b35a" },
   commission_signal: { label: "Commission", color: "#fbbf24" },
+  // Phase 5 — Executive Oversight (Vanessa = purple)
+  executive_brief: { label: "Executive Brief", color: "#a78bfa" },
+  executive_priority: { label: "Executive Priority", color: "#b89eff" },
+  strategic_recommendation: { label: "Strategic Recommendation", color: "#8b5cf6" },
+  risk_summary: { label: "Risk Summary", color: "#ef4444" },
+  opportunity_summary: { label: "Opportunity Summary", color: "#22c55e" },
+  workforce_performance_summary: { label: "Workforce Performance", color: "#a78bfa" },
+  decision_support_brief: { label: "Decision Support", color: "#818cf8" },
+  company_priority: { label: "Company Priority", color: "#c084fc" },
 };
 
 export function styleFor(category: string): CategoryStyle {

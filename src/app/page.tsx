@@ -22,6 +22,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { CommandHubRecommendationsPanel } from "@/components/core/CommandHubRecommendationsPanel";
 import { CommandHubProposalsPanel } from "@/components/core/CommandHubProposalsPanel";
 import { CommandHubExecutiveBrief } from "@/components/core/CommandHubExecutiveBrief";
+import { CommandHubDraftsPanel } from "@/components/core/CommandHubDraftsPanel";
 
 const statusStrip = [
   { label: "Auth Active",                 color: "#22c55e", bg: "rgba(34,197,94,0.10)",   border: "rgba(34,197,94,0.22)",   icon: Lock        },
@@ -541,6 +542,11 @@ export default function CommandHubPage() {
           <div className="hub-fade-up w-full text-left grid grid-cols-1 lg:grid-cols-2 gap-4">
             <CommandHubRecommendationsPanel />
             <CommandHubProposalsPanel />
+          </div>
+
+          {/* ── Veronica Draft Approval Queue (Conversation Intelligence) ───── */}
+          <div className="hub-fade-up w-full text-left">
+            <CommandHubDraftsPanel />
           </div>
 
           {/* ── Footer ──────────────────────────────────────────────────────── */}

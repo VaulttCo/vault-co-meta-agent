@@ -70,7 +70,7 @@ import {
   type AdSetDefinition,
 } from "@/lib/planStore";
 import { TheCouncil } from "@/components/council/TheCouncil";
-import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, buildExtendedPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
+import { buildCouncilPrompt, applyCouncilToDraft, safeExtractJson, buildImprovementPatchPrompt, safeExtractImprovementPatch, applyImprovementPatchToDraft } from "@/lib/council/buildCouncilPrompt";
 import type { CouncilResponse, CampaignImprovementPatch } from "@/lib/council/types";
 import { MetaPushReadiness } from "@/components/meta/MetaPushReadiness";
 
@@ -2668,6 +2668,10 @@ function AICampaignBuilderContent() {
         setGenerationSource(provider ?? "mock");
         setLatestGenerationFailed(false);
         setLatestGenerationError(null);
+        // Show the draft immediately — optimization continues in background.
+        // This means a Hermes timeout can never block the user from seeing their draft.
+        setIsGenerating(false);
+        setPipelinePhase("");
       } catch (genErr) {
         // Veronica failed — use client-side mock, abort Council phase
         const rawMsg = genErr instanceof Error ? genErr.message : String(genErr);
@@ -2771,12 +2775,19 @@ function AICampaignBuilderContent() {
       let rawCoreOutput = "";
       let coreHermesOk = false;
 
+      // 35-second client-side abort — draft already shown, this is a background call.
+      // Server-side timeout is 45s; Vercel maxDuration is 60s.
+      const patchAbortCtrl = new AbortController();
+      const patchTimeout = setTimeout(() => patchAbortCtrl.abort(), 35000);
+
       try {
         const coreRes = await fetch("/api/veronica/hermes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: safeCorePatch }),
+          signal: patchAbortCtrl.signal,
         });
+        clearTimeout(patchTimeout);
 
         let coreData: { output?: string | null; error?: string | null } = {};
         try { coreData = await coreRes.json(); } catch { /* unparseable */ }
@@ -2796,90 +2807,43 @@ function AICampaignBuilderContent() {
           coreHermesOk = true;
         }
       } catch (hermesErr) {
+        clearTimeout(patchTimeout);
+        const isAbort = hermesErr instanceof Error && hermesErr.name === "AbortError";
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] Core Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
+          if (isAbort) console.warn("[Patch] Client-side timeout (20s) — preserving original draft.");
+          else console.warn("[Patch] Core Hermes fetch error:", hermesErr instanceof Error ? hermesErr.message : hermesErr);
         }
+        // On timeout or network error: original draft already shown — return cleanly
+        return;
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Phase 4: Extract core patch ───────────────────────────────────────
+      // ── Phase 4: Extract + apply core patch ─────────────────────────────────────────
       setPipelinePhase("Veronica is applying strategic improvements…");
 
-      let corePatch: CampaignImprovementPatch | null = null;
-      if (rawCoreOutput) {
-        corePatch = safeExtractImprovementPatch(rawCoreOutput);
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] Core extraction:", corePatch ? "success" : "failed");
-          if (corePatch) console.warn("[Patch] Core patch keys:", Object.keys(corePatch).join(", "));
-          else console.warn("[Patch] Core extraction failed. Raw:", rawCoreOutput.slice(0, 400));
-        }
-      }
+      const corePatch: CampaignImprovementPatch | null = rawCoreOutput
+        ? safeExtractImprovementPatch(rawCoreOutput)
+        : null;
 
-      // ── Step B: Extended patch (optional — only if core succeeded + assets) ─
-      let extendedPatch: CampaignImprovementPatch | null = null;
-      if (corePatch && selectedAssets.length > 0) {
-        try {
-          const extPrompt = buildExtendedPatchPrompt(patchContext);
-          const safeExtPrompt = extPrompt.replace(/[\u0000-\u001F\u007F]/g, " ");
-
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[Patch] Extended prompt length:", safeExtPrompt.length);
-          }
-
-          const extRes = await fetch("/api/veronica/hermes", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: safeExtPrompt }),
-          });
-
-          let extData: { output?: string | null; error?: string | null } = {};
-          try { extData = await extRes.json(); } catch { }
-
-          if (process.env.NODE_ENV !== "production") {
-            console.warn("[Patch] Extended HTTP:", extRes.status);
-            console.warn("[Patch] Extended output first 800:", String(extData.output ?? "").slice(0, 800));
-          }
-
-          if (extRes.ok && !extData.error && extData.output) {
-            extendedPatch = safeExtractImprovementPatch(String(extData.output));
-            if (process.env.NODE_ENV !== "production") {
-              console.warn("[Patch] Extended extraction:", extendedPatch ? "success" : "failed");
-              if (extendedPatch) console.warn("[Patch] Extended patch keys:", Object.keys(extendedPatch).join(", "));
-            }
-          }
-        } catch {
-          // Non-blocking — extended patch is optional
-        }
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[Patch] Core extraction:", corePatch ? "success" : "failed");
+        if (corePatch) console.warn("[Patch] Core patch keys:", Object.keys(corePatch).join(", "));
+        else if (rawCoreOutput) console.warn("[Patch] Core extraction failed. Raw:", rawCoreOutput.slice(0, 400));
       }
 
       if (generationAttemptIdRef.current !== attemptId) return;
 
-      // ── Merge core + extended patches ─────────────────────────────────────
-      const mergedPatch: CampaignImprovementPatch | null = corePatch
-        ? {
-            ...corePatch,
-            ...(extendedPatch ?? {}),
-            primaryTexts: corePatch.primaryTexts ?? extendedPatch?.primaryTexts,
-            headlines: corePatch.headlines ?? extendedPatch?.headlines,
-            cta: corePatch.cta ?? extendedPatch?.cta,
-            changesMade: [
-              ...(corePatch.changesMade ?? []),
-              ...(extendedPatch?.changesMade ?? []),
-            ].filter(Boolean),
-          }
-        : extendedPatch;
-
-      if (mergedPatch) {
+      if (corePatch) {
         setPipelinePhase("Veronica is finalizing your campaign draft…");
-        const patchResult = applyImprovementPatchToDraft(initialPlan, mergedPatch);
+        const patchResult = applyImprovementPatchToDraft(initialPlan, corePatch);
 
         if (process.env.NODE_ENV !== "production") {
           console.warn("[Patch] Applied fields:", patchResult.appliedFields.join(", "));
           console.warn("[Patch] Skipped fields:", patchResult.skippedFields.join(", "));
           console.warn("[Patch] Success:", patchResult.success);
           if (!patchResult.success && patchResult.appliedFields.length === 0) {
-            console.warn("[Patch] Warning reason: zero fields applied. mergedPatch:", JSON.stringify(mergedPatch).slice(0, 300));
+            console.warn("[Patch] Warning reason: zero fields applied. corePatch keys:", Object.keys(corePatch).join(", "));
           }
         }
 
@@ -2888,14 +2852,12 @@ function AICampaignBuilderContent() {
         if (generationAttemptIdRef.current === attemptId) {
           if (patchResult.success) {
             setCurrentPlan(improved);
-            setCouncilIntelligence(mergedPatch);
-            // No warning — optimization succeeded
+            setCouncilIntelligence(corePatch);
           } else if (patchResult.appliedFields.length > 0) {
             setCurrentPlan(improved);
-            setCouncilIntelligence(mergedPatch);
+            setCouncilIntelligence(corePatch);
             setCouncilWarning("Veronica applied strategic improvements with minor limitations.");
           } else {
-            // Zero fields applied — preserve original draft
             setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
             if (process.env.NODE_ENV !== "production") {
               console.warn("[Patch] Zero applied fields — original draft preserved.");
@@ -2903,17 +2865,13 @@ function AICampaignBuilderContent() {
           }
         }
       } else {
-        if (generationAttemptIdRef.current === attemptId) {
-          setCouncilWarning(
-            coreHermesOk
-              ? "Veronica applied strategic improvements with minor limitations."
-              : "Veronica couldn't fully optimize the strategy this time. Your original draft was preserved."
-          );
+        if (generationAttemptIdRef.current === attemptId && !coreHermesOk) {
+          setCouncilWarning("Veronica couldn't fully optimize the strategy this time. Your original draft was preserved.");
         }
         if (process.env.NODE_ENV !== "production") {
-          console.warn("[Patch] No patch available. coreHermesOk:", coreHermesOk, "rawCoreOutput length:", rawCoreOutput.length);
+          console.warn("[Patch] No patch. coreHermesOk:", coreHermesOk, "rawOutput length:", rawCoreOutput.length);
           if (!coreHermesOk) console.warn("[Patch] Reason: Hermes returned HTTP error or error field");
-          else console.warn("[Patch] Reason: extraction returned null from output:", rawCoreOutput.slice(0, 300));
+          else console.warn("[Patch] Reason: extraction returned null:", rawCoreOutput.slice(0, 300));
         }
       }
 

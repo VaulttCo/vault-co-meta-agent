@@ -15,6 +15,30 @@ export const PRIORITY_RANK: Record<VanessaPriority, number> = {
   critical: 5, high: 4, medium: 3, low: 2, watch: 1,
 };
 
+// Phase 6 — draft message presentation.
+export const DRAFT_STATUS_META: Record<string, { label: string; variant: BadgeVariant }> = {
+  draft: { label: "Needs Review", variant: "blue" },
+  approved: { label: "Approved", variant: "success" },
+  edited: { label: "Edited", variant: "purple" },
+  rejected: { label: "Rejected", variant: "danger" },
+};
+
+export const DRAFT_TYPE_LABEL: Record<string, string> = {
+  sms_reply: "SMS Reply",
+  follow_up: "Follow-Up",
+  reactivation: "Reactivation",
+  appointment_confirmation: "Appt Confirmation",
+  no_show_recovery: "No-Show Recovery",
+  objection_response: "Objection Response",
+  lead_nurture: "Lead Nurture",
+};
+
+export const RISK_META: Record<string, { label: string; color: string }> = {
+  low: { label: "Low risk", color: "#22c55e" },
+  medium: { label: "Medium risk", color: "#f59e0b" },
+  high: { label: "High risk", color: "#ef4444" },
+};
+
 type BadgeVariant = "success" | "warning" | "danger" | "neutral" | "blue" | "orange" | "purple" | "gold";
 
 export const STATUS_META: Record<RecommendationStatus, { label: string; variant: BadgeVariant }> = {

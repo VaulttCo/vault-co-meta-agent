@@ -14,6 +14,7 @@ import {
   VCStatusBadge,
   VCChip,
   VCEmptyState,
+  VCSkeleton,
 } from "@/components/ui/VaultUI";
 import { useAuth } from "@/components/AuthProvider";
 import { DRAFT_STATUS_META, DRAFT_TYPE_LABEL, RISK_META } from "./recommendationStatus";
@@ -138,7 +139,7 @@ export function DraftApprovalQueue() {
           <VCPanel>
             <VCPanelHeader icon={MessageSquare} label="Queue" title="Drafted Messages" live />
             <div className="px-4 py-3 space-y-2.5">
-              {loading && <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Loading…</p>}
+              {loading && <VCSkeleton rows={4} className="px-1 py-1" />}
               {!loading && visible.length === 0 && <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Nothing in this view.</p>}
               {visible.map((d) => {
                 const sm = DRAFT_STATUS_META[d.status] ?? DRAFT_STATUS_META.draft;

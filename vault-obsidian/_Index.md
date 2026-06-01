@@ -21,9 +21,10 @@ Obsidian graph view stays connected.
 - [[ADR-0004-workforce-collaboration-engine]] — collaboration + reputation + objectives
 - [[ADR-0005-financial-intelligence-layer]] — Valerie + financial intelligence
 - [[ADR-0006-executive-oversight-layer]] — Vanessa + executive oversight
+- [[ADR-0007-conversation-intelligence-layer]] — Veronica + conversation intelligence + GHL
 
 ## Workforce (Layer 2)
-- [[Veronica]] — Lead Acquisition Director
+- [[Veronica]] — Lead Acquisition Director *(active)*
 - [[Victoria]] — Marketing Director *(active)*
 - [[Vivian]] — Operations Director
 - [[Valerie]] — Financial Director *(active)*

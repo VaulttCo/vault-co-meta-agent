@@ -21,6 +21,7 @@ import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { CommandHubRecommendationsPanel } from "@/components/core/CommandHubRecommendationsPanel";
 import { CommandHubProposalsPanel } from "@/components/core/CommandHubProposalsPanel";
+import { CommandHubExecutiveBrief } from "@/components/core/CommandHubExecutiveBrief";
 
 const statusStrip = [
   { label: "Auth Active",                 color: "#22c55e", bg: "rgba(34,197,94,0.10)",   border: "rgba(34,197,94,0.22)",   icon: Lock        },
@@ -529,6 +530,11 @@ export default function CommandHubPage() {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Vault Core Executive Oversight (Vanessa) ─────────────────────── */}
+          <div className="hub-fade-up w-full text-left">
+            <CommandHubExecutiveBrief />
           </div>
 
           {/* ── Vault Core Command Hub (Recommendations + System Proposals) ── */}

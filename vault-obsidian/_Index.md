@@ -22,6 +22,7 @@ Obsidian graph view stays connected.
 - [[ADR-0005-financial-intelligence-layer]] — Valerie + financial intelligence
 - [[ADR-0006-executive-oversight-layer]] — Vanessa + executive oversight
 - [[ADR-0007-conversation-intelligence-layer]] — Veronica + conversation intelligence + GHL
+- [[ADR-0008-production-deployment-readiness]] — Vercel deployment readiness + security
 
 ## Workforce (Layer 2)
 - [[Veronica]] — Lead Acquisition Director *(active)*

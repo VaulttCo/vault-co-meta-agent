@@ -6,6 +6,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { HermesRunStatus } from "@/lib/supabase/types";
 
+// nodejs runtime required for fetch with AbortController + DB writes.
+// maxDuration tells Vercel Pro to allow up to 60s before platform kill.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 // ── Skill auto-detection ──────────────────────────────────────────────────────
 
 const SKILL_TRIGGER_KEYWORDS = [
@@ -211,17 +216,29 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 45-second server-side abort — must respond before Vercel maxDuration (60s).
+  // Client-side abort (35s) fires earlier so the user never waits for a 504.
+  const vpsAbortCtrl = new AbortController();
+  const vpsTimeout = setTimeout(() => vpsAbortCtrl.abort(), 45000);
+
   let res: Response;
   try {
     res = await fetch(`${workerUrl}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: trimmedPrompt, secret }),
+      signal: vpsAbortCtrl.signal,
     });
-  } catch {
-    const msg = "Hermes VPS is unreachable. Please try again later.";
-    await logRun(trimmedPrompt, null, msg, "unreachable", safeTaskId);
-    return NextResponse.json({ output: null, error: msg }, { status: 502 });
+    clearTimeout(vpsTimeout);
+  } catch (fetchErr) {
+    clearTimeout(vpsTimeout);
+    const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
+    const msg = isTimeout
+      ? "Strategy engine did not respond in time. Please try again."
+      : "Hermes VPS is unreachable. Please try again later.";
+    const status: HermesRunStatus = isTimeout ? "error" : "unreachable";
+    await logRun(trimmedPrompt, null, msg, status, safeTaskId);
+    return NextResponse.json({ output: null, error: msg }, { status: isTimeout ? 504 : 502 });
   }
 
   let data: { output?: string | null; error?: string | null };

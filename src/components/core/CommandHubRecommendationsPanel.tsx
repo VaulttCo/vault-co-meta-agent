@@ -77,6 +77,12 @@ export function CommandHubRecommendationsPanel() {
               style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}
             >
               <span className="text-[12.5px] truncate flex-1" style={{ color: "var(--t-text-body)" }}>{r.title}</span>
+              {r.revenue_impact && (
+                <span className="text-[10.5px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded-full hidden sm:inline"
+                  style={{ color: "#c9a84c", background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.22)" }}>
+                  {r.revenue_impact}
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 flex-shrink-0">
                 <Gauge size={11} style={{ color: "#ff8400" }} />
                 <span className="text-[11px] font-semibold" style={{ color: "#ff8400" }}>{Math.round(r.priority_score * 100)}</span>

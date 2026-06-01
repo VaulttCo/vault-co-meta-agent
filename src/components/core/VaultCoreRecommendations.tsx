@@ -92,6 +92,7 @@ export function VaultCoreRecommendations() {
   const [recs, setRecs] = useState<VaultRecommendationRow[]>([]);
   const [counts, setCounts] = useState<RecommendationCounts | null>(null);
   const [filter, setFilter] = useState<RecommendationStatus | "all">("pending_review");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -176,9 +177,18 @@ export function VaultCoreRecommendations() {
     [selectedId, notes, load, openDetail]
   );
 
+  const agents = useMemo(
+    () => Array.from(new Set(recs.map((r) => r.agent))).sort(),
+    [recs]
+  );
   const visible = useMemo(
-    () => (filter === "all" ? recs : recs.filter((r) => r.status === filter)),
-    [recs, filter]
+    () =>
+      recs.filter(
+        (r) =>
+          (filter === "all" || r.status === filter) &&
+          (agentFilter === "all" || r.agent === agentFilter)
+      ),
+    [recs, filter, agentFilter]
   );
 
   const countFor = (key: RecommendationStatus | "all") =>
@@ -221,6 +231,30 @@ export function VaultCoreRecommendations() {
             })}
           </div>
 
+          {/* Source-agent filter (e.g. Financial = Valerie) */}
+          {agents.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="vc-label mr-1">Source</span>
+              {["all", ...agents].map((ag) => {
+                const active = agentFilter === ag;
+                return (
+                  <button
+                    key={ag}
+                    onClick={() => setAgentFilter(ag)}
+                    className="px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-all capitalize"
+                    style={
+                      active
+                        ? { background: "rgba(201,168,76,0.16)", border: "1px solid rgba(201,168,76,0.34)", color: "#e8c97a" }
+                        : { background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }
+                    }
+                  >
+                    {ag === "all" ? "All agents" : ag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Queue */}
           <VCPanel>
             <VCPanelHeader icon={Lightbulb} label="Queue" title="Recommendations" live />
@@ -254,6 +288,7 @@ export function VaultCoreRecommendations() {
                       <ScorePill label="infl" value={r.influence_score} color="#0081f2" />
                       <ScorePill label="prio" value={r.priority_score} color="#ff8400" />
                       {r.impact && <VCChip label={r.impact} color="#22c55e" />}
+                      {r.revenue_impact && <VCChip label={r.revenue_impact} color="#c9a84c" />}
                       <span className="text-[10.5px] ml-auto" style={{ color: "var(--t-dim)" }}>{timeAgo(r.created_at)}</span>
                     </div>
                   </button>

@@ -6,6 +6,7 @@
 // organization. Read-only; Veronica Design.
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Users,
   ShieldCheck,
@@ -24,7 +25,7 @@ import {
   VCEmptyState,
 } from "@/components/ui/VaultUI";
 import { PRIORITY_META } from "./recommendationStatus";
-import type { WorkforceMember, CollaborationFeedItem, ExecutiveBrief } from "@/lib/core/types";
+import type { WorkforceMember, CollaborationFeedItem, ExecutiveBrief, DraftCounts } from "@/lib/core/types";
 
 function money(n: number): string {
   if (n >= 1000) return `$${Math.round(n / 1000)}k`;
@@ -131,15 +132,17 @@ export function WorkforceView() {
   const [workforce, setWorkforce] = useState<WorkforceMember[]>([]);
   const [feed, setFeed] = useState<CollaborationFeedItem[]>([]);
   const [brief, setBrief] = useState<ExecutiveBrief | null>(null);
+  const [draftCounts, setDraftCounts] = useState<DraftCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [w, c, b] = await Promise.all([
+      const [w, c, b, d] = await Promise.all([
         fetch("/api/core/workforce").then((r) => r.json()),
         fetch("/api/core/collaboration").then((r) => r.json()),
         fetch("/api/core/executive-brief").then((r) => r.json()),
+        fetch("/api/core/drafts").then((r) => (r.ok ? r.json() : { counts: null })).catch(() => ({ counts: null })),
       ]);
       if (w.error) {
         setError("You don't have access to the Workforce dashboard.");
@@ -149,6 +152,7 @@ export function WorkforceView() {
       setWorkforce(w.workforce ?? []);
       setFeed(c.feed ?? []);
       setBrief(b.brief ?? null);
+      setDraftCounts(d.counts ?? null);
     } catch {
       setError("Failed to load the Workforce dashboard.");
     } finally {
@@ -217,6 +221,28 @@ export function WorkforceView() {
               </div>
             </div>
           </div>
+        </VCPanel>
+      )}
+
+      {/* Conversation Intelligence (Veronica) */}
+      {draftCounts && (
+        <VCPanel accent="blue">
+          <VCPanelHeader
+            icon={MessageSquare}
+            label="Veronica · Conversation Intelligence"
+            title="Lead Conversations & Drafts"
+            live
+            action={<Link href="/drafts" className="inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: "#0081f2" }}>Draft queue →</Link>}
+          />
+          <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <Metric label="Drafts to Review" value={String(draftCounts.draft)} color="#0081f2" />
+            <Metric label="Approved" value={String(draftCounts.approved)} color="#22c55e" />
+            <Metric label="Edited" value={String(draftCounts.edited)} color="#a78bfa" />
+            <Metric label="Total Drafts" value={String(draftCounts.total)} color="#6b7a99" />
+          </div>
+          <p className="px-5 pb-4 text-[10.5px]" style={{ color: "var(--t-dim)" }}>
+            Veronica drafts lead follow-ups for human approval. Nothing is sent automatically — no SMS, no GHL writes.
+          </p>
         </VCPanel>
       )}
 

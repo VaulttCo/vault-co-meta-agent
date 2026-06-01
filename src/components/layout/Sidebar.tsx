@@ -34,6 +34,7 @@ import {
   Lightbulb,
   Network,
   Wrench,
+  Command,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -47,13 +48,19 @@ interface NavItem {
   permission: keyof Permissions;
 }
 
+// ── Vault Core nav (private AI operating system) ──────────────────────────────
+const vaultCoreNavItems: NavItem[] = [
+  { label: "Executive Command", href: "/",                icon: Command,       permission: "canViewDashboard" },
+  { label: "Vault Memory",      href: "/vault-memory",    icon: Brain,         permission: "canViewStrategyData" },
+  { label: "Workforce",         href: "/workforce",       icon: Network,       permission: "canViewStrategyData" },
+  { label: "Recommendations",   href: "/recommendations", icon: Lightbulb,     permission: "canViewApprovals" },
+  { label: "Drafts",            href: "/drafts",          icon: MessageSquare, permission: "canViewApprovals" },
+  { label: "System Proposals",  href: "/proposals",       icon: Wrench,        permission: "canViewApprovals" },
+  { label: "Runtime Activity",  href: "/runtime",         icon: Activity,      permission: "canViewStrategyData" },
+];
+
 // ── Veronica portal nav ───────────────────────────────────────────────────────
 const veronicaNavItems: NavItem[] = [
-  { label: "Vault Memory",      href: "/vault-memory",      icon: Brain,       permission: "canViewStrategyData" },
-  { label: "Workforce",         href: "/workforce",         icon: Network,     permission: "canViewStrategyData" },
-  { label: "Recommendations",   href: "/recommendations",   icon: Lightbulb,   permission: "canViewApprovals" },
-  { label: "Draft Queue",       href: "/drafts",            icon: MessageSquare, permission: "canViewApprovals" },
-  { label: "System Proposals",  href: "/proposals",         icon: Wrench,      permission: "canViewApprovals" },
   { label: "Veronica Overview", href: "/ai-agent",         icon: Bot,         permission: "canViewAiBuilder" },
   { label: "Veronica Console",  href: "/ai-agent/console", icon: Sparkles,    permission: "canViewAiBuilder" },
   { label: "Clients",           href: "/clients",           icon: Users,       permission: "canViewClients"   },
@@ -65,30 +72,83 @@ const veronicaNavItems: NavItem[] = [
   { label: "Analytics",         href: "/analytics",         icon: BarChart3,   permission: "canViewAnalytics" },
 ];
 
-const settingsItem: NavItem = {
-  label: "Settings", href: "/settings", icon: Settings, permission: "canViewSettings",
-};
-
 interface SidebarProps {
   onClose?: () => void;
 }
 
-export function Sidebar({ onClose }: SidebarProps) {
+// ── Active-route test (pure) ──────────────────────────────────────────────────
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  // Exact match for /ai-agent so the overview and console don't both highlight
+  if (href === "/ai-agent") return pathname === "/ai-agent";
+  if (href === "/revenue-dashboard") return pathname === "/revenue-dashboard";
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
+// ── Shared section header ─────────────────────────────────────────────────────
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-4"
+      style={{ color: "rgba(107,122,153,0.55)" }}>
+      {label}
+    </div>
+  );
+}
+
+// ── Decorative coming-soon item ───────────────────────────────────────────────
+function ComingSoonItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
+      style={{ color: "rgba(107,122,153,0.40)" }}>
+      <Icon size={15} className="flex-shrink-0" />
+      <span className="truncate">{label}</span>
+      <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
+        style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.12)", border: "1px solid rgba(61,79,110,0.18)" }}>
+        Soon
+      </span>
+    </div>
+  );
+}
+
+// ── Nav item — top-level component; reads its own pathname + pending count ──────
+function NavLink({ label, href, icon: Icon }: { label: string; href: string; icon: React.ElementType }) {
   const pathname = usePathname();
   const { plans, hasLoaded } = usePlans();
+  const pendingDrafts = hasLoaded ? plans.filter((p) => p.status === "needs_review").length : 0;
+  const active = isActive(pathname, href);
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${active ? "text-[#f8f8f7]" : ""}`}
+      style={
+        active
+          ? { backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.20)", color: "#f8f8f7" }
+          : { color: "rgba(107,122,153,0.85)", border: "1px solid transparent" }
+      }
+      onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "#f8f8f7"; }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(107,122,153,0.85)"; }}
+    >
+      <Icon size={15} className="flex-shrink-0" style={{ color: active ? "#0081f2" : undefined }} />
+      <span className="truncate">{label}</span>
+      {(label === "Veronica Overview" || label === "Veronica Console") && (
+        <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+          style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
+          <Sparkles size={7} />AI
+        </span>
+      )}
+      {label === "Approvals" && pendingDrafts > 0 && (
+        <span className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+          style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
+          {pendingDrafts}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+export function Sidebar({ onClose }: SidebarProps) {
+  const pathname = usePathname();
   const { user, permissions, signOut } = useAuth();
-
-  const pendingDrafts = hasLoaded
-    ? plans.filter((p) => p.status === "needs_review").length
-    : 0;
-
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    // Exact match for /ai-agent so the overview and console don't both highlight
-    if (href === "/ai-agent") return pathname === "/ai-agent";
-    if (href === "/revenue-dashboard") return pathname === "/revenue-dashboard";
-    return pathname === href || pathname.startsWith(href + "/");
-  };
 
   const roleColor = user ? ROLE_COLORS[user.role] : "#6b7a99";
   const roleLabel = user ? ROLE_LABELS[user.role] : "";
@@ -96,11 +156,15 @@ export function Sidebar({ onClose }: SidebarProps) {
   // ── Determine portal context ─────────────────────────────────────────────
   const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
   const isVictoria = pathname.startsWith("/victoria");
+  const VAULT_CORE_ROUTES = ["/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime"];
+  const isVaultCore = VAULT_CORE_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   const portalLabel = isRevenueDashboard
     ? "Revenue Dashboard"
     : isVictoria
     ? "Victoria AI"
+    : isVaultCore
+    ? "Vault Core"
     : "Vault Co Veronica";
 
   const showSettings = permissions?.canViewSettings ?? false;
@@ -126,65 +190,6 @@ export function Sidebar({ onClose }: SidebarProps) {
       <span>Command Hub</span>
     </Link>
   );
-
-  // ── Shared: nav item renderer ─────────────────────────────────────────────
-  function NavLink({ label, href, icon: Icon }: { label: string; href: string; icon: React.ElementType }) {
-    const active = isActive(href);
-    return (
-      <Link
-        key={href}
-        href={href}
-        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${active ? "text-[#f8f8f7]" : ""}`}
-        style={
-          active
-            ? { backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.20)", color: "#f8f8f7" }
-            : { color: "rgba(107,122,153,0.85)", border: "1px solid transparent" }
-        }
-        onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "#f8f8f7"; }}
-        onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = "rgba(107,122,153,0.85)"; }}
-      >
-        <Icon size={15} className="flex-shrink-0" style={{ color: active ? "#0081f2" : undefined }} />
-        <span className="truncate">{label}</span>
-        {(label === "Veronica Overview" || label === "Veronica Console") && (
-          <span className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
-            style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
-            <Sparkles size={7} />AI
-          </span>
-        )}
-        {label === "Approvals" && pendingDrafts > 0 && (
-          <span className="ml-auto flex items-center text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
-            style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}>
-            {pendingDrafts}
-          </span>
-        )}
-      </Link>
-    );
-  }
-
-  // ── Shared: decorative coming-soon item ───────────────────────────────────
-  function ComingSoonItem({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
-    return (
-      <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium cursor-default select-none"
-        style={{ color: "rgba(107,122,153,0.40)" }}>
-        <Icon size={15} className="flex-shrink-0" />
-        <span className="truncate">{label}</span>
-        <span className="ml-auto flex-shrink-0 text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded"
-          style={{ color: "rgba(107,122,153,0.55)", backgroundColor: "rgba(61,79,110,0.12)", border: "1px solid rgba(61,79,110,0.18)" }}>
-          Soon
-        </span>
-      </div>
-    );
-  }
-
-  // ── Shared: section header ────────────────────────────────────────────────
-  function SectionLabel({ label }: { label: string }) {
-    return (
-      <div className="text-[9px] font-bold uppercase tracking-widest px-2 mb-2 mt-4"
-        style={{ color: "rgba(107,122,153,0.55)" }}>
-        {label}
-      </div>
-    );
-  }
 
   return (
     <aside
@@ -269,6 +274,14 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* ── Veronica portal (default) ──────────────────────────────── */}
         {!isRevenueDashboard && !isVictoria && (
           <>
+            {/* Vault Core — private AI operating system */}
+            <SectionLabel label="Vault Core" />
+            {vaultCoreNavItems
+              .filter((item) => permissions?.[item.permission] ?? false)
+              .map(({ label, href, icon }) => (
+                <NavLink key={href} label={label} href={href} icon={icon} />
+              ))}
+
             <SectionLabel label="Veronica AI" />
             {veronicaNavItems
               .filter((item) => permissions?.[item.permission] ?? false)
@@ -319,12 +332,12 @@ export function Sidebar({ onClose }: SidebarProps) {
             href="/settings"
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
             style={
-              isActive("/settings")
+              isActive(pathname, "/settings")
                 ? { backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.20)", color: "#f8f8f7" }
                 : { color: "rgba(107,122,153,0.85)", border: "1px solid transparent" }
             }
           >
-            <Settings size={15} className="flex-shrink-0" style={{ color: isActive("/settings") ? "#0081f2" : undefined }} />
+            <Settings size={15} className="flex-shrink-0" style={{ color: isActive(pathname, "/settings") ? "#0081f2" : undefined }} />
             Settings
           </Link>
         )}

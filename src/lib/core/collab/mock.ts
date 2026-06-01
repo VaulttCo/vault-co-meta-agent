@@ -22,6 +22,7 @@ const mid = (s: string) => `mock-${s}`;
 
 const COLLAB_ID = mid("collab-offer-shift");
 const VAL_COLLAB_ID = mid("collab-payment-risk");
+const VER_COLLAB_ID = mid("collab-sms-pattern");
 
 // ── Collaborations ────────────────────────────────────────────
 export function buildMockCollaborations(): AgentCollaborationRow[] {
@@ -61,6 +62,18 @@ export function buildMockCollaborations(): AgentCollaborationRow[] {
       joint_recommendation_id: null,
       related_node_ids: [],
       created_at: iso(25 * MIN),
+      resolved_at: null,
+    },
+    {
+      id: VER_COLLAB_ID,
+      title: "SMS booking pattern — validation",
+      initiator: "veronica",
+      participants: ["veronica", "vega"],
+      status: "in_progress",
+      summary: "Veronica surfaced a response-time → booking pattern and requested Vega validate it across available conversation data.",
+      joint_recommendation_id: null,
+      related_node_ids: [],
+      created_at: iso(18 * MIN),
       resolved_at: null,
     },
   ];
@@ -109,6 +122,10 @@ export function buildMockMessages(): AgentMessageRow[] {
       "Vega — corroborate the at-risk invoice signal against cross-system patterns before we escalate.", 22 * MIN, VAL_COLLAB_ID),
     m("9", "vanessa", null, "share_context", "Executive priorities updated",
       "Today's top priorities: Review unpaid/open invoices (critical); Replicate winning creative angle (high).", 15 * MIN, null),
+    m("10", "veronica", null, "share_discovery", "Hot lead awaiting follow-up",
+      "High-intent inbound (hail damage) with no reply yet — drafted a same-day follow-up for approval.", 18 * MIN, null),
+    m("11", "veronica", "vega", "request_analysis", "Validate SMS booking pattern",
+      "Vega — confirm the response-time → booking correlation across conversation data.", 16 * MIN, VER_COLLAB_ID),
   ];
 }
 
@@ -157,9 +174,13 @@ export function buildMockTasks(): AgentTaskRow[] {
 // ── Objectives (canonical seed, used for mock + DB seeding) ────
 export const DEFAULT_OBJECTIVES: Record<string, Array<{ objective: string; metric: string; progress: number }>> = {
   veronica: [
-    { objective: "Increase booking insights", metric: "insights / week", progress: 0.42 },
-    { objective: "Improve follow-up intelligence", metric: "follow-up patterns", progress: 0.35 },
-    { objective: "Reduce missed opportunity rate", metric: "% missed", progress: 0.28 },
+    { objective: "Improve booking intelligence", metric: "booking insights", progress: 0.6 },
+    { objective: "Identify missed opportunities", metric: "missed flagged", progress: 0.55 },
+    { objective: "Improve follow-up recommendations", metric: "follow-up recs", progress: 0.5 },
+    { objective: "Improve reactivation intelligence", metric: "reactivations found", progress: 0.46 },
+    { objective: "Increase conversation insight accuracy", metric: "insight accuracy", progress: 0.62 },
+    { objective: "Increase lead-to-appointment learning", metric: "lead→appt patterns", progress: 0.48 },
+    { objective: "Improve objection pattern detection", metric: "objection patterns", progress: 0.52 },
   ],
   victoria: [
     { objective: "Discover winning content", metric: "winning patterns", progress: 0.61 },
@@ -219,7 +240,7 @@ const REP_SEED: Record<string, Omit<AgentReputationRow, "agent" | "updated_at">>
   vega:     { trust_score: 92, accuracy_score: 88, adoption_rate: 81, influence_score: 90, knowledge_contributions: 146, revenue_influence: 184000, collaboration_score: 87 },
   victoria: { trust_score: 94, accuracy_score: 89, adoption_rate: 84, influence_score: 86, knowledge_contributions: 128, revenue_influence: 217000, collaboration_score: 91 },
   valerie:  { trust_score: 88, accuracy_score: 85, adoption_rate: 77, influence_score: 83, knowledge_contributions: 64, revenue_influence: 241000, collaboration_score: 79 },
-  veronica: { trust_score: 71, accuracy_score: 68, adoption_rate: 55, influence_score: 64, knowledge_contributions: 22, revenue_influence: 41000, collaboration_score: 60 },
+  veronica: { trust_score: 87, accuracy_score: 83, adoption_rate: 76, influence_score: 82, knowledge_contributions: 58, revenue_influence: 198000, collaboration_score: 85 },
   vanessa:  { trust_score: 90, accuracy_score: 86, adoption_rate: 80, influence_score: 91, knowledge_contributions: 73, revenue_influence: 263000, collaboration_score: 93 },
   vivian:   { trust_score: 60, accuracy_score: 57, adoption_rate: 44, influence_score: 52, knowledge_contributions: 7, revenue_influence: 12000, collaboration_score: 41 },
 };

@@ -306,12 +306,36 @@ export default function CommandHubPage() {
                 Security-first
               </span>
             </div>
-            <p className="text-[14px] sm:text-[15px] max-w-lg" style={{ color: "rgba(255,255,255,0.42)" }}>
-              Choose which Vault Co operating system you want to enter.
+            <p className="text-[14px] sm:text-[15px] max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
+              The Vault Co operating system — executive intelligence, workforce activity, and everything awaiting your review.
             </p>
             <p className="text-[11px] font-medium tracking-wide" style={{ color: "rgba(201,168,76,0.62)" }}>
-              Security-first. AI-assisted. Approval-gated. Operator-controlled. Built for scale.
+              Read · analyze · recommend — every action is human-approved.
             </p>
+          </div>
+
+          {/* ── Vault Core · Executive Intelligence (home base) ─────────────── */}
+          <div className="hub-fade-up w-full flex flex-col gap-4 text-left">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#0081f2" }}>
+                Vault Core · Executive Intelligence
+              </span>
+              <span className="h-px flex-1" style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.28), transparent)" }} />
+            </div>
+            <CommandHubExecutiveBrief />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CommandHubRecommendationsPanel />
+              <CommandHubProposalsPanel />
+            </div>
+            <CommandHubDraftsPanel />
+          </div>
+
+          {/* ── Operating Systems (portals) ─────────────────────────────────── */}
+          <div className="hub-fade-up w-full flex items-center gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(201,168,76,0.72)" }}>
+              Operating Systems
+            </span>
+            <span className="h-px flex-1" style={{ background: "linear-gradient(90deg, rgba(201,168,76,0.24), transparent)" }} />
           </div>
 
           {/* ── Three portal cards ─────────────────────────────────────────── */}
@@ -531,22 +555,6 @@ export default function CommandHubPage() {
                 </div>
               );
             })}
-          </div>
-
-          {/* ── Vault Core Executive Oversight (Vanessa) ─────────────────────── */}
-          <div className="hub-fade-up w-full text-left">
-            <CommandHubExecutiveBrief />
-          </div>
-
-          {/* ── Vault Core Command Hub (Recommendations + System Proposals) ── */}
-          <div className="hub-fade-up w-full text-left grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CommandHubRecommendationsPanel />
-            <CommandHubProposalsPanel />
-          </div>
-
-          {/* ── Veronica Draft Approval Queue (Conversation Intelligence) ───── */}
-          <div className="hub-fade-up w-full text-left">
-            <CommandHubDraftsPanel />
           </div>
 
           {/* ── Footer ──────────────────────────────────────────────────────── */}

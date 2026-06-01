@@ -30,6 +30,11 @@ organizational brain (Vault Memory + Obsidian).
   Layer (Priority Engine, Daily Executive Brief, Executive Queue), prioritizes across the workforce.
 - **Phase 6** — [[ADR-0007-conversation-intelligence-layer]]: Veronica activated, Conversation
   Intelligence Layer, GHL read-only integration, Draft Approval Queue (drafts never sent).
+- **Phase 6.5** — Veronica Design production pass + Vault Co brand lock (Command Hub as executive
+  home base; removed "Layer N" jargon; consistent loading skeletons). No new features.
+- **Phase 6.6** — [[ADR-0008-production-deployment-readiness]]: Vercel deployment prep — security
+  audit (no committed secrets), env-var + SQL-order + route-verification docs, deployment guide.
+  **Ready to deploy** (rotate the GHL key first).
 
 ## Next (proposed order)
 

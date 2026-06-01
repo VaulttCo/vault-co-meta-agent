@@ -29,6 +29,7 @@ import {
   VCStatusBadge,
   VCChip,
   VCEmptyState,
+  VCSkeleton,
 } from "@/components/ui/VaultUI";
 import { useAuth } from "@/components/AuthProvider";
 import { styleFor } from "./categoryStyle";
@@ -199,7 +200,7 @@ export function VaultCoreRecommendations() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Layer 4 · Command Hub"
+        sectionLabel="Vault Core · Command Hub"
         title="Vault Core Recommendations"
         description="Agent-generated intelligence awaiting human review. Read · analyze · recommend — nothing executes without you."
         badge={<VCStatusBadge label={`${countFor("pending_review")} pending`} variant="blue" dot />}
@@ -284,7 +285,7 @@ export function VaultCoreRecommendations() {
           <VCPanel>
             <VCPanelHeader icon={Lightbulb} label="Queue" title="Recommendations" live />
             <div className="px-4 py-3 space-y-2.5">
-              {loading && <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Loading…</p>}
+              {loading && <VCSkeleton rows={4} className="px-1 py-1" />}
               {!loading && visible.length === 0 && (
                 <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Nothing in this view.</p>
               )}

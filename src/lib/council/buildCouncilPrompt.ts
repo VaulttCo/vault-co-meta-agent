@@ -346,80 +346,83 @@ export function applyCouncilToDraft(
 }
 
 // ─────────────────────────────────────────────────────────────
-// buildImprovementPatchPrompt
+// buildImprovementPatchPrompt  (REQUIRED CORE PATCH — tight)
 // ─────────────────────────────────────────────────────────────
-// Builds a focused, plain-text prompt for the hidden pipeline refinement step.
-// Covers all major campaign sections. No JSON syntax in prompt body.
+// Asks for ONLY the 14 core fields. Kept under ~1200 chars to
+// avoid VPS size/timeout limits that caused the old full-schema
+// prompt to fail. No JSON syntax in the prompt body.
 export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
   const lines: string[] = [];
 
-  lines.push("CAMPAIGN COMPREHENSIVE IMPROVEMENT TASK");
-  lines.push("Improve all major campaign sections. Return a comprehensive improvement patch.");
-  lines.push("Safety: Only improve copy and strategy. Cannot launch ads, change budgets, or push to Meta.");
+  lines.push("CAMPAIGN IMPROVEMENT — JSON ONLY");
+  lines.push("Return compact JSON. No markdown. No code fences. No text before or after. No commentary.");
+  lines.push("Safety: draft/review only. Cannot launch ads, push Meta, or change budgets.");
   lines.push("");
 
   if (ctx.client) {
-    lines.push(`Client: ${ctx.client.name}`);
-    if (ctx.market || ctx.client.market) lines.push(`Market: ${ctx.market || ctx.client.market}`);
-    if (ctx.budget || ctx.client.monthlyBudget) lines.push(`Budget: ${ctx.budget || ctx.client.monthlyBudget}`);
-    if (ctx.client.services?.length) lines.push(`Services: ${ctx.client.services.slice(0, 3).join(", ")}`);
+    lines.push(`Client: ${ctx.client.name} | Market: ${ctx.market ?? ctx.client.market ?? ""} | Budget: ${ctx.budget ?? ctx.client.monthlyBudget ?? ""}`);
   }
-  lines.push(`Goal: ${ctx.goal ?? ""}`);
-  lines.push(`Service: ${ctx.service ?? ""}`);
+  lines.push(`Service: ${ctx.service ?? ""} | Goal: ${ctx.goal ?? ""}`);
 
   if (ctx.displayPlan) {
     const p = ctx.displayPlan;
-    lines.push("");
-    lines.push("CURRENT CAMPAIGN DRAFT");
+    lines.push(`Campaign: ${p.campaignName}`);
+    lines.push(`Objective: ${p.metaStructure?.campaignObjective ?? ""}`);
     const texts = Array.isArray(p.adCopy?.primaryTexts) ? p.adCopy.primaryTexts : [];
-    if (texts[0]) lines.push(`Primary Text 1: ${String(texts[0]).slice(0, 200)}`);
-    if (texts[1]) lines.push(`Primary Text 2: ${String(texts[1]).slice(0, 180)}`);
+    if (texts[0]) lines.push(`Text1: ${String(texts[0]).slice(0, 150)}`);
+    if (texts[1]) lines.push(`Text2: ${String(texts[1]).slice(0, 100)}`);
     const heads = Array.isArray(p.adCopy?.headlines) ? p.adCopy.headlines : [];
     if (heads.length) lines.push(`Headlines: ${heads.slice(0, 3).join(" / ")}`);
     if (p.adCopy?.cta) lines.push(`CTA: ${String(p.adCopy.cta).slice(0, 50)}`);
-    if (p.creativeDirection?.angle) lines.push(`Creative Angle: ${String(p.creativeDirection.angle).slice(0, 120)}`);
-    if (p.creativeDirection?.hook) lines.push(`Hook: ${String(p.creativeDirection.hook).slice(0, 100)}`);
-    if (p.leadForm?.introCopy) lines.push(`Lead Form Intro: ${String(p.leadForm.introCopy).slice(0, 120)}`);
-    if (p.compliance?.metaRisk) lines.push(`Compliance: ${String(p.compliance.metaRisk).slice(0, 80)}`);
-    if (p.metaStructure?.campaignObjective) lines.push(`Objective: ${p.metaStructure.campaignObjective}`);
-    const adSetNames = Array.isArray(p.metaStructure?.adSetNames) ? p.metaStructure.adSetNames : [];
-    if (adSetNames.length) lines.push(`Ad Sets: ${adSetNames.join(", ")}`);
-    if (p.ghlWorkflow?.immediateSms) lines.push(`Immediate SMS: ${String(p.ghlWorkflow.immediateSms).slice(0, 100)}`);
-    if (p.optimization?.budgetScalingRule) lines.push(`Scaling Rule: ${String(p.optimization.budgetScalingRule).slice(0, 80)}`);
-    if (p.buyerPsychologyUsed?.buyerInsight) lines.push(`Buyer Insight: ${String(p.buyerPsychologyUsed.buyerInsight).slice(0, 100)}`);
+    if (p.creativeDirection?.hook) lines.push(`Hook: ${String(p.creativeDirection.hook).slice(0, 80)}`);
   }
 
-  if (ctx.selectedAssets && ctx.selectedAssets.length > 0) {
-    lines.push("");
-    lines.push("CREATIVE ASSETS");
-    ctx.selectedAssets.slice(0, 4).forEach((asset, i) => {
-      lines.push(`Asset ${i + 1}: ${asset.fileName} (${asset.fileType === "video" ? "VIDEO" : "IMAGE"}, ${asset.assetType})`);
-      if (asset.notes) lines.push(`  Notes: ${String(asset.notes).slice(0, 100)}`);
-      const analysis = ctx.assetAnalyses?.[asset.id];
-      if (analysis?.visualSummary && analysis.visualSummary !== "Image not available for analysis") {
-        lines.push(`  Vision: ${String(analysis.visualSummary).slice(0, 150)}`);
-      }
-      const note = ctx.assetNotes?.[asset.id];
-      if (note) lines.push(`  Campaign Note: ${String(note).slice(0, 80)}`);
+  if (ctx.selectedAssets?.length) {
+    const assetList = ctx.selectedAssets.slice(0, 4).map((a) =>
+      `${a.fileName}(${a.fileType === "video" ? "VIDEO" : "IMG"})`
+    ).join(", ");
+    lines.push(`Assets: ${assetList}`);
+  }
+
+  lines.push("");
+  lines.push("Return JSON with ONLY these keys:");
+  lines.push("readinessScore (0-100 integer), winningAngle, campaignName, primaryTexts (array of 3 strings), headlines (array of 3 strings), cta, creativeDirectionSummary, leadFormIntro, followUpSteps (array), complianceWarnings (array), optimizationNotes (array), missingAssets (array), nextOperatorTasks (array), changesMade (array)");
+
+  return lines.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────
+// buildExtendedPatchPrompt  (OPTIONAL EXTENDED PATCH)
+// ─────────────────────────────────────────────────────────────
+// Only runs after core patch succeeds. Asks for asset matrix,
+// buyer psychology, market research, GHL, and Meta push readiness.
+// Kept short to avoid VPS limits.
+export function buildExtendedPatchPrompt(ctx: CouncilContext): string {
+  const lines: string[] = [];
+
+  lines.push("CAMPAIGN EXTENDED IMPROVEMENT — JSON ONLY");
+  lines.push("Return compact JSON. No markdown. No code fences. No text before or after. No commentary.");
+  lines.push("Safety: draft/review only. Cannot launch ads, push Meta, or change budgets.");
+  lines.push("");
+
+  if (ctx.client) lines.push(`Client: ${ctx.client.name} | Service: ${ctx.service ?? ""}`);
+  if (ctx.displayPlan) lines.push(`Campaign: ${ctx.displayPlan.campaignName}`);
+
+  if (ctx.selectedAssets?.length) {
+    lines.push("Assets:");
+    ctx.selectedAssets.slice(0, 5).forEach((a, i) => {
+      const analysis = ctx.assetAnalyses?.[a.id];
+      const vision =
+        analysis?.visualSummary && analysis.visualSummary !== "Image not available for analysis"
+          ? ` Vision: ${String(analysis.visualSummary).slice(0, 100)}`
+          : "";
+      lines.push(`${i + 1}. ${a.fileName}(${a.fileType === "video" ? "VIDEO" : "IMG"})${vision}`);
     });
   }
 
   lines.push("");
-  lines.push("SECTIONS TO IMPROVE:");
-  lines.push("Ad Copy: Rewrite primary texts (specific to assets, no generic city filler), headlines, CTA, add hook bank variants, and retargeting copy.");
-  lines.push("Creative Direction: Best campaign angle, hook, shot list, text overlays, voiceover direction note.");
-  lines.push("Buyer Psychology: Core motivation, urgency trigger, trust triggers, objections addressed, hook rationale, CTA rationale.");
-  lines.push("Market Research: Market summary, competitor angle, audience rationale, location rationale, seasonality note.");
-  lines.push("Asset Matrix: For each creative asset, write specific angle, primary text, headline, CTA, best ad set assignment, temperature (cold/warm/hot), and reason.");
-  lines.push("Lead Form: Stronger intro copy, qualification questions, improved thank-you copy.");
-  lines.push("GHL Workflow: Workflow summary, follow-up steps, immediate SMS draft (speed-to-lead), GHL tags.");
-  lines.push("Compliance: Compliance warnings, disallowed phrases to remove, required disclaimers to add.");
-  lines.push("Optimization: KPIs to track, scaling rules, kill/pause rules, human approval triggers.");
-  lines.push("Meta Push Readiness: Status (not_ready, needs_review, or ready_for_validation), missing fields, payload notes, validation warnings.");
-  lines.push("");
-  lines.push("OUTPUT FORMAT");
-  lines.push("Return valid JSON only. No markdown fences. No text before or after the JSON.");
-  lines.push("Top-level fields: readinessScore (0-100), winningAngle, campaignName, primaryTexts (array), headlines (array), descriptions (array), cta, hookBank (array), retargetingCopy (array), creativeDirectionSummary, shotList (array), textOverlays (array), voiceoverNote, buyerPsychology (object: insight, urgencyTrigger, trustTriggers array, objections array, hookRationale, ctaRationale), marketResearch (object: summary, competitorAngle, audienceRationale, locationRationale, seasonalityNote), assetMatrix (array of objects: assetId, assetName, angle, primaryText1, headline1, cta, adSet, adSetTemperature, reason, warnings array), leadFormIntro, qualificationQuestions (array), thankYouCopy, ghlWorkflowSummary, followUpSteps (array), immediateSmsDraft, ghlTags (array), complianceWarnings (array), disallowedPhrases (array), requiredDisclaimers (array), optimizationNotes (array), kpis (array), scalingRules (array), killRules (array), humanApprovalTriggers (array), metaPushReadiness (object: status, missingFields array, payloadNotes array, validationWarnings array), changesMade (array), missingAssets (array), nextOperatorTasks (array).");
+  lines.push("Return JSON with ONLY these keys:");
+  lines.push("assetMatrix (array: assetName, angle, primaryText1, headline1, cta, adSetTemperature cold/warm/hot, reason), buyerPsychology (object: insight, urgencyTrigger, trustTriggers array, objections array), marketResearch (object: summary, competitorAngle, audienceRationale), ghlWorkflowSummary, immediateSmsDraft, ghlTags (array), disallowedPhrases (array), metaPushReadiness (object: status not_ready/needs_review/ready_for_validation, missingFields array, validationWarnings array)");
 
   return lines.join("\n");
 }
@@ -430,25 +433,94 @@ export function buildImprovementPatchPrompt(ctx: CouncilContext): string {
 // Robustly parses Hermes output into a CampaignImprovementPatch.
 // Validates every field independently — bad fields are skipped.
 // Never throws. Returns null if unusable.
+// ─────────────────────────────────────────────────────────────
+// extractTextFallback
+// ─────────────────────────────────────────────────────────────
+// Last-resort: parse key-value and bullet-list patterns from
+// plain text output when Hermes doesn't return valid JSON.
+function extractTextFallback(raw: string): CampaignImprovementPatch | null {
+  const patch: CampaignImprovementPatch = {};
+  const applied: string[] = [];
+
+  // readinessScore: 75
+  const scoreMatch = raw.match(/readinessScore[:\s]+(\d+)/i);
+  if (scoreMatch) {
+    const score = parseInt(scoreMatch[1], 10);
+    if (!isNaN(score)) { patch.readinessScore = Math.max(0, Math.min(100, score)); applied.push("readinessScore"); }
+  }
+
+  // winningAngle: "text" or winningAngle: text until newline
+  const waMatch = raw.match(/winningAngle[:\s]+["']?(.+?)["']?\s*(?:\n|$)/i);
+  if (waMatch?.[1]?.trim()) { patch.winningAngle = waMatch[1].trim().slice(0, 500); applied.push("winningAngle"); }
+
+  // campaignName: "text"
+  const cnMatch = raw.match(/campaignName[:\s]+["']?(.+?)["']?\s*(?:\n|$)/i);
+  if (cnMatch?.[1]?.trim()) { patch.campaignName = cnMatch[1].trim().slice(0, 120); applied.push("campaignName"); }
+
+  // cta: "Get My Free Inspection"
+  const ctaMatch = raw.match(/\bcta[:\s]+["']?(.+?)["']?\s*(?:\n|$)/i);
+  if (ctaMatch?.[1]?.trim()) { patch.cta = ctaMatch[1].trim().slice(0, 80); applied.push("cta"); }
+
+  // Helper: extract bullet list following a key name
+  function extractBulletList(key: string, maxItems = 5): string[] | null {
+    const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`${esc}[:\\s]*([\\s\\S]*?)(?=\\n[A-Za-z][\\w]+[:\\s]|\\n\\n|$)`, "i");
+    const match = raw.match(re);
+    if (!match?.[1]) return null;
+    const items = match[1]
+      .split(/\n/)
+      .map((l) => l.replace(/^[-*•\d.)[\s]+/, "").trim())
+      .filter((l) => l.length > 3);
+    return items.length > 0 ? items.slice(0, maxItems) : null;
+  }
+
+  const ptList = extractBulletList("primaryTexts");
+  if (ptList?.length) { patch.primaryTexts = ptList; applied.push("primaryTexts"); }
+
+  const hlList = extractBulletList("headlines");
+  if (hlList?.length) { patch.headlines = hlList; applied.push("headlines"); }
+
+  const cmList = extractBulletList("changesMade");
+  if (cmList?.length) { patch.changesMade = cmList; applied.push("changesMade"); }
+
+  const maList = extractBulletList("missingAssets");
+  if (maList?.length) { patch.missingAssets = maList; applied.push("missingAssets"); }
+
+  const ntList = extractBulletList("nextOperatorTasks");
+  if (ntList?.length) { patch.nextOperatorTasks = ntList; applied.push("nextOperatorTasks"); }
+
+  if (process.env.NODE_ENV !== "production" && applied.length > 0) {
+    console.warn("[Patch] Text fallback extracted:", applied.join(", "));
+  }
+
+  return applied.length > 0 ? patch : null;
+}
+
 export function safeExtractImprovementPatch(raw: string): CampaignImprovementPatch | null {
   const jsonStr = safeExtractJson(raw);
   if (!jsonStr) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("[Patch] safeExtractImprovementPatch: no JSON found. Raw length:", raw?.length ?? 0);
+      console.warn("[Patch] safeExtractImprovementPatch: no JSON found. Raw length:", raw?.length ?? 0, "First 300:", raw?.slice(0, 300));
     }
-    return null;
+    // Attempt text/key-value fallback before giving up
+    return extractTextFallback(raw);
   }
 
   let parsed: Record<string, unknown>;
   try {
     const p = JSON.parse(jsonStr);
-    if (typeof p !== "object" || p === null || Array.isArray(p)) return null;
+    if (typeof p !== "object" || p === null || Array.isArray(p)) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[Patch] JSON parsed but not an object:", typeof p);
+      }
+      return extractTextFallback(raw);
+    }
     parsed = p as Record<string, unknown>;
   } catch {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("[Patch] safeExtractImprovementPatch: JSON.parse failed");
+      console.warn("[Patch] safeExtractImprovementPatch: JSON.parse failed on:", jsonStr.slice(0, 200));
     }
-    return null;
+    return extractTextFallback(raw);
   }
 
   const patch: CampaignImprovementPatch = {};
@@ -642,12 +714,39 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
   }
 
   if (process.env.NODE_ENV !== "production") {
-    console.info("[Patch] applied:", applied.join(", "));
-    if (skipped.length) console.warn("[Patch] skipped (wrong type):", skipped.join(", "));
+    console.warn("[Patch] JSON extraction applied:", applied.join(", "));
+    if (skipped.length) console.warn("[Patch] JSON extraction skipped (wrong type):", skipped.join(", "));
   }
 
-  const usable = !!(patch.winningAngle || (patch.primaryTexts && patch.primaryTexts.length > 0) || patch.readinessScore);
-  return usable ? patch : null;
+  // usable = at least one meaningful field was extracted
+  const usable = !!(
+    patch.winningAngle ||
+    (patch.primaryTexts && patch.primaryTexts.length > 0) ||
+    (patch.headlines && patch.headlines.length > 0) ||
+    patch.cta ||
+    patch.readinessScore !== undefined ||
+    patch.campaignName ||
+    patch.creativeDirectionSummary ||
+    (patch.changesMade && patch.changesMade.length > 0)
+  );
+
+  if (!usable && process.env.NODE_ENV !== "production") {
+    console.warn("[Patch] No usable fields extracted from JSON. Attempting text fallback.");
+  }
+
+  return usable ? patch : extractTextFallback(raw);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PatchApplyResult
+// ─────────────────────────────────────────────────────────────
+export interface PatchApplyResult {
+  draft: CampaignDraft;
+  appliedFields: string[];
+  skippedFields: string[];
+  // success = at least one MEANINGFUL field was applied
+  // (campaignName, primaryTexts, headlines, cta, winningAngle, creativeDirectionSummary)
+  success: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -656,10 +755,14 @@ export function safeExtractImprovementPatch(raw: string): CampaignImprovementPat
 // Merges a CampaignImprovementPatch into an existing valid CampaignDraft.
 // Every section is applied only if the patch provides valid data.
 // Never throws — returns original on any error.
+// Returns PatchApplyResult with applied/skipped field lists and success flag.
 export function applyImprovementPatchToDraft(
   original: CampaignDraft,
   patch: CampaignImprovementPatch
-): CampaignDraft {
+): PatchApplyResult {
+  const _appliedFields: string[] = [];
+  const _skippedFields: string[] = [];
+
   try {
     const now = new Date().toLocaleString("en-US", {
       month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
@@ -824,7 +927,7 @@ export function applyImprovementPatchToDraft(
       ? patch.campaignName.trim()
       : existingName;
 
-    return {
+    const improvedDraft: CampaignDraft = {
       ...original,
       campaignName: newName,
       status: "needs_review",
@@ -896,10 +999,38 @@ export function applyImprovementPatchToDraft(
       marketResearchUsed: newMR,
       adVariations: newVariations,
     };
+
+    // ── Track which patch fields had content (applied) vs were absent (skipped)
+    const MEANINGFUL_FIELDS = ["campaignName", "primaryTexts", "headlines", "cta", "winningAngle", "creativeDirectionSummary"] as const;
+    const ALL_FIELDS = [
+      "campaignName", "primaryTexts", "headlines", "descriptions", "cta", "hookBank", "retargetingCopy",
+      "winningAngle", "creativeDirectionSummary", "shotList", "textOverlays", "voiceoverNote",
+      "leadFormIntro", "qualificationQuestions", "thankYouCopy",
+      "ghlWorkflowSummary", "followUpSteps", "immediateSmsDraft", "ghlTags",
+      "complianceWarnings", "disallowedPhrases", "requiredDisclaimers",
+      "optimizationNotes", "kpis", "scalingRules", "killRules", "humanApprovalTriggers",
+      "readinessScore", "changesMade", "missingAssets", "nextOperatorTasks",
+      "buyerPsychology", "marketResearch", "assetMatrix", "metaPushReadiness",
+    ] as const;
+
+    for (const field of ALL_FIELDS) {
+      const val = patch[field as keyof CampaignImprovementPatch];
+      const hasValue =
+        val !== undefined &&
+        val !== null &&
+        (typeof val !== "string" || (val as string).trim().length > 0) &&
+        (!Array.isArray(val) || (val as unknown[]).length > 0) &&
+        (typeof val !== "object" || Array.isArray(val) || Object.keys(val as object).length > 0);
+      if (hasValue) _appliedFields.push(field); else _skippedFields.push(field);
+    }
+
+    const success = MEANINGFUL_FIELDS.some((f) => _appliedFields.includes(f));
+
+    return { draft: improvedDraft, appliedFields: _appliedFields, skippedFields: _skippedFields, success };
   } catch (err) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[Patch] applyImprovementPatchToDraft failed, preserving original:", err);
     }
-    return original;
+    return { draft: original, appliedFields: [], skippedFields: [], success: false };
   }
 }

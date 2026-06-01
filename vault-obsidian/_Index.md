@@ -21,9 +21,9 @@ Obsidian graph view stays connected.
 
 ## Workforce (Layer 2)
 - [[Veronica]] — Lead Acquisition Director
-- [[Victoria]] — Marketing Director
+- [[Victoria]] — Marketing Director *(active)*
 - [[Vivian]] — Operations Director
-- [[Valerie]] — Financial Director
+- [[Valerie]] — Financial Director *(active)*
 - [[Vega]] — Intelligence Director *(active)*
 - [[Vanessa]] — Executive Director
 

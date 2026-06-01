@@ -21,6 +21,7 @@ const iso = (ago: number) => new Date(Date.now() - ago).toISOString();
 const mid = (s: string) => `mock-${s}`;
 
 const COLLAB_ID = mid("collab-offer-shift");
+const VAL_COLLAB_ID = mid("collab-payment-risk");
 
 // ── Collaborations ────────────────────────────────────────────
 export function buildMockCollaborations(): AgentCollaborationRow[] {
@@ -48,6 +49,18 @@ export function buildMockCollaborations(): AgentCollaborationRow[] {
       joint_recommendation_id: null,
       related_node_ids: [],
       created_at: iso(40 * MIN),
+      resolved_at: null,
+    },
+    {
+      id: VAL_COLLAB_ID,
+      title: "Payment risk — cross-system confidence check",
+      initiator: "valerie",
+      participants: ["valerie", "vega"],
+      status: "in_progress",
+      summary: "Valerie flagged open/past-due invoices and requested Vega corroborate the cash-flow risk before escalating a joint recommendation.",
+      joint_recommendation_id: null,
+      related_node_ids: [],
+      created_at: iso(25 * MIN),
       resolved_at: null,
     },
   ];
@@ -90,6 +103,10 @@ export function buildMockMessages(): AgentMessageRow[] {
       "Packaging this into a joint recommendation for the Command Hub. High strategic value.", 2.2 * HOUR),
     m("6", "victoria", "vega", "request_analysis", "Hook fatigue check",
       "CTR sliding on long-running hooks — can you confirm the decay rate?", 40 * MIN, mid("collab-hook-rotation")),
+    m("7", "valerie", null, "share_discovery", "Payment risk detected",
+      "Several invoices are open/past-due this cycle — flagging cash-flow risk.", 25 * MIN, VAL_COLLAB_ID),
+    m("8", "valerie", "vega", "request_analysis", "Confirm payment-risk impact",
+      "Vega — corroborate the at-risk invoice signal against cross-system patterns before we escalate.", 22 * MIN, VAL_COLLAB_ID),
   ];
 }
 
@@ -120,6 +137,18 @@ export function buildMockTasks(): AgentTaskRow[] {
       created_at: iso(38 * MIN),
       completed_at: null,
     },
+    {
+      id: mid("task-3"),
+      assigned_to: "vega",
+      assigned_by: "valerie",
+      title: "Validate payment-risk signal",
+      detail: "Cross-check Valerie's at-risk invoice signal against performance/conversion data.",
+      status: "in_progress",
+      collaboration_id: VAL_COLLAB_ID,
+      related_node_ids: [],
+      created_at: iso(22 * MIN),
+      completed_at: null,
+    },
   ];
 }
 
@@ -142,9 +171,12 @@ export const DEFAULT_OBJECTIVES: Record<string, Array<{ objective: string; metri
     { objective: "Improve onboarding quality", metric: "onboarding score", progress: 0.18 },
   ],
   valerie: [
-    { objective: "Improve financial visibility", metric: "coverage", progress: 0.33 },
-    { objective: "Detect anomalies", metric: "anomalies flagged", progress: 0.4 },
-    { objective: "Improve forecasting accuracy", metric: "forecast accuracy", progress: 0.29 },
+    { objective: "Improve financial visibility", metric: "coverage", progress: 0.58 },
+    { objective: "Detect payment risk", metric: "at-risk invoices flagged", progress: 0.52 },
+    { objective: "Improve forecasting accuracy", metric: "forecast accuracy", progress: 0.44 },
+    { objective: "Improve partner earnings clarity", metric: "split visibility", progress: 0.6 },
+    { objective: "Identify revenue leakage", metric: "leakage found", progress: 0.38 },
+    { objective: "Increase financial recommendation accuracy", metric: "adoption rate", progress: 0.5 },
   ],
   vega: [
     { objective: "Increase intelligence quality", metric: "avg confidence", progress: 0.72 },
@@ -181,9 +213,9 @@ export function buildMockObjectives(): AgentObjectiveRow[] {
 const REP_SEED: Record<string, Omit<AgentReputationRow, "agent" | "updated_at">> = {
   vega:     { trust_score: 92, accuracy_score: 88, adoption_rate: 81, influence_score: 90, knowledge_contributions: 146, revenue_influence: 184000, collaboration_score: 87 },
   victoria: { trust_score: 94, accuracy_score: 89, adoption_rate: 84, influence_score: 86, knowledge_contributions: 128, revenue_influence: 217000, collaboration_score: 91 },
+  valerie:  { trust_score: 88, accuracy_score: 85, adoption_rate: 77, influence_score: 83, knowledge_contributions: 64, revenue_influence: 241000, collaboration_score: 79 },
   veronica: { trust_score: 71, accuracy_score: 68, adoption_rate: 55, influence_score: 64, knowledge_contributions: 22, revenue_influence: 41000, collaboration_score: 60 },
   vanessa:  { trust_score: 78, accuracy_score: 74, adoption_rate: 62, influence_score: 80, knowledge_contributions: 18, revenue_influence: 96000, collaboration_score: 76 },
-  valerie:  { trust_score: 64, accuracy_score: 61, adoption_rate: 48, influence_score: 58, knowledge_contributions: 9, revenue_influence: 23000, collaboration_score: 44 },
   vivian:   { trust_score: 60, accuracy_score: 57, adoption_rate: 44, influence_score: 52, knowledge_contributions: 7, revenue_influence: 12000, collaboration_score: 41 },
 };
 

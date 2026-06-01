@@ -168,7 +168,7 @@ export function WorkforceView() {
   if (error) {
     return (
       <VCPageWrapper>
-        <PageHeader sectionLabel="Vault Core · Layer 2" title="Workforce" />
+        <PageHeader sectionLabel="Vault Core · Workforce" title="Workforce" />
         <VCPanel><VCEmptyState icon={Users} title="Workforce unavailable" description={error} /></VCPanel>
       </VCPageWrapper>
     );
@@ -179,7 +179,7 @@ export function WorkforceView() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Layer 2 & 3"
+        sectionLabel="Vault Core · Workforce"
         title="Workforce"
         description="Executives collaborating, earning reputation, and pursuing objectives — a company operating inside software."
         badge={<VCStatusBadge label={`${activeCount} active`} variant="success" dot />}
@@ -250,7 +250,7 @@ export function WorkforceView() {
         {/* Collaboration feed */}
         <div className="xl:col-span-1 order-2 xl:order-1">
           <VCPanel accent="purple">
-            <VCPanelHeader icon={Network} label="Layer 3" title="Collaboration Feed" live />
+            <VCPanelHeader icon={Network} label="Workforce" title="Collaboration Feed" live />
             <div className="px-4 py-3 space-y-2.5 max-h-[720px] overflow-y-auto">
               {loading && <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>Loading…</p>}
               {!loading && feed.length === 0 && (

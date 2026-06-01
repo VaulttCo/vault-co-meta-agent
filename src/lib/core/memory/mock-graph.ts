@@ -189,6 +189,29 @@ export function buildMockGraph(): VaultGraph {
   edges.push(edge("rec-1", "insight-cpl", "derived_from", 0.7, "vega"));
   edges.push(edge("rec-1", "agent-vega", "contributed_by", 0.9, "vega"));
 
+  // Financial intelligence nodes (Valerie, Phase 4)
+  const financial: Array<[string, VaultNodeCategory, string, string]> = [
+    ["fin-trend", "revenue_trend", "Revenue concentration: top client 41% of revenue", "Tracked revenue concentrated in one account — dependency risk."],
+    ["fin-risk", "payment_risk", "2 invoices at risk · $7,000", "Open/past-due invoice statuses detected this cycle."],
+    ["fin-partner", "partner_earnings_signal", "Partner earnings · Nick $3,010 / Jaxon $3,990", "Recurring partner-split visibility across snapshots."],
+  ];
+  financial.forEach(([id, cat, label, summary], i) => {
+    nodes.push(
+      node(id, cat, label, {
+        summary,
+        confidence: 0.74 + i * 0.02,
+        source_agent: "valerie",
+        created_at: iso((i + 1) * 4 * HOUR),
+        updated_at: iso((i + 1) * 25 * MINUTE),
+      })
+    );
+    edges.push(edge(id, "agent-valerie", "contributed_by", 0.88, "valerie"));
+    edges.push(edge(id, "memory-core", "influences", 0.65, "valerie"));
+  });
+  // Tie payment risk to a client to show traceability
+  const riskClient = mockClients[0];
+  if (riskClient) edges.push(edge("fin-risk", `client-${riskClient.id}`, "related_to", 0.7, "valerie"));
+
   return { nodes, edges };
 }
 
@@ -270,6 +293,28 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       reviewed_by: "Nick (admin)",
       reviewed_at: iso(3 * HOUR),
       review_notes: "Approved — ops to draft the SLA. No external action taken.",
+      implemented_at: null,
+    },
+    {
+      id: nid("rec-fin-1"),
+      agent: "valerie",
+      title: "Review unpaid / open client invoices",
+      body: "2 invoices show at-risk status (open / past-due) this cycle. Recommend a human review of collection status. Valerie cannot send, charge, or modify Stripe — review only.",
+      impact: "Cash-flow risk if unresolved",
+      priority_score: 0.85,
+      status: "pending_review",
+      node_id: nid("fin-risk"),
+      metadata: { confidence: 0.8, suggested_human_action: "Review Stripe invoice status; follow up on collection." },
+      created_at: iso(90 * MINUTE),
+      influence_score: 0.72,
+      revenue_impact: "$7,000 at risk",
+      related_clients: sampleClients,
+      related_campaigns: [],
+      related_conversations: [],
+      related_node_ids: [nid("fin-risk"), nid("fin-trend")],
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
       implemented_at: null,
     },
   ];

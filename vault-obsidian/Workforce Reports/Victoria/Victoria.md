@@ -1,14 +1,17 @@
 ---
 title: "Victoria — Marketing Director"
 agent: Victoria
-status: stub
+status: active
 created: 2026-05-31
-tags: [workforce, victoria]
+tags: [workforce, victoria, active]
 ---
 
-# Victoria — Marketing Director
+# Victoria — Marketing Director 🎯
 
-**Mission:** Understand why attention converts. *(Phase 1 status: registered stub — not yet active.)*
+**Mission:** Understand how attention converts.
+**Status: ACTIVE** — activated in Phase 3 ([[ADR-0004-workforce-collaboration-engine]]).
+Code: `src/lib/core/agents/victoria/`. Reads creative/campaign data (READ-ONLY), surfaces
+winning content/hook patterns, and **opens collaborations** requesting Vega's impact analysis.
 
 ## Stores here
 - Competitor research

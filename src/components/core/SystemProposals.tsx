@@ -25,6 +25,7 @@ import {
   VCStatusBadge,
   VCChip,
   VCEmptyState,
+  VCSkeleton,
 } from "@/components/ui/VaultUI";
 import { useAuth } from "@/components/AuthProvider";
 import { STATUS_META, ACTION_META, actionsFor } from "./recommendationStatus";
@@ -147,7 +148,7 @@ export function SystemProposals() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · System Creation Engine V1"
+        sectionLabel="Vault Core · System Proposals"
         title="System Proposals"
         description="Vault Core proposing improvements to itself. Read · analyze · recommend — approval signals intent only; nothing is built automatically."
         badge={<VCStatusBadge label={`${countFor("pending_review")} pending`} variant="blue" dot />}
@@ -175,7 +176,7 @@ export function SystemProposals() {
           <VCPanel>
             <VCPanelHeader icon={Wrench} label="Queue" title="System Proposals" live />
             <div className="px-4 py-3 space-y-2.5">
-              {loading && <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Loading…</p>}
+              {loading && <VCSkeleton rows={4} className="px-1 py-1" />}
               {!loading && visible.length === 0 && (
                 <p className="text-[12px] px-1" style={{ color: "var(--t-muted)" }}>Nothing in this view.</p>
               )}

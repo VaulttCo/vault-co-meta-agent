@@ -1,6 +1,6 @@
 // Vault Core — Workforce roster (Layer 2).
 //
-// Phase 1: only VEGA is active. The other five executives are registered as
+// Active: VEGA (Phase 1) + VICTORIA (Phase 3). The remaining four executives are
 // metadata-only stubs so the UI can render the full workforce and future phases
 // can flip `active: true` and attach a runnable agent without schema changes.
 //
@@ -40,9 +40,9 @@ export const WORKFORCE: AgentMeta[] = [
     id: "victoria",
     name: "Victoria",
     title: "Marketing Director",
-    mission: "Understand why attention converts.",
+    mission: "Understand how attention converts.",
     color: ORANGE,
-    active: false,
+    active: true, // ← activated in Phase 3 (second active executive)
     tiers: ["hourly", "daily"],
   },
   {

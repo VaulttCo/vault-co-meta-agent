@@ -47,7 +47,7 @@ export function CommandHubRecommendationsPanel() {
     <VCPanel accent="orange">
       <VCPanelHeader
         icon={Lightbulb}
-        label="Vault Core · Layer 4"
+        label="Vault Core · Human Review"
         title="Recommendations"
         live
         action={

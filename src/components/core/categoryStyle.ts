@@ -28,6 +28,15 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   portal_system: { label: "Portal System", color: "#818cf8" },
   decision: { label: "Decision", color: "#f472b6" },
   initiative: { label: "Initiative", color: "#fb923c" },
+  // Phase 4 — Financial Intelligence (gold/amber/red palette; Valerie = gold)
+  financial_insight: { label: "Financial Insight", color: "#c9a84c" },
+  revenue_trend: { label: "Revenue Trend", color: "#eab308" },
+  payment_risk: { label: "Payment Risk", color: "#ef4444" },
+  failed_payment_signal: { label: "Failed Payment", color: "#f87171" },
+  partner_earnings_signal: { label: "Partner Earnings", color: "#c9a84c" },
+  forecast_signal: { label: "Forecast", color: "#f59e0b" },
+  client_revenue_signal: { label: "Client Revenue", color: "#d4b35a" },
+  commission_signal: { label: "Commission", color: "#fbbf24" },
 };
 
 export function styleFor(category: string): CategoryStyle {

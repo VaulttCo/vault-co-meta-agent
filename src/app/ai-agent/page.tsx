@@ -304,7 +304,47 @@ export default function VeronicaOverviewPage() {
         </div>
       </div>
 
-      {/* ── AI Workforce ──────────────────────────────────────── */}
+      {/* ── Vault Core — private AI operating system entry ─────── */}
+      <div
+        className="rounded-2xl px-6 py-5 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, rgba(0,129,242,0.12) 0%, rgba(167,139,250,0.06) 55%, rgba(5,7,11,0) 100%)",
+          border: "1px solid rgba(0,129,242,0.22)",
+        }}
+      >
+        <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "radial-gradient(circle at 40% 40%, rgba(0,129,242,0.30) 0%, rgba(0,129,242,0.08) 70%)", border: "1px solid rgba(0,129,242,0.32)" }}
+          >
+            <Brain size={22} style={{ color: "#0081f2" }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-[18px] font-bold tracking-wide" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-text)" }}>
+                Vault Core
+              </h2>
+              <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full" style={{ color: "#0081f2", background: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.24)" }}>
+                Private OS
+              </span>
+            </div>
+            <p className="text-[13px] mt-1 leading-relaxed max-w-2xl" style={{ color: "var(--t-text-body)" }}>
+              Private AI operating system for Vault Co. Five active executives monitoring intelligence,
+              finance, marketing, conversations, recommendations, and executive priorities — 24/7, human-approved.
+            </p>
+          </div>
+          <Link
+            href="/"
+            className="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold tracking-wide self-start"
+            style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.26) 0%, rgba(0,129,242,0.14) 100%)", border: "1px solid rgba(0,129,242,0.4)", color: "#4da6ff", boxShadow: "0 2px 14px rgba(0,129,242,0.16)" }}
+          >
+            Enter Vault Core
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+      </div>
+
+      {/* ── AI Workforce (preview — full system lives in Vault Core) ── */}
       <VAIWorkforce
         pendingPlans={pendingPlans}
         draftPlans={draftPlans}
@@ -313,6 +353,12 @@ export default function VeronicaOverviewPage() {
         hermesSkills={hermesSkills}
         hermesRunsLoading={hermesRunsLoading}
       />
+      <div className="-mt-2">
+        <Link href="/workforce" className="inline-flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "#0081f2" }}>
+          Open the full Workforce in Vault Core
+          <ArrowRight size={12} />
+        </Link>
+      </div>
 
       {/* ── Client Intelligence + Fulfillment Pipeline ─────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

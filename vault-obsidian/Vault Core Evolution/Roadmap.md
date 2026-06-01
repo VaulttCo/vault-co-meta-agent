@@ -11,7 +11,7 @@ organizational brain (Vault Memory + Obsidian).
 
 ## Layers
 1. **Vault Memory** — permanent intelligence layer ✅ (Phase 1)
-2. **Workforce Agents** — specialized executives ◐ (Vega + Victoria + Valerie + Vanessa active; 2 stubs)
+2. **Workforce Agents** — specialized executives ◐ (Vega + Victoria + Valerie + Vanessa + Veronica active; 1 stub: Vivian)
 3. **Collaboration Engine** — agents exchange knowledge ✅ (Phase 3)
 4. **Command Hub** — human review & approval ✅ (Phase 2 Part 1)
 5. **Portal Systems** — dashboards, tools, reports ◐ (pre-existing portal)
@@ -28,12 +28,16 @@ organizational brain (Vault Memory + Obsidian).
   Intelligence Layer (revenue trends, payment risk, partner earnings), Valerie↔Vega collaboration.
 - **Phase 5** — [[ADR-0006-executive-oversight-layer]]: Vanessa activated, Executive Oversight
   Layer (Priority Engine, Daily Executive Brief, Executive Queue), prioritizes across the workforce.
+- **Phase 6** — [[ADR-0007-conversation-intelligence-layer]]: Veronica activated, Conversation
+  Intelligence Layer, GHL read-only integration, Draft Approval Queue (drafts never sent).
 
 ## Next (proposed order)
 
-1. **Activate executive #5/#6** — Veronica (Lead Acquisition) + Vivian (Operations): read-only cycles.
-2. **Collaboration depth** — multi-round agent dialogue across all executives.
+1. **Activate Vivian** (Operations) — the last stub: SOPs, bottlenecks, onboarding (read-only).
+2. **Collaboration depth** — multi-round agent dialogue across all six executives.
 3. **System Creation Engine V2** — data-aware gap detection (not a single canned proposal).
+4. **Outbound (post-Phase 6, gated)** — only after explicit human-in-the-loop send controls;
+   currently NO sending exists by design.
 4. **Knowledge graph depth** — filter/search/expand-collapse, Memory Timeline, dedup.
 5. **Obsidian runtime bridge** — optionally let the runtime auto-generate briefings into the
    vault (revisit [[ADR-0003-obsidian-cognitive-layer]] "Runtime → GitHub/Storage").

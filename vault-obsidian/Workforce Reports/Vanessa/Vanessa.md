@@ -1,15 +1,24 @@
 ---
 title: "Vanessa — Executive Director"
 agent: Vanessa
-status: stub
+status: active
 created: 2026-05-31
-tags: [workforce, vanessa]
+tags: [workforce, vanessa, active]
 ---
 
-# Vanessa — Executive Director
+# Vanessa — Executive Director 🧭
 
-**Mission:** Coordinate the workforce; prioritize opportunities and risks. *(Phase 1 status:
-registered stub — not yet active.)*
+**Mission:** Coordinate the workforce and convert intelligence into executive priorities.
+**Status: ACTIVE** — activated in Phase 5 ([[ADR-0006-executive-oversight-layer]]).
+Code: `src/lib/core/agents/vanessa/`. Vanessa is the Executive Oversight Layer: she synthesizes
+Vega/Victoria/Valerie outputs, runs the Priority Engine, generates the Daily Executive Brief,
+sets executive priority on open recommendations, and pushes the top item to the Command Hub.
+
+> **Read / analyze / prioritize / recommend only.** Vanessa never sends, publishes, launches,
+> deletes, or modifies any client/Stripe system. Humans decide.
+
+## Seed brief
+- [[2026-05-31-daily-executive-brief]]
 
 ## Stores here
 - Executive briefings

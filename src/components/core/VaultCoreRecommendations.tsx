@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/VaultUI";
 import { useAuth } from "@/components/AuthProvider";
 import { styleFor } from "./categoryStyle";
-import { STATUS_META, ACTION_META, actionsFor } from "./recommendationStatus";
+import { STATUS_META, ACTION_META, actionsFor, PRIORITY_META } from "./recommendationStatus";
 import type {
   VaultRecommendationRow,
   RecommendationTrace,
@@ -93,6 +93,7 @@ export function VaultCoreRecommendations() {
   const [counts, setCounts] = useState<RecommendationCounts | null>(null);
   const [filter, setFilter] = useState<RecommendationStatus | "all">("pending_review");
   const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -186,9 +187,10 @@ export function VaultCoreRecommendations() {
       recs.filter(
         (r) =>
           (filter === "all" || r.status === filter) &&
-          (agentFilter === "all" || r.agent === agentFilter)
+          (agentFilter === "all" || r.agent === agentFilter) &&
+          (priorityFilter === "all" || r.vanessa_priority === priorityFilter)
       ),
-    [recs, filter, agentFilter]
+    [recs, filter, agentFilter, priorityFilter]
   );
 
   const countFor = (key: RecommendationStatus | "all") =>
@@ -255,6 +257,29 @@ export function VaultCoreRecommendations() {
             </div>
           )}
 
+          {/* Executive priority filter (Vanessa) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="vc-label mr-1">Exec priority</span>
+            {["all", "critical", "high", "medium", "low", "watch"].map((p) => {
+              const active = priorityFilter === p;
+              const color = p !== "all" ? PRIORITY_META[p as keyof typeof PRIORITY_META].color : "#a78bfa";
+              return (
+                <button
+                  key={p}
+                  onClick={() => setPriorityFilter(p)}
+                  className="px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-all capitalize"
+                  style={
+                    active
+                      ? { background: `${color}22`, border: `1px solid ${color}55`, color }
+                      : { background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }
+                  }
+                >
+                  {p === "all" ? "All priorities" : p}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Queue */}
           <VCPanel>
             <VCPanelHeader icon={Lightbulb} label="Queue" title="Recommendations" live />
@@ -280,7 +305,15 @@ export function VaultCoreRecommendations() {
                         <p className="text-[13.5px] font-semibold" style={{ color: "var(--t-text)" }}>{r.title}</p>
                         {r.body && <p className="text-[12px] mt-0.5 leading-snug line-clamp-2" style={{ color: "var(--t-text-body)" }}>{r.body}</p>}
                       </div>
-                      <VCStatusBadge label={sm.label} variant={sm.variant} />
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <VCStatusBadge label={sm.label} variant={sm.variant} />
+                        {r.vanessa_priority && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                            style={{ color: PRIORITY_META[r.vanessa_priority].color, background: `${PRIORITY_META[r.vanessa_priority].color}18`, border: `1px solid ${PRIORITY_META[r.vanessa_priority].color}38` }}>
+                            {PRIORITY_META[r.vanessa_priority].label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                       <VCChip label={`by ${r.agent}`} color="#22d3ee" />
@@ -383,6 +416,20 @@ function RecommendationDetail({
           <ScorePill label="influence" value={r.influence_score} color="#0081f2" />
           <ScorePill label="priority" value={r.priority_score} color="#ff8400" />
         </div>
+
+        {/* Vanessa executive priority + reason */}
+        {r.vanessa_priority && (
+          <div className="px-3.5 py-2.5 rounded-xl" style={{ background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.2)" }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="vc-label" style={{ color: "#a78bfa" }}>Vanessa priority</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                style={{ color: PRIORITY_META[r.vanessa_priority].color, background: `${PRIORITY_META[r.vanessa_priority].color}18`, border: `1px solid ${PRIORITY_META[r.vanessa_priority].color}38` }}>
+                {PRIORITY_META[r.vanessa_priority].label}
+              </span>
+            </div>
+            {r.priority_reason && <p className="text-[12px]" style={{ color: "var(--t-text-body)" }}>{r.priority_reason}</p>}
+          </div>
+        )}
 
         {r.body && <p className="text-[13px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{r.body}</p>}
 

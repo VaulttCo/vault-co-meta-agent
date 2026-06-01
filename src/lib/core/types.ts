@@ -31,14 +31,25 @@ export type VaultNodeCategory =
   | "proposal"
   | "portal_system"
   | "decision"
-  | "initiative";
+  | "initiative"
+  // Phase 4 — Financial Intelligence Layer (Valerie)
+  | "financial_insight"
+  | "revenue_trend"
+  | "payment_risk"
+  | "failed_payment_signal"
+  | "partner_earnings_signal"
+  | "forecast_signal"
+  | "client_revenue_signal"
+  | "commission_signal";
 
 export type VaultEdgeRelationship =
   | "connected_to"
   | "influences"
   | "contributed_by"
   | "impacts"
-  | "derived_from";
+  | "derived_from"
+  | "related_to"
+  | "supports";
 
 export type VaultActivityKind =
   | "insight"

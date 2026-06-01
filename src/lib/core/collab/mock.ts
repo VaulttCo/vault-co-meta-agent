@@ -107,6 +107,8 @@ export function buildMockMessages(): AgentMessageRow[] {
       "Several invoices are open/past-due this cycle — flagging cash-flow risk.", 25 * MIN, VAL_COLLAB_ID),
     m("8", "valerie", "vega", "request_analysis", "Confirm payment-risk impact",
       "Vega — corroborate the at-risk invoice signal against cross-system patterns before we escalate.", 22 * MIN, VAL_COLLAB_ID),
+    m("9", "vanessa", null, "share_context", "Executive priorities updated",
+      "Today's top priorities: Review unpaid/open invoices (critical); Replicate winning creative angle (high).", 15 * MIN, null),
   ];
 }
 
@@ -184,9 +186,12 @@ export const DEFAULT_OBJECTIVES: Record<string, Array<{ objective: string; metri
     { objective: "Increase knowledge graph value", metric: "relationship density", progress: 0.7 },
   ],
   vanessa: [
-    { objective: "Improve workforce performance", metric: "workforce score", progress: 0.55 },
-    { objective: "Improve strategic alignment", metric: "alignment index", progress: 0.5 },
-    { objective: "Improve recommendation quality", metric: "quality score", progress: 0.58 },
+    { objective: "Improve strategic alignment", metric: "alignment index", progress: 0.62 },
+    { objective: "Improve recommendation prioritization", metric: "prioritized / total", progress: 0.7 },
+    { objective: "Improve workforce performance", metric: "workforce score", progress: 0.58 },
+    { objective: "Reduce decision overload", metric: "items surfaced vs total", progress: 0.55 },
+    { objective: "Increase executive clarity", metric: "brief clarity score", progress: 0.66 },
+    { objective: "Increase high-impact recommendation adoption", metric: "high-impact adoption", progress: 0.6 },
   ],
 };
 
@@ -215,7 +220,7 @@ const REP_SEED: Record<string, Omit<AgentReputationRow, "agent" | "updated_at">>
   victoria: { trust_score: 94, accuracy_score: 89, adoption_rate: 84, influence_score: 86, knowledge_contributions: 128, revenue_influence: 217000, collaboration_score: 91 },
   valerie:  { trust_score: 88, accuracy_score: 85, adoption_rate: 77, influence_score: 83, knowledge_contributions: 64, revenue_influence: 241000, collaboration_score: 79 },
   veronica: { trust_score: 71, accuracy_score: 68, adoption_rate: 55, influence_score: 64, knowledge_contributions: 22, revenue_influence: 41000, collaboration_score: 60 },
-  vanessa:  { trust_score: 78, accuracy_score: 74, adoption_rate: 62, influence_score: 80, knowledge_contributions: 18, revenue_influence: 96000, collaboration_score: 76 },
+  vanessa:  { trust_score: 90, accuracy_score: 86, adoption_rate: 80, influence_score: 91, knowledge_contributions: 73, revenue_influence: 263000, collaboration_score: 93 },
   vivian:   { trust_score: 60, accuracy_score: 57, adoption_rate: 44, influence_score: 52, knowledge_contributions: 7, revenue_influence: 12000, collaboration_score: 41 },
 };
 

@@ -52,6 +52,7 @@ const veronicaNavItems: NavItem[] = [
   { label: "Vault Memory",      href: "/vault-memory",      icon: Brain,       permission: "canViewStrategyData" },
   { label: "Workforce",         href: "/workforce",         icon: Network,     permission: "canViewStrategyData" },
   { label: "Recommendations",   href: "/recommendations",   icon: Lightbulb,   permission: "canViewApprovals" },
+  { label: "Draft Queue",       href: "/drafts",            icon: MessageSquare, permission: "canViewApprovals" },
   { label: "System Proposals",  href: "/proposals",         icon: Wrench,      permission: "canViewApprovals" },
   { label: "Veronica Overview", href: "/ai-agent",         icon: Bot,         permission: "canViewAiBuilder" },
   { label: "Veronica Console",  href: "/ai-agent/console", icon: Sparkles,    permission: "canViewAiBuilder" },

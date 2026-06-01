@@ -50,7 +50,7 @@ interface NavItem {
 
 // ── Vault Core nav (private AI operating system) ──────────────────────────────
 const vaultCoreNavItems: NavItem[] = [
-  { label: "Executive Command", href: "/",                icon: Command,       permission: "canViewDashboard" },
+  { label: "Executive Command", href: "/vault-core",       icon: Command,       permission: "canViewDashboard" },
   { label: "Vault Memory",      href: "/vault-memory",    icon: Brain,         permission: "canViewStrategyData" },
   { label: "Workforce",         href: "/workforce",       icon: Network,       permission: "canViewStrategyData" },
   { label: "Recommendations",   href: "/recommendations", icon: Lightbulb,     permission: "canViewApprovals" },
@@ -156,7 +156,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   // ── Determine portal context ─────────────────────────────────────────────
   const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
   const isVictoria = pathname.startsWith("/victoria");
-  const VAULT_CORE_ROUTES = ["/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime"];
+  const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime"];
   const isVaultCore = VAULT_CORE_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   const portalLabel = isRevenueDashboard
@@ -271,17 +271,21 @@ export function Sidebar({ onClose }: SidebarProps) {
           </>
         )}
 
-        {/* ── Veronica portal (default) ──────────────────────────────── */}
-        {!isRevenueDashboard && !isVictoria && (
+        {/* ── Vault Core — private AI operating system ───────────────── */}
+        {isVaultCore && (
           <>
-            {/* Vault Core — private AI operating system */}
             <SectionLabel label="Vault Core" />
             {vaultCoreNavItems
               .filter((item) => permissions?.[item.permission] ?? false)
               .map(({ label, href, icon }) => (
                 <NavLink key={href} label={label} href={href} icon={icon} />
               ))}
+          </>
+        )}
 
+        {/* ── Veronica portal (default) ──────────────────────────────── */}
+        {!isRevenueDashboard && !isVictoria && !isVaultCore && (
+          <>
             <SectionLabel label="Veronica AI" />
             {veronicaNavItems
               .filter((item) => permissions?.[item.permission] ?? false)
@@ -290,6 +294,30 @@ export function Sidebar({ onClose }: SidebarProps) {
               ))}
 
             <SectionLabel label="Other Portals" />
+            <Link
+              href="/vault-core"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+              style={{ color: "rgba(77,166,255,0.8)", border: "1px solid transparent" }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#4da6ff";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(0,129,242,0.08)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,129,242,0.18)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "rgba(77,166,255,0.8)";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLElement).style.borderColor = "transparent";
+              }}
+            >
+              <Brain size={15} className="flex-shrink-0" style={{ color: "#0081f2" }} />
+              <span className="truncate">Vault Core</span>
+              <span
+                className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                style={{ color: "#0081f2", backgroundColor: "rgba(0,129,242,0.10)", border: "1px solid rgba(0,129,242,0.20)" }}
+              >
+                OS
+              </span>
+            </Link>
             <Link
               href="/victoria"
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"

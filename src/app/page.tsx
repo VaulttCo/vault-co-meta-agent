@@ -13,16 +13,13 @@ import {
   CheckSquare,
   ArrowRight,
   LogOut,
+  Brain,
 } from "lucide-react";
 import Image from "next/image";
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
-import { CommandHubRecommendationsPanel } from "@/components/core/CommandHubRecommendationsPanel";
-import { CommandHubProposalsPanel } from "@/components/core/CommandHubProposalsPanel";
-import { CommandHubExecutiveBrief } from "@/components/core/CommandHubExecutiveBrief";
-import { CommandHubDraftsPanel } from "@/components/core/CommandHubDraftsPanel";
 
 const statusStrip = [
   { label: "Auth Active",                 color: "#22c55e", bg: "rgba(34,197,94,0.10)",   border: "rgba(34,197,94,0.22)",   icon: Lock        },
@@ -210,6 +207,35 @@ export default function CommandHubPage() {
           filter: brightness(1.18);
         }
 
+        /* ── Vault Core card (flagship — blue + intelligence cyan) ── */
+        .card-vaultcore {
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          border-radius: 1rem;
+          backdrop-filter: blur(14px);
+          background: linear-gradient(145deg, rgba(0,129,242,0.16) 0%, rgba(34,211,238,0.05) 32%, rgba(7,9,14,0.97) 70%);
+          border: 1px solid rgba(0,129,242,0.34);
+          box-shadow: 0 8px 44px rgba(0,129,242,0.18), 0 1px 0 rgba(255,255,255,0.05) inset;
+          transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease, background 0.24s ease;
+        }
+        .card-vaultcore:hover {
+          transform: translateY(-7px);
+          border-color: rgba(0,129,242,0.65);
+          box-shadow: 0 24px 90px rgba(0,129,242,0.30), 0 1px 0 rgba(255,255,255,0.08) inset;
+          background: linear-gradient(145deg, rgba(0,129,242,0.24) 0%, rgba(34,211,238,0.08) 32%, rgba(7,9,14,0.97) 70%);
+        }
+        .card-vaultcore:hover .icon-ring {
+          box-shadow: 0 0 46px rgba(0,129,242,0.70);
+          transform: scale(1.07);
+          border-color: rgba(0,129,242,0.70);
+          transition: box-shadow 0.24s ease, transform 0.24s ease, border-color 0.24s ease;
+        }
+        .card-vaultcore:hover .cta-btn {
+          box-shadow: 0 4px 30px rgba(0,129,242,0.42) !important;
+          filter: brightness(1.20);
+        }
+
         /* Shared icon ring transition */
         .icon-ring {
           transition: box-shadow 0.24s ease, transform 0.24s ease, border-color 0.24s ease;
@@ -314,22 +340,6 @@ export default function CommandHubPage() {
             </p>
           </div>
 
-          {/* ── Vault Core · Executive Intelligence (home base) ─────────────── */}
-          <div className="hub-fade-up w-full flex flex-col gap-4 text-left">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#0081f2" }}>
-                Vault Core · Executive Intelligence
-              </span>
-              <span className="h-px flex-1" style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.28), transparent)" }} />
-            </div>
-            <CommandHubExecutiveBrief />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <CommandHubRecommendationsPanel />
-              <CommandHubProposalsPanel />
-            </div>
-            <CommandHubDraftsPanel />
-          </div>
-
           {/* ── Operating Systems (portals) ─────────────────────────────────── */}
           <div className="hub-fade-up w-full flex items-center gap-3">
             <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "rgba(201,168,76,0.72)" }}>
@@ -338,8 +348,56 @@ export default function CommandHubPage() {
             <span className="h-px flex-1" style={{ background: "linear-gradient(90deg, rgba(201,168,76,0.24), transparent)" }} />
           </div>
 
-          {/* ── Three portal cards ─────────────────────────────────────────── */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* ── Portal cards ───────────────────────────────────────────────── */}
+          <div className="w-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+
+            {/* Vault Core — flagship private operating system */}
+            <div className="hub-fade-up card-vaultcore">
+              <div className="p-6 flex-1 flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div
+                    className="icon-ring w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: "radial-gradient(circle at 40% 40%, rgba(0,129,242,0.32) 0%, rgba(34,211,238,0.10) 70%)", border: "1px solid rgba(0,129,242,0.42)", boxShadow: "0 0 22px rgba(0,129,242,0.32)" }}
+                  >
+                    <Brain size={26} style={{ color: "#4da6ff" }} />
+                  </div>
+                  <span className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex-shrink-0" style={{ color: "#0081f2", backgroundColor: "rgba(0,129,242,0.12)", border: "1px solid rgba(0,129,242,0.26)" }}>
+                    Private OS
+                  </span>
+                </div>
+                <div>
+                  <div className="text-[18px] font-bold tracking-wide mb-0.5" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#e8eaf0" }}>
+                    Vault Core
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(77,166,255,0.6)" }}>
+                    Private AI operating system for Vault Co
+                  </p>
+                  <p className="text-[12px] leading-relaxed" style={{ color: "rgba(255,255,255,0.40)" }}>
+                    Five active executives monitoring intelligence, finance, marketing, conversations, recommendations, drafts, runtime activity, and executive priorities — 24/7, human-approved.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-auto">
+                  <div className="px-3 py-2.5 rounded-xl" style={{ backgroundColor: "rgba(0,129,242,0.07)", border: "1px solid rgba(0,129,242,0.16)" }}>
+                    <div className="text-[20px] font-bold leading-none" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#4da6ff" }}>5</div>
+                    <div className="text-[9px] mt-0.5 leading-tight" style={{ color: "rgba(255,255,255,0.26)" }}>Active Executives</div>
+                  </div>
+                  <div className="px-3 py-2.5 rounded-xl" style={{ backgroundColor: "rgba(0,129,242,0.07)", border: "1px solid rgba(0,129,242,0.16)" }}>
+                    <div className="text-[20px] font-bold leading-none" style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "#4da6ff" }}>24/7</div>
+                    <div className="text-[9px] mt-0.5 leading-tight" style={{ color: "rgba(255,255,255,0.26)" }}>Continuous Runtime</div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  onClick={() => enterModule("/vault-core", "Entering Vault Core…")}
+                  className="cta-btn flex items-center justify-center gap-2 w-full py-3 rounded-xl text-[13px] font-bold tracking-wide cursor-pointer"
+                  style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.28) 0%, rgba(0,129,242,0.15) 100%)", border: "1px solid rgba(0,129,242,0.42)", color: "#4da6ff", boxShadow: "0 2px 14px rgba(0,129,242,0.18)" }}
+                >
+                  Enter Vault Core
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
 
             {/* 1 — Veronica Meta AI */}
             <div className="hub-fade-up-1 card-veronica">

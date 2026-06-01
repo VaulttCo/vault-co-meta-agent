@@ -334,7 +334,7 @@ export default function VeronicaOverviewPage() {
             </p>
           </div>
           <Link
-            href="/"
+            href="/vault-core"
             className="flex-shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold tracking-wide self-start"
             style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.26) 0%, rgba(0,129,242,0.14) 100%)", border: "1px solid rgba(0,129,242,0.4)", color: "#4da6ff", boxShadow: "0 2px 14px rgba(0,129,242,0.16)" }}
           >

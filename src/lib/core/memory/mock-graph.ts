@@ -238,6 +238,34 @@ export function buildMockGraph(): VaultGraph {
   edges.push(edge("exec-brief", "insight-cpl", "related_to", 0.6, "vanessa"));
   edges.push(edge("risk-summary", "fin-trend", "related_to", 0.7, "vanessa"));
 
+  // Conversation intelligence nodes (Veronica, Phase 6)
+  const conversation: Array<[string, VaultNodeCategory, string, string]> = [
+    ["convo-insight", "conversation_insight", "Conversation intelligence: 2 hot · 2 dead · 25% booked", "Reviewed 8 lead conversations — hot leads need follow-up, dead conversations are reactivation candidates."],
+    ["sms-pattern-1", "sms_pattern", "Fast response on hot leads lifts booking", "Hot inbound contacted within the hour books at a higher rate; urgency-framed confirmations reduce no-shows."],
+    ["hot-lead-1", "hot_lead_signal", "Hot lead needs follow-up: Roofing — M. Alvarez", "High-intent inbound (hail damage) awaiting reply."],
+    ["reactivation-1", "reactivation_opportunity", "Reactivation: Roofing — P. Sterling (34d cold)", "Dead conversation worth a seasonal re-engagement touch."],
+    ["appt-risk-1", "appointment_risk", "No-show recovery: HVAC — J. Carter", "Booked lead missed the appointment — recovery window open."],
+    ["sms-draft-1", "sms_draft", "follow up draft · Roofing — M. Alvarez", "Same-day scheduling reply drafted for human approval."],
+  ];
+  conversation.forEach(([id, cat, label, summary], i) => {
+    nodes.push(
+      node(id, cat, label, {
+        summary,
+        confidence: 0.78 - i * 0.02,
+        source_agent: "veronica",
+        created_at: iso((i + 1) * 22 * MINUTE),
+        updated_at: iso((i + 1) * 8 * MINUTE),
+      })
+    );
+    edges.push(edge(id, "agent-veronica", "contributed_by", 0.9, "veronica"));
+    edges.push(edge(id, "memory-core", "influences", 0.65, "veronica"));
+  });
+  // Traceability: draft requires approval (→ Command Hub / memory core); pattern ties to a lead
+  edges.push(edge("sms-draft-1", "memory-core", "requires_approval", 0.9, "veronica"));
+  edges.push(edge("hot-lead-1", "sms-pattern-1", "supports", 0.7, "veronica"));
+  const leadClient = mockClients[1];
+  if (leadClient) edges.push(edge("convo-insight", `client-${leadClient.id}`, "related_to", 0.6, "veronica"));
+
   return { nodes, edges };
 }
 
@@ -372,6 +400,30 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       implemented_at: null,
       vanessa_priority: "critical",
       priority_reason: "financial risk with revenue exposure · cross-agent validated",
+    },
+    {
+      id: nid("rec-convo-1"),
+      agent: "veronica",
+      title: "Review hot lead needing follow-up",
+      body: "Roofing — M. Alvarez sent a high-intent message (hail damage) with no reply yet. A drafted same-day follow-up is ready for approval. No message will be sent automatically.",
+      impact: "Booking risk if the lead goes cold",
+      priority_score: 0.86,
+      status: "pending_review",
+      node_id: nid("convo-insight"),
+      metadata: { confidence: 0.8, suggested_human_action: "Approve/edit the drafted SMS, then send manually. Veronica cannot send." },
+      created_at: iso(20 * MINUTE),
+      influence_score: 0.74,
+      revenue_impact: "Potential booked job",
+      related_clients: ["Roofing — M. Alvarez"],
+      related_campaigns: [],
+      related_conversations: ["lead-001"],
+      related_node_ids: [nid("convo-insight"), nid("hot-lead-1"), nid("sms-draft-1")],
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
+      implemented_at: null,
+      vanessa_priority: "high",
+      priority_reason: "high-intent lead awaiting human follow-up",
     },
   ];
 }

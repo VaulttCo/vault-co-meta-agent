@@ -23,7 +23,8 @@ import {
   VCStatusBadge,
   VCEmptyState,
 } from "@/components/ui/VaultUI";
-import type { WorkforceMember, CollaborationFeedItem } from "@/lib/core/types";
+import { PRIORITY_META } from "./recommendationStatus";
+import type { WorkforceMember, CollaborationFeedItem, ExecutiveBrief } from "@/lib/core/types";
 
 function money(n: number): string {
   if (n >= 1000) return `$${Math.round(n / 1000)}k`;
@@ -129,14 +130,16 @@ function Metric({ label, value, color }: { label: string; value: string; color: 
 export function WorkforceView() {
   const [workforce, setWorkforce] = useState<WorkforceMember[]>([]);
   const [feed, setFeed] = useState<CollaborationFeedItem[]>([]);
+  const [brief, setBrief] = useState<ExecutiveBrief | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [w, c] = await Promise.all([
+      const [w, c, b] = await Promise.all([
         fetch("/api/core/workforce").then((r) => r.json()),
         fetch("/api/core/collaboration").then((r) => r.json()),
+        fetch("/api/core/executive-brief").then((r) => r.json()),
       ]);
       if (w.error) {
         setError("You don't have access to the Workforce dashboard.");
@@ -145,6 +148,7 @@ export function WorkforceView() {
       setError(null);
       setWorkforce(w.workforce ?? []);
       setFeed(c.feed ?? []);
+      setBrief(b.brief ?? null);
     } catch {
       setError("Failed to load the Workforce dashboard.");
     } finally {
@@ -176,6 +180,45 @@ export function WorkforceView() {
         description="Executives collaborating, earning reputation, and pursuing objectives — a company operating inside software."
         badge={<VCStatusBadge label={`${activeCount} active`} variant="success" dot />}
       />
+
+      {/* Executive Brief preview (Vanessa) */}
+      {brief && (
+        <VCPanel accent="purple">
+          <VCPanelHeader icon={ClipboardList} label="Vanessa · Executive Oversight" title="Daily Executive Brief" live />
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{brief.executiveSummary}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <p className="vc-label mb-1.5">Top Priorities</p>
+                <div className="space-y-1">
+                  {brief.topPriorities.length === 0 && <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>None.</p>}
+                  {brief.topPriorities.map((p, i) => (
+                    <div key={p.recommendationId ?? i} className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded-full flex-shrink-0"
+                        style={{ color: PRIORITY_META[p.priority].color, background: `${PRIORITY_META[p.priority].color}18` }}>{PRIORITY_META[p.priority].label}</span>
+                      <span className="text-[11.5px] truncate" style={{ color: "var(--t-text-body)" }}>{p.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="vc-label mb-1.5">Suggested Human Actions</p>
+                <ul className="space-y-1">
+                  {brief.suggestedHumanActions.slice(0, 3).map((s, i) => (
+                    <li key={i} className="text-[11.5px] leading-snug" style={{ color: "var(--t-text-body)" }}>• {s}</li>
+                  ))}
+                  {brief.suggestedHumanActions.length === 0 && <li className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>None.</li>}
+                </ul>
+              </div>
+              <div>
+                <p className="vc-label mb-1.5">Signals</p>
+                <p className="text-[11px] leading-snug" style={{ color: "var(--t-muted)" }}>{brief.agentActivitySummary}</p>
+                <p className="text-[11px] mt-1.5 leading-snug" style={{ color: "var(--t-dim)" }}>{brief.systemHealth}</p>
+              </div>
+            </div>
+          </div>
+        </VCPanel>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Collaboration feed */}

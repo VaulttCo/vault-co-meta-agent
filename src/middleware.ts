@@ -12,9 +12,10 @@
  * - There is NO open fallback that allows protected routes through when Supabase
  *   is not configured. This prevents accidental exposure during misconfiguration.
  *
- * In demo mode (NEXT_PUBLIC_AUTH_MODE=demo), all route protection is skipped
- * because there are no real Supabase sessions — the client-side AuthProvider
- * handles demo auth via localStorage.
+ * In demo mode (NEXT_PUBLIC_AUTH_MODE=demo) — DEV/LOCAL ONLY — route protection is
+ * skipped because there are no real Supabase sessions. Demo mode is ignored in a
+ * production build (process.env.NODE_ENV === "production"), so it can never bypass
+ * auth in production even if the env var is set.
  *
  * Role-level access control (e.g. blocking /settings for non-admins) is handled
  * in each page component via useAuth().can() — not in middleware — because role
@@ -60,10 +61,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Demo mode: skip all server-side auth checks ───────────────────────────
-  // Client-side AuthProvider handles demo auth via localStorage.
+  // ── Demo mode: skip server-side auth checks — DEV/LOCAL ONLY ──────────────
+  // Demo mode must NEVER bypass auth in a production build. Even if
+  // NEXT_PUBLIC_AUTH_MODE=demo is mistakenly set in production env vars, we ignore
+  // it and fall through to the fail-closed Supabase session check below.
   const authMode = process.env.NEXT_PUBLIC_AUTH_MODE ?? "supabase";
-  if (authMode === "demo") {
+  if (authMode === "demo" && process.env.NODE_ENV !== "production") {
     return NextResponse.next();
   }
 

@@ -1,11 +1,17 @@
 /**
  * POST /api/integrations/ghl/sync
- * Sync GoHighLevel pipeline data for a client (read-only).
+ * Sync GoHighLevel pipeline data for a client (read-only from GHL).
+ *
+ * SCOPE: This is the LEGACY per-client GHL integration used ONLY by the Revenue
+ * Dashboard. It reads a client's own GHL sub-account (resolved from per-client
+ * credentials / integration_connections / clients.ghl_location_id). It is NOT
+ * used by Vault Core — Vault Core reads only the two Vault Co-owned locations via
+ * src/lib/core/integrations/ghl/client.ts (env-var-only). Because this endpoint
+ * can read arbitrary client sub-accounts, it is restricted to admins.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { syncGHLPipelineForClient } from "@/lib/integrations/ghl/client";
 import { resolveServerRole } from "@/lib/auth/server-role";
-import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
@@ -14,8 +20,8 @@ export async function POST(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewStrategyData")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
 
   try {

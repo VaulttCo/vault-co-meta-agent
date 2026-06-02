@@ -43,8 +43,14 @@ CREATE INDEX IF NOT EXISTS idx_message_drafts_status ON vault_message_drafts (st
 
 -- ─────────────────────────────────────────────────────────────
 -- GHL: no schema. The GoHighLevel / LeadConnector integration is READ-ONLY and
--- server-side only, reading credentials from environment variables:
---   GHL_API_KEY, GHL_LOCATION_ID   (.env.local locally, Vercel env in prod)
--- If either is missing, the integration fails safely and falls back to mock data.
+-- server-side only, reading credentials from environment variables.
+--   Vault Core (executive runtime, incl. Veronica) uses ONLY the Vault-Co-owned
+--   accounts and NEVER the generic GHL_* fallback:
+--     VAULT_CO_GHL_API_KEY, VAULT_CO_GHL_LOCATION_ID
+--     VAULT_CO_LEGACY_GHL_API_KEY, VAULT_CO_LEGACY_GHL_LOCATION_ID
+--   (.env.local locally, Vercel env in prod)
+--   NOTE: generic GHL_API_KEY / GHL_LOCATION_ID are CLIENT-TRACKING LEGACY ONLY
+--   (Revenue Dashboard per-client resolver fallback) — NOT used by Vault Core.
+-- If config is missing, the integration fails safely and falls back to mock data.
 -- Credentials are never logged, returned, exposed to the client, or committed.
 -- ─────────────────────────────────────────────────────────────

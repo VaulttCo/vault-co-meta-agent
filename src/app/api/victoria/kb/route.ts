@@ -6,14 +6,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listKBEntries, insertKBEntry } from "@/lib/victoria/db";
 import { KB_DOMAINS } from "@/lib/victoria/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 const VALID_DOMAINS = KB_DOMAINS.map((d) => d.value) as string[];
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/victoria/kb?domain=xxx&limit=50
 // ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const domain = req.nextUrl.searchParams.get("domain") ?? undefined;
   const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") ?? 50), 200);
 
@@ -30,6 +45,9 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: {
     domain: string;
     title: string;

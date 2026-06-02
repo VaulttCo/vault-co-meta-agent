@@ -7,12 +7,17 @@
  * an arbitrary clientId. NOT used by Vault Core. Admin-only.
  */
 import { NextRequest, NextResponse } from "next/server";
-import { readGHLOpportunitySnapshots } from "@/lib/integrations/ghl/client";
+import { readGHLOpportunitySnapshots, legacyGhlRoutesEnabled, LEGACY_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
 import { resolveServerRole } from "@/lib/auth/server-role";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
+  // Kill switch — disabled by default so no arbitrary client GHL data is read.
+  if (!legacyGhlRoutesEnabled()) {
+    return NextResponse.json(LEGACY_GHL_DISABLED_BODY, { status: 501 });
+  }
+
   const auth = await resolveServerRole();
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

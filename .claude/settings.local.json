@@ -12,5 +12,8 @@
       "Bash(npm install *)",
       "Bash(sort -k3)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "@21st-dev/magic"
+  ]
 }

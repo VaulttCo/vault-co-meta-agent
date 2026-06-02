@@ -8,6 +8,7 @@ import { WORKFORCE } from "../agents/registry";
 import { getRunnableAgent } from "../agents";
 import { insertAgentRun } from "../memory/db";
 import { runCollaborationCycle, runSystemCreationCycle } from "../collab/orchestrator";
+import { runIdentityAndLearningCycle } from "../identity/ingest";
 import { setLastRun } from "./kv";
 import type { AgentTier } from "../types";
 
@@ -30,6 +31,11 @@ export interface TierRunSummary {
     responses: number;
     jointRecommendations: number;
     proposals: number;
+  };
+  identity?: {
+    identityNodes: number;
+    legacyNodes: number;
+    recommendations: number;
   };
 }
 
@@ -128,6 +134,16 @@ export async function runTier(
     };
   } catch (e) {
     console.error(`[VaultCore:dispatcher] collaboration cycle failed:`, (e as Error).message);
+  }
+
+  // ── Identity Core + legacy-learning ingestion (daily tier + manual ticks).
+  // Mirrors Vault Co identity into memory and refreshes legacy GHL learnings.
+  if (tier === "daily" || trigger === "manual") {
+    try {
+      summary.identity = await runIdentityAndLearningCycle();
+    } catch (e) {
+      console.error(`[VaultCore:dispatcher] identity cycle failed:`, (e as Error).message);
+    }
   }
 
   await setLastRun(tier);

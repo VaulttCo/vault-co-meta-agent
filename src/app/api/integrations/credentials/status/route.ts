@@ -12,21 +12,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export async function GET(req: NextRequest) {
-  // ── 1. Auth check (cookie-based session client) ────────────────────────────
-  // The service role client cannot read user sessions from cookies.
-  const sessionClient = await getSupabaseSessionClient();
-  if (!sessionClient) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
-  }
-
-  const {
-    data: { user },
-  } = await sessionClient.auth.getUser();
-  if (!user) {
+  // ── 1. Auth + permission ───────────────────────────────────────────────────
+  // Credential status (even masked) exposes which clients have integrations
+  // configured, so require an authenticated user permitted to manage
+  // integrations (admin / canConnectIntegrations).
+  const auth = await resolveServerRole();
+  if (!auth) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!can(auth.role, "canConnectIntegrations")) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   // ── 2. Validate query params ───────────────────────────────────────────

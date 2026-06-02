@@ -3,10 +3,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const taskId = url.searchParams.get("task_id")?.trim();
 

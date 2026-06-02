@@ -16,8 +16,23 @@ Vault Core safety invariants (flag ANY violation as P0):
 - Read / analyze / recommend / draft only. No SMS sending, no GHL/CRM mutation, no Stripe mutation,
   no invoice sending, no workflow triggers, no client-system mutation, no auto-execution from approvals.
 - Drafts are never sent; approving a draft/recommendation/proposal only updates internal status.
-- GHL access is GET-only and scoped to Vault Co accounts (current/legacy) — never client sub-accounts,
-  never multi-location scanning.
+- GHL invariant (CORRECTED — scope matters, do NOT blanket-flag per-client credentials as P0):
+  • Vault Core EXECUTIVE RUNTIME (src/lib/core/**, src/app/api/core/**) must be Vault-Co-only for GHL:
+    it may use ONLY VAULT_CO_GHL_API_KEY / VAULT_CO_GHL_LOCATION_ID / VAULT_CO_LEGACY_GHL_API_KEY /
+    VAULT_CO_LEGACY_GHL_LOCATION_ID via src/lib/core/integrations/ghl/client.ts. It must NEVER use
+    per-client credentials, integration_connections, client_integration_credentials,
+    clients.ghl_location_id, or the generic GHL_API_KEY / GHL_LOCATION_ID fallback. Flag P0 if Vault
+    Core runtime touches any of those.
+  • CLIENT PORTAL TRACKING (Revenue Dashboard, client reporting, Meta/GHL performance, Veronica client
+    portal) MAY use per-client GHL credentials — this is allowed and expected. It is acceptable when:
+    routes are admin-only / canConnectIntegrations, credentials encrypted at rest, never logged, never
+    returned to the client, GHL access GET-only, no GHL mutation, and gated by CLIENT_GHL_TRACKING_ENABLED.
+    Do NOT classify a guarded, read-only, admin-only per-client GHL route as P0 merely for using
+    per-client credentials.
+- All GHL access remains GET-only; never multi-location scanning across arbitrary client sub-accounts
+  from Vault Core runtime.
+- Demo auth (NEXT_PUBLIC_AUTH_MODE=demo) must never bypass auth in a production build (gated on
+  NODE_ENV !== "production" in both middleware and AuthProvider).
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

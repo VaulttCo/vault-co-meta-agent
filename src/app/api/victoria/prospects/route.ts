@@ -5,12 +5,27 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { listProspects, insertProspect } from "@/lib/victoria/db";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/victoria/prospects?search=john&limit=30
 // ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const search = req.nextUrl.searchParams.get("search") ?? undefined;
   const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") ?? 30), 100);
 
@@ -23,6 +38,9 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: {
     name: string;
     company?: string;

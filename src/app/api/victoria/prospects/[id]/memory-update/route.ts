@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/victoria/memory/session-store";
 import { extractPostCallMemory } from "@/lib/victoria/agents/prospect-memory";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/victoria/prospects/:id/memory-update
@@ -21,6 +23,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id: prospectId } = await params;
 
   let body: { call_id: string };

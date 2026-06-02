@@ -1,5 +1,16 @@
 /**
- * GoHighLevel Read-Only Integration Client
+ * GoHighLevel Read-Only Integration Client — LEGACY (Revenue Dashboard ONLY)
+ *
+ * ⚠️ SCOPE: This is the legacy per-CLIENT GHL integration. It resolves a client's
+ * own GHL sub-account from per-client encrypted credentials,
+ * integration_connections, or clients.ghl_location_id, and is used ONLY by the
+ * Revenue Dashboard. Every route that imports this module is admin-only.
+ *
+ * ❌ NOT used by Vault Core. Vault Core has its own GHL client at
+ * src/lib/core/integrations/ghl/client.ts which is env-var-only and scoped to the
+ * two Vault Co-owned locations ("current"/"legacy") — it never reads client
+ * sub-accounts. Do NOT import this legacy module from src/lib/core/** or
+ * src/app/api/core/**.
  *
  * READ-ONLY ONLY. This client can:
  * - Fetch contacts, opportunities, appointments, and pipelines

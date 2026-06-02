@@ -4,8 +4,16 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export async function GET(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const url = new URL(req.url);
     const limitParam = url.searchParams.get("limit");
@@ -27,6 +35,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: { name?: string; category?: string; description?: string; instructions?: string };
   try {
     body = await req.json();
@@ -52,7 +66,7 @@ export async function POST(req: NextRequest) {
         category: body.category?.trim() || "Operator Playbook",
         description: body.description?.trim().slice(0, 300) || null,
         instructions,
-        created_by: "operator",
+        created_by: auth.userId,
         auto_created: false,
       })
       .select("id")

@@ -42,9 +42,25 @@ organizational brain (Vault Memory + Obsidian).
   (dev-ops layer; not a business executive). `/hermes-qa` skill + `scripts/hermes-qa.mjs` + Codex
   prompts/playbook. No production runtime change.
 
+## Recommendation — Victoria / Valentina role split (SPEC ONLY)
+
+See `docs/valentina-marketing-director-spec.md`. Corrected naming:
+- **Victoria = AI Sales Coach** (live sales-call product: Fathom/live-listen, rep coaching,
+  objection detection, call summaries, deal risk, follow-up coaching, sales-training intelligence).
+- **Valentina = AI Marketing Director** (marketing strategy, Meta/Google campaign direction, creative
+  strategy, offer positioning, ad diagnosis, hooks/copy/angles, content calendar, market intelligence,
+  client growth recs, coordination with Veronica for campaign drafts).
+
+The active executive currently registered as `victoria` (title "Marketing Director") performs the
+**Valentina** role. **Spec only for now — NOT activated, NO runtime change.** The rename/activation is
+deferred to a future phase (see the spec's activation checklist). Recommend doing this BEFORE
+activating Vivian so the workforce naming is correct first.
+
 ## Next (proposed order)
 
 1. **Activate Vivian** (Operations) — the last stub: SOPs, bottlenecks, onboarding (read-only).
+2. **Reposition Victoria → Valentina (AI Marketing Director)** and scope Victoria to AI Sales Coach
+   — execute `docs/valentina-marketing-director-spec.md` (spec ready; not started).
 2. **Collaboration depth** — multi-round agent dialogue across all six executives.
 3. **System Creation Engine V2** — data-aware gap detection (not a single canned proposal).
 4. **Outbound (post-Phase 6, gated)** — only after explicit human-in-the-loop send controls;

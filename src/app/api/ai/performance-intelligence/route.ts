@@ -22,6 +22,20 @@ import { can } from "@/lib/auth/permissions";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Returns a short, non-sensitive error category for logging. Never logs raw
+// provider bodies, model output, prompt context, client data, or thrown objects.
+function errCategory(e: unknown): string {
+  if (e instanceof Error) {
+    if (e.name === "AbortError") return "timeout";
+    if (e.name === "TypeError") return "network";
+    if (e.name === "SyntaxError") return "parse_error";
+    // Our own thrown errors use safe lowercase_snake codes (e.g. anthropic_http_429).
+    if (/^[a-z0-9_]+$/.test(e.message)) return e.message;
+    return e.name || "error";
+  }
+  return "unknown";
+}
+
 interface PerformanceIntelligenceResult {
   clientId: string;
   clientName: string;
@@ -237,20 +251,22 @@ Only include wins, issues, recommendations, and next actions that are directly s
           }),
         });
       } catch (fetchErr) {
-        console.error(`[performance-intelligence] Fetch failed for model ${model}:`, fetchErr);
+        console.error(`[performance-intelligence] provider=anthropic category=${errCategory(fetchErr)}`);
         throw fetchErr;
       }
       if (!response.ok) {
-        const errBody = await response.text();
-        console.error(`[performance-intelligence] Anthropic error body: ${errBody.substring(0, 400)}`);
-        throw new Error(`Anthropic API error ${response.status}: ${errBody.substring(0, 200)}`);
+        // Safe metadata only — never log/throw the raw provider response body.
+        const requestId = response.headers.get("request-id") ?? response.headers.get("anthropic-request-id") ?? "n/a";
+        console.error(`[performance-intelligence] provider=anthropic status=${response.status} request_id=${requestId}`);
+        throw new Error(`anthropic_http_${response.status}`);
       }
       const message = await response.json();
       const rawText = message.content?.[0]?.type === "text" ? message.content[0].text : "";
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        console.error(`[performance-intelligence] No JSON in response. Full text: ${rawText.substring(0, 500)}`);
-        throw new Error("No JSON found in response");
+        // Do not log raw model output — it can contain client data / prompt context.
+        console.error(`[performance-intelligence] provider=anthropic category=no_json_in_response`);
+        throw new Error("no_json_in_response");
       }
       return jsonMatch[0];
     }
@@ -260,12 +276,12 @@ Only include wins, issues, recommendations, and next actions that are directly s
       try {
         jsonText = await callAnthropic(PRIMARY_MODEL);
       } catch (primaryErr) {
-        console.error(`[performance-intelligence] Primary model failed, trying fallback:`, primaryErr);
+        console.error(`[performance-intelligence] provider=anthropic primary_failed category=${errCategory(primaryErr)} — trying fallback`);
         jsonText = await callAnthropic(FALLBACK_MODEL);
       }
       intelligence = JSON.parse(jsonText);
     } catch (err) {
-      console.error("[performance-intelligence] AI error:", err);
+      console.error(`[performance-intelligence] provider=anthropic category=${errCategory(err)}`);
       intelligence = {
         performanceSummary: "AI analysis temporarily unavailable. Raw data is shown below.",
         wins: metaSummary ? [`$${metaSummary.totalSpend.toFixed(2)} total ad spend tracked`, `${metaSummary.totalLeads} leads generated`] : [],

@@ -3,11 +3,22 @@
 // The browser uses this token to open a WebSocket directly to AssemblyAI.
 // Server-side only — the API key never leaves the server.
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 
-export async function GET(_req: NextRequest) {
+// Returns a short, non-sensitive error category. Never logs raw provider bodies,
+// thrown-object contents, tokens, or any caller data.
+function errCategory(e: unknown): string {
+  if (e instanceof Error) {
+    if (e.name === "AbortError") return "timeout";
+    if (e.name === "TypeError") return "network";
+    return e.name || "error";
+  }
+  return "unknown";
+}
+
+export async function GET() {
   // ── Auth: never issue a third-party transcription token to an unauthenticated
   // or unauthorized caller. AI-builder access is required (same gate as the rest
   // of the Victoria live-call feature). ───────────────────────────────────────
@@ -46,8 +57,9 @@ export async function GET(_req: NextRequest) {
     });
 
     if (!response.ok) {
-      const body = await response.text();
-      console.error("[Victoria:Transcription] AssemblyAI token request failed:", response.status, body);
+      // Safe metadata only — never log the raw provider response body.
+      const requestId = response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? "n/a";
+      console.error(`[Victoria:Transcription] provider=assemblyai status=${response.status} request_id=${requestId}`);
       return NextResponse.json({
         available: false,
         provider: "web_speech_api",
@@ -63,7 +75,7 @@ export async function GET(_req: NextRequest) {
       token: data.token,
     });
   } catch (err) {
-    console.error("[Victoria:Transcription] Token fetch error:", err);
+    console.error(`[Victoria:Transcription] provider=assemblyai category=${errCategory(err)}`);
     return NextResponse.json({
       available: false,
       provider: "web_speech_api",

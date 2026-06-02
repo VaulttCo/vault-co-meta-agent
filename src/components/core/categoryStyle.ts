@@ -61,6 +61,19 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   sms_draft: { label: "SMS Draft", color: "#0070d4" },
   hot_lead_signal: { label: "Hot Lead", color: "#ef4444" },
   dead_conversation_signal: { label: "Dead Conversation", color: "#6b7a99" },
+  // Phase 6.8 — Vault Co Identity Core (gold/blue — company DNA) + legacy learning
+  company_identity: { label: "Company Identity", color: "#c9a84c" },
+  brand_voice: { label: "Brand Voice", color: "#e8c97a" },
+  target_market: { label: "Target Market", color: "#0081f2" },
+  core_offer: { label: "Core Offer", color: "#22c55e" },
+  sales_positioning: { label: "Sales Positioning", color: "#38bdf8" },
+  objection_handling: { label: "Objection Handling", color: "#fb923c" },
+  messaging_principle: { label: "Messaging Principle", color: "#a78bfa" },
+  differentiation: { label: "Differentiation", color: "#c9a84c" },
+  proof_point: { label: "Proof Point", color: "#22c55e" },
+  pricing_context: { label: "Pricing Context", color: "#d4b35a" },
+  internal_principle: { label: "Internal Principle", color: "#818cf8" },
+  legacy_learning: { label: "Legacy Learning", color: "#f59e0b" },
 };
 
 export function styleFor(category: string): CategoryStyle {

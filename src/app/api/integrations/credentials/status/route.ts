@@ -55,8 +55,14 @@ export async function GET(req: NextRequest) {
   const rows = rowsRaw as any[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const metaRow = rows?.find((r: any) => r.provider === "meta");
+
+  // ── GHL kill switch ────────────────────────────────────────────────────────
+  // Per-client GHL is disabled by default (Vault Core invariant). When off, do NOT
+  // reveal whether a client has GHL credentials stored — return a disabled marker.
+  // Meta status is unaffected.
+  const legacyGhlEnabled = process.env.LEGACY_GHL_ROUTES_ENABLED === "true";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ghlRow = rows?.find((r: any) => r.provider === "ghl");
+  const ghlRow = legacyGhlEnabled ? rows?.find((r: any) => r.provider === "ghl") : null;
 
   return NextResponse.json({
     meta: {
@@ -65,11 +71,13 @@ export async function GET(req: NextRequest) {
       accountLabel: metaRow?.account_label ?? null,
       updatedAt: metaRow?.updated_at ?? null,
     },
-    ghl: {
-      saved: Boolean(ghlRow),
-      accountId: ghlRow?.account_id ?? null,
-      accountLabel: ghlRow?.account_label ?? null,
-      updatedAt: ghlRow?.updated_at ?? null,
-    },
+    ghl: legacyGhlEnabled
+      ? {
+          saved: Boolean(ghlRow),
+          accountId: ghlRow?.account_id ?? null,
+          accountLabel: ghlRow?.account_label ?? null,
+          updatedAt: ghlRow?.updated_at ?? null,
+        }
+      : { saved: false, disabled: true, accountId: null, accountLabel: null, updatedAt: null },
   });
 }

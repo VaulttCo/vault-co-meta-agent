@@ -128,18 +128,21 @@ export interface ResolvedGHLCredentials {
  * Resolve GoHighLevel credentials for a specific client.
  * Returns null if no credentials are available.
  *
- * ⚠️ LEGACY / Revenue Dashboard ONLY. This resolves a client's OWN GHL sub-account
- * (per-client encrypted creds → integration_connections → global env). It is
- * GATED behind LEGACY_GHL_ROUTES_ENABLED and returns null by default. Vault Core
- * NEVER calls this — Vault Core uses the env-only core client
- * (src/lib/core/integrations/ghl/client.ts) scoped to the VAULT_CO_* locations.
+ * ⚠️ CLIENT TRACKING ONLY (client portal / Revenue Dashboard / reporting). This
+ * resolves a client's OWN GHL sub-account (per-client encrypted creds →
+ * integration_connections → generic env). Per-client GHL tracking is ENABLED by
+ * default; it returns null ONLY when CLIENT_GHL_TRACKING_ENABLED="false". Vault
+ * Core NEVER calls this — Vault Core uses the env-only core client
+ * (src/lib/core/integrations/ghl/client.ts) scoped to the VAULT_CO_* locations and
+ * does NOT use the generic GHL_* fallback.
  */
 export async function resolveGHLCredentials(
   clientId: string
 ): Promise<ResolvedGHLCredentials | null> {
-  // ── 0. Kill switch — per-client GHL credential resolution is OFF by default ──
-  // This closes the per-client GHL sub-account path even if a caller reaches here.
-  if (process.env.LEGACY_GHL_ROUTES_ENABLED !== "true") {
+  // ── 0. Feature flag — per-client GHL resolution is ON by default (client
+  // tracking). Returns null only when explicitly disabled. Never reached by Vault
+  // Core runtime, which does not call this resolver at all. ──
+  if (process.env.CLIENT_GHL_TRACKING_ENABLED === "false") {
     return null;
   }
 

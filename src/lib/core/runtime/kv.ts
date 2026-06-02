@@ -14,10 +14,28 @@ const lockKey = (tier: AgentTier) => `${NS}:lock:tick:${tier}`;
 const lastRunKey = (tier: AgentTier) => `${NS}:lastrun:${tier}`;
 
 /**
+ * Tier-aware lock TTL (seconds). The TTL must be:
+ *   • long enough to cover a real run of that tier (so a slow run doesn't lose its
+ *     lock mid-cycle and let a concurrent fire double-run), and
+ *   • comfortably shorter than that tier's cron interval (so a CRASHED run's lock
+ *     auto-expires before the next same-tier fire and never wedges the tier).
+ * Frequent tiers get short TTLs (small cron gap); daily/weekly/monthly get longer
+ * TTLs since their runs can take longer and their intervals are huge.
+ */
+const TIER_LOCK_TTL_SECONDS: Record<AgentTier, number> = {
+  "5min": 240,    // < 300s gap
+  "15min": 600,   // < 900s gap
+  hourly: 1800,   // 30m — well under the 3600s gap, covers long hourly runs
+  daily: 3000,    // 50m — tiny vs 24h gap
+  weekly: 3000,   // 50m — tiny vs 7d gap
+  monthly: 3000,  // 50m — tiny vs ~30d gap
+};
+
+/**
  * Distributed tier lock to prevent overlapping cycles. Acquisition is ATOMIC —
  * it uses SET ... NX EX (via kvSetNX) so two concurrent ticks can never both win
  * the lock (no check-then-set race). The TTL auto-expires so a crashed run never
- * wedges the tier.
+ * wedges the tier, and is tier-aware (see TIER_LOCK_TTL_SECONDS).
  *
  * Returns an opaque owner token on success, or null if the lock is already held.
  * Pass the token back to releaseTickLock so a slow/overrun run can only release
@@ -25,10 +43,11 @@ const lastRunKey = (tier: AgentTier) => `${NS}:lastrun:${tier}`;
  */
 export async function acquireTickLock(
   tier: AgentTier,
-  ttlSeconds = 280
+  ttlSeconds?: number
 ): Promise<string | null> {
+  const ttl = ttlSeconds ?? TIER_LOCK_TTL_SECONDS[tier] ?? 280;
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  const won = await kvSetNX(lockKey(tier), token, ttlSeconds);
+  const won = await kvSetNX(lockKey(tier), token, ttl);
   return won ? token : null;
 }
 

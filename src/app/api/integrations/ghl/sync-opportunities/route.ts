@@ -2,11 +2,16 @@
  * POST /api/integrations/ghl/sync-opportunities
  * Read GHL opportunities and upsert per-opportunity snapshots to Supabase.
  * READ-ONLY from GHL — never modifies contacts, opportunities, or pipelines in GHL.
+ *
+ * SCOPE: LEGACY per-client GHL integration used ONLY by the Revenue Dashboard. It
+ * reads a client's own GHL sub-account by clientId. It is NOT used by Vault Core
+ * (Vault Core uses src/lib/core/integrations/ghl/client.ts, env-var-only, scoped
+ * to the two Vault Co-owned locations). Restricted to admins because it can read
+ * arbitrary client sub-accounts.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { syncGHLOpportunitiesForClient } from "@/lib/integrations/ghl/client";
 import { resolveServerRole } from "@/lib/auth/server-role";
-import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
@@ -15,8 +20,8 @@ export async function POST(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewStrategyData")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
 
   try {

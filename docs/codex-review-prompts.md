@@ -3,6 +3,17 @@
 Reusable, read-only Codex prompts. Codex **reviews and reports**; it does not edit files unless a
 human explicitly approves. Pair with `/hermes-qa`.
 
+> **Workforce naming (role split — for audit context):**
+> - **Victoria = AI Sales Coach** (live sales-call product: `src/lib/victoria/**`, `/api/victoria/**`,
+>   `/victoria`). Do NOT flag Victoria for not being a marketing director, and do NOT expect Victoria
+>   to do marketing.
+> - **Valentina = AI Marketing Director** — **SPEC ONLY** (`docs/valentina-marketing-director-spec.md`).
+>   Valentina is intentionally **not active**, not in the tick, not a runnable agent. Do NOT flag her
+>   absence from runtime as a defect.
+> - Transitional reality: the active executive registered as `victoria` (title "Marketing Director")
+>   currently performs the Valentina role; its rename/activation is a deferred future phase. Flag a
+>   NEW finding only if runtime behavior actually changes — not for the documented transitional naming.
+
 ---
 
 ## Reusable Vault Core audit prompt (the default)

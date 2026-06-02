@@ -9,8 +9,23 @@ import {
   seedRepProfilesIfEmpty,
 } from "@/lib/victoria/reps/profiles";
 import type { RepProfile } from "@/lib/victoria/reps/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET(_req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   // Ensure at least Nick + Jaxon exist
   await seedRepProfilesIfEmpty().catch(console.error);
 
@@ -19,6 +34,9 @@ export async function GET(_req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const body = (await req.json().catch(() => null)) as Partial<RepProfile> | null;
   if (!body?.name?.trim()) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });

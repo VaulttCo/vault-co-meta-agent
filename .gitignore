@@ -42,6 +42,3 @@ yarn-error.log*
 next-env.d.ts
 .claude/worktrees/
 .claude/worktrees/
-
-# Phase 7 Mission Control WIP — parked, NOT for production. Remove this line when Phase 7 begins.
-src/components/core/mission/

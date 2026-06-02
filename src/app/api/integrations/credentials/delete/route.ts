@@ -45,6 +45,15 @@ export async function DELETE(req: NextRequest) {
       { status: 400 }
     );
   }
+  // ── GHL kill switch ────────────────────────────────────────────────────────
+  // The per-client GHL credential path is disabled by default (Vault Core invariant).
+  // Meta credential deletion is unaffected.
+  if (provider === "ghl" && process.env.LEGACY_GHL_ROUTES_ENABLED !== "true") {
+    return NextResponse.json(
+      { error: "Per-client GHL credential storage is disabled. Vault Core uses VAULT_CO_* env vars only." },
+      { status: 501 }
+    );
+  }
 
   // ── 4. Delete from Supabase ────────────────────────────────────────────────
   const { error } = await supabase

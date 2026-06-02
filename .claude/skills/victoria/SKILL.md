@@ -1,14 +1,21 @@
 ---
 name: victoria
-description: Recall and update Victoria's knowledge (Marketing Director) from the Vault Core Obsidian vault. Understand why attention converts. Use when the user invokes /victoria, asks what Victoria knows/recommends, or wants to capture Victoria-domain knowledge (Competitor Intelligence, Marketing Intelligence, hooks, scripts, offers). Reads vault-obsidian/Workforce Reports/Victoria plus related intelligence folders.
+description: Recall and update Victoria's knowledge (AI Sales Coach) from the Vault Core Obsidian vault. Use when the user invokes /victoria, asks what Victoria knows/recommends, or wants to capture Victoria-domain knowledge (live sales-call support, rep coaching, objection detection, call summaries, deal risk, follow-up coaching, sales-training intelligence). NOTE: the AI Marketing Director role is being repositioned as Valentina (see docs/valentina-marketing-director-spec.md); legacy marketing-intelligence notes filed under Victoria belong to that Valentina-to-be role. Reads vault-obsidian/Workforce Reports/Victoria plus related folders.
 ---
 
-# /victoria — Victoria · Marketing Director
+# /victoria — Victoria · AI Sales Coach
 
-**Mission:** Understand why attention converts.
+**Scope:** live sales call support, Fathom/live-listen, rep coaching, objection detection, sales call
+summaries, deal risk, follow-up coaching, sales-training intelligence.
 
-Victoria's knowledge lives in `vault-obsidian/Workforce Reports/Victoria/` and related intelligence
-folders. This skill keeps every agent working from the same understanding of the company.
+> ⚠️ **Role split:** Victoria = **AI Sales Coach**. The **AI Marketing Director** function (campaign
+> direction, creative strategy, offer positioning, hooks/copy/angles, content calendar, market
+> intelligence) is being repositioned as **Valentina** — see `docs/valentina-marketing-director-spec.md`.
+> Any legacy marketing-intelligence notes in this folder describe the Valentina-to-be role; Valentina
+> is spec-only (not an active agent yet).
+
+Victoria's knowledge lives in `vault-obsidian/Workforce Reports/Victoria/` and related folders.
+This skill keeps every agent working from the same understanding of the company.
 
 ## Recall
 1. Pull Victoria's notes:

@@ -6,11 +6,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/victoria/memory/session-store";
 import { runActionEngine } from "@/lib/victoria/agents/action-engine";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ call_id: string }> }
 ) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { call_id } = await params;
 
   if (!call_id) {

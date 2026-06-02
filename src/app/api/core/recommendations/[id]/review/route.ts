@@ -60,6 +60,23 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
+  // ── Action-level governance ───────────────────────────────────────────────
+  // canViewApprovals (admin + media_buyer) gates the route, but the privileged
+  // actions are restricted further: approve needs approval authority, implement
+  // is admin-only. reject/archive/request_revision stay at canViewApprovals.
+  if (action === "approve" && !(auth.role === "admin" || can(auth.role, "canApproveCampaigns"))) {
+    return NextResponse.json(
+      { error: "Forbidden — approval authority required to approve" },
+      { status: 403 }
+    );
+  }
+  if (action === "implement" && auth.role !== "admin") {
+    return NextResponse.json(
+      { error: "Forbidden — admin role required to implement" },
+      { status: 403 }
+    );
+  }
+
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) || null : null;
 
   try {

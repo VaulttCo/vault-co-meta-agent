@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import type { CampaignImprovementPatch } from "@/lib/council/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 // maxDuration tells Vercel Pro to allow up to 45s; internal abort fires at 30s.
@@ -161,6 +163,13 @@ function safeStrArr(obj: Record<string, unknown>, key: string, maxItems: number,
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  // ── Auth: campaign optimization is a staff AI action ────────────────────────
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ patch: null, error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canGenerateCampaigns")) {
+    return NextResponse.json({ patch: null, error: "Forbidden" }, { status: 403 });
+  }
+
   const apiKey = resolveAnthropicKey();
   if (!apiKey) {
     return NextResponse.json(

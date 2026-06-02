@@ -89,6 +89,17 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  // ── GHL kill switch ────────────────────────────────────────────────────────
+  // Storing per-client GHL credentials creates a client-sub-account access path,
+  // which violates the Vault Core invariant (GHL = Vault-Co env-only). Disabled by
+  // default; only the legacy Revenue Dashboard may opt in via LEGACY_GHL_ROUTES_ENABLED.
+  // Meta credential storage is unaffected.
+  if (provider === "ghl" && process.env.LEGACY_GHL_ROUTES_ENABLED !== "true") {
+    return NextResponse.json(
+      { error: "Per-client GHL credential storage is disabled. Vault Core uses VAULT_CO_* env vars only." },
+      { status: 501 }
+    );
+  }
   if (!credentials || typeof credentials !== "object") {
     return NextResponse.json({ error: "credentials object is required." }, { status: 400 });
   }

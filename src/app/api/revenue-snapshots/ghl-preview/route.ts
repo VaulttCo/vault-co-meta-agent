@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getGHLClosedWonForMonth, legacyGhlRoutesEnabled, LEGACY_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
+import { getGHLClosedWonForMonth, clientGhlTrackingEnabled, CLIENT_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
 import { resolveGHLCredentials } from "@/lib/integrations/credential-resolver";
 import type { GHLPreviewResult } from "@/lib/revenue/types";
 
@@ -24,13 +24,12 @@ function maskId(id: string | null | undefined): string {
 }
 
 export async function POST(req: NextRequest) {
-  // Kill switch — this route reads a client's own GHL sub-account via the LEGACY
-  // per-client client. Disabled by default (501). Enabling LEGACY_GHL_ROUTES_ENABLED
-  // is ONLY for controlled Revenue Dashboard legacy client GHL preview — it is NOT
-  // used by Vault Core runtime (Vault Core uses the env-only core client). GET-only,
-  // no GHL mutation either way.
-  if (!legacyGhlRoutesEnabled()) {
-    return NextResponse.json(LEGACY_GHL_DISABLED_BODY, { status: 501 });
+  // Feature flag — this route reads a client's own GHL sub-account (per-client
+  // tracking) for the Revenue Dashboard preview. Admin-only, GET-only, no GHL
+  // mutation. Enabled by default; set CLIENT_GHL_TRACKING_ENABLED=false to disable
+  // (501). NOT used by Vault Core runtime (Vault Core uses the env-only core client).
+  if (!clientGhlTrackingEnabled()) {
+    return NextResponse.json(CLIENT_GHL_DISABLED_BODY, { status: 501 });
   }
 
   const auth = await resolveServerRole();

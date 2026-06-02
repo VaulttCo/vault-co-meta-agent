@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Claude Code worktrees (gitignored) contain duplicate src + built .next output.
+    // Never lint them — they are transient and not part of this project's sources.
+    ".claude/**",
   ]),
 ]);
 

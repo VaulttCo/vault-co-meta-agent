@@ -4,6 +4,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 function detectRuntime(): string {
   if (process.env.VERCEL_ENV) return `vercel-${process.env.VERCEL_ENV}`;
@@ -25,6 +26,10 @@ export async function GET() {
   const auth = await resolveServerRole();
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Authenticated but not permitted → 403. AI provider config is an AI-builder concern.
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const provider = ((process.env.AI_PROVIDER ?? "").trim().toLowerCase()) || "mock";

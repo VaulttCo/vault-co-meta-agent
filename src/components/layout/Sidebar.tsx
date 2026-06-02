@@ -35,6 +35,7 @@ import {
   Network,
   Wrench,
   Command,
+  Fingerprint,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -57,6 +58,7 @@ const vaultCoreNavItems: NavItem[] = [
   { label: "Drafts",            href: "/drafts",          icon: MessageSquare, permission: "canViewApprovals" },
   { label: "System Proposals",  href: "/proposals",       icon: Wrench,        permission: "canViewApprovals" },
   { label: "Runtime Activity",  href: "/runtime",         icon: Activity,      permission: "canViewStrategyData" },
+  { label: "Identity Core",     href: "/vault-core/identity", icon: Fingerprint, permission: "canViewStrategyData" },
 ];
 
 // ── Veronica portal nav ───────────────────────────────────────────────────────

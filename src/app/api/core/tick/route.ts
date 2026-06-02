@@ -49,8 +49,8 @@ async function handleTick(
   tier: AgentTier,
   trigger: "cron" | "manual"
 ): Promise<NextResponse> {
-  const locked = await acquireTickLock(tier);
-  if (!locked) {
+  const lockToken = await acquireTickLock(tier);
+  if (!lockToken) {
     return NextResponse.json(
       { ok: false, tier, skipped: true, reason: "Another run for this tier is in progress" },
       { status: 200 }
@@ -63,7 +63,7 @@ async function handleTick(
     console.error("[VaultCore:tick]", (e as Error).message);
     return NextResponse.json({ ok: false, error: "Tick failed" }, { status: 500 });
   } finally {
-    await releaseTickLock(tier);
+    await releaseTickLock(tier, lockToken);
   }
 }
 

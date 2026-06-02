@@ -26,6 +26,20 @@ import type { ClientIntelligence } from "@/lib/clientIntelligence";
 import type { Client } from "@/lib/data";
 import type { MetaCampaignSnapshotRow, GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 
+// Returns a short, non-sensitive error category for logging. Never logs raw
+// provider bodies, model output, prompts, client data, or thrown objects.
+function errCategory(e: unknown): string {
+  if (e instanceof Error) {
+    if (e.name === "AbortError") return "timeout";
+    if (e.name === "TypeError") return "network";
+    if (e.name === "SyntaxError") return "parse_error";
+    // Our own thrown errors use safe lowercase_snake codes (e.g. anthropic_http_429).
+    if (/^[a-z0-9_]+$/.test(e.message)) return e.message;
+    return e.name || "error";
+  }
+  return "unknown";
+}
+
 // Read clients using the service role key so RLS is not a barrier and real UUIDs are returned.
 // SupabaseDataProvider.getClients() uses the browser client which has no server session,
 // causing RLS to block reads and fall back to mock slugs ("kaczmar-builders") instead of UUIDs.
@@ -310,12 +324,15 @@ export async function POST(req: NextRequest) {
         });
 
         if (!response.ok) {
-          throw new Error(`Anthropic API ${response.status}: ${await response.text().catch(() => response.statusText)}`);
+          // Safe metadata only — never log/throw the raw provider response body.
+          const requestId = response.headers.get("request-id") ?? response.headers.get("anthropic-request-id") ?? "n/a";
+          console.error(`[POST /api/veronica] provider=anthropic status=${response.status} request_id=${requestId}`);
+          throw new Error(`anthropic_http_${response.status}`);
         }
 
         const data = await response.json();
         const text: string = data?.content?.[0]?.text ?? "";
-        if (!text) throw new Error("Empty response from Anthropic");
+        if (!text) throw new Error("empty_response");
 
         // Parse JSON — handle any stray fences
         let jsonStr = text.trim();
@@ -349,7 +366,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(result);
       } catch (err) {
-        console.error("[POST /api/veronica] Anthropic error — falling back to mock:", err);
+        console.error(`[POST /api/veronica] provider=anthropic category=${errCategory(err)} — falling back to mock`);
         // Fall through to mock
       }
     }
@@ -364,7 +381,7 @@ export async function POST(req: NextRequest) {
       operatorTaskSuggestions: operatorTaskSuggestions.length > 0 ? operatorTaskSuggestions : undefined,
     });
   } catch (err) {
-    console.error("[POST /api/veronica]", err);
+    console.error(`[POST /api/veronica] category=${errCategory(err)}`);
     return NextResponse.json(
       {
         reply:

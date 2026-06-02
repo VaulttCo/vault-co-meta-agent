@@ -3,8 +3,11 @@
 // SCOPE (Phase 6.8): Vault Core reads ONLY two explicitly-labeled Vault Co-owned
 // sub-accounts and NEVER client sub-accounts:
 //   • "current" → VAULT_CO_GHL_API_KEY / VAULT_CO_GHL_LOCATION_ID
-//                 (falls back to generic GHL_API_KEY / GHL_LOCATION_ID for back-compat)
 //   • "legacy"  → VAULT_CO_LEGACY_GHL_API_KEY / VAULT_CO_LEGACY_GHL_LOCATION_ID
+// Vault Core uses ONLY these Vault-Co-owned vars. It does NOT fall back to the
+// generic GHL_API_KEY / GHL_LOCATION_ID (those are legacy/client-tracking only),
+// and it never reads per-client credentials, integration_connections, or
+// clients.ghl_location_id.
 // There is NO multi-location scanning and NO looping over locations. A read is
 // always scoped to one of these two configured locations.
 //
@@ -38,9 +41,10 @@ function resolveConfig(account: GhlAccount): GhlConfig | null {
     if (!apiKey || !locationId) return null;
     return { apiKey, locationId };
   }
-  // current — Vault Co-specific vars first, generic GHL_* as backward-compat fallback.
-  const apiKey = process.env.VAULT_CO_GHL_API_KEY?.trim() || process.env.GHL_API_KEY?.trim();
-  const locationId = process.env.VAULT_CO_GHL_LOCATION_ID?.trim() || process.env.GHL_LOCATION_ID?.trim();
+  // current — Vault Co-owned vars ONLY. No generic GHL_* fallback (Vault Core must
+  // never resolve GHL credentials outside the Vault-Co-owned accounts).
+  const apiKey = process.env.VAULT_CO_GHL_API_KEY?.trim();
+  const locationId = process.env.VAULT_CO_GHL_LOCATION_ID?.trim();
   if (!apiKey || !locationId) return null;
   return { apiKey, locationId };
 }

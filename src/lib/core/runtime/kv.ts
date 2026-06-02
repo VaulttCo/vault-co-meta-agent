@@ -5,7 +5,7 @@
 // absent. So locking/state work in dev with zero infrastructure, and become
 // durable in production once UPSTASH_REDIS_REST_URL / _TOKEN are set.
 
-import { kvGet, kvSet, kvDel, kvSetNX } from "@/lib/victoria/redis";
+import { kvGet, kvSet, kvSetNX, kvDelIfMatch } from "@/lib/victoria/redis";
 import type { AgentTier } from "../types";
 
 const NS = "vaultcore";
@@ -33,16 +33,13 @@ export async function acquireTickLock(
 }
 
 /**
- * Releases the lock only if the stored token still matches this owner's token.
- * If another run has since acquired the lock (e.g. after a TTL expiry), this is a
- * no-op so we never delete someone else's lock.
+ * Releases the lock only if the stored token still matches this owner's token,
+ * using an ATOMIC compare-and-delete. If another run has since acquired the lock
+ * (e.g. after a TTL expiry), this is a no-op — we never delete someone else's lock,
+ * and there is no get-then-del race window.
  */
 export async function releaseTickLock(tier: AgentTier, token: string): Promise<void> {
-  const key = lockKey(tier);
-  const current = await kvGet<string>(key);
-  if (current === token) {
-    await kvDel(key);
-  }
+  await kvDelIfMatch(lockKey(tier), token);
 }
 
 export async function setLastRun(tier: AgentTier): Promise<void> {

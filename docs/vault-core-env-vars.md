@@ -21,14 +21,28 @@ For local dev, use `.env.local` (gitignored; never commit). `.env.example` docum
 | `UPSTASH_REDIS_REST_URL` | **server-only** | Tick locks + last-run state | Falls back to in-memory map (per-instance; fine for dev, weak for prod locking) |
 | `UPSTASH_REDIS_REST_TOKEN` | **server-only** | Upstash auth | Same as above |
 
-## Optional — Phase 6 live conversation data (GoHighLevel / LeadConnector)
+## Optional — GoHighLevel / LeadConnector
+
+### Vault Core executive runtime (Vault-Co-owned accounts ONLY)
+Vault Core (incl. Veronica) reads GHL via `src/lib/core/integrations/ghl/client.ts` and uses ONLY these
+Vault-Co-owned vars. It does NOT fall back to generic `GHL_*`, and never reads per-client sub-accounts.
 
 | Variable | Visibility | Purpose | Without it |
 |---|---|---|---|
-| `GHL_API_KEY` | **server-only** | Veronica reads lead conversations (READ-ONLY) | Veronica uses **mock conversation data** (fail-safe) |
-| `GHL_LOCATION_ID` | **server-only** | Scopes GHL reads to the location | Same — mock fallback |
+| `VAULT_CO_GHL_API_KEY` | **server-only** | Vault Core reads the current Vault Co GHL location (READ-ONLY) | Vault Core uses **mock data** (fail-safe) |
+| `VAULT_CO_GHL_LOCATION_ID` | **server-only** | Scopes the "current" Vault Co read | Same — mock fallback |
+| `VAULT_CO_LEGACY_GHL_API_KEY` | **server-only** | Vault Core reads the legacy Vault Co GHL location (READ-ONLY) | "legacy" account unavailable |
+| `VAULT_CO_LEGACY_GHL_LOCATION_ID` | **server-only** | Scopes the "legacy" Vault Co read | Same |
+
+### Client-tracking (NOT Vault Core) — per-client GHL for the client portal / Revenue Dashboard
+| Variable | Visibility | Purpose | Without it |
+|---|---|---|---|
+| `CLIENT_GHL_TRACKING_ENABLED` | **server-only** | Master switch for per-client GHL tracking routes (`/api/integrations/ghl/*`, `ghl-preview`, credential save/delete/status for GHL). **Enabled by default**; set to `"false"` to hard-disable (routes return 501). | Defaults to enabled |
+| `GHL_API_KEY` *(legacy)* | **server-only** | **Legacy / client-tracking ONLY** — generic fallback used by the per-client credential resolver. **Never used by Vault Core.** | Per-client resolver falls back to per-client encrypted creds / integration_connections |
+| `GHL_LOCATION_ID` *(legacy)* | **server-only** | **Legacy / client-tracking ONLY** — generic location fallback. **Never used by Vault Core.** | Same |
 
 > ⚠️ **The previously-exposed GHL key is COMPROMISED. Do NOT use it in production.** Revoke it in GHL, create a new key, and set the new value only in Vercel env. See `docs/vault-core-security-checklist.md`.
+> Per-client GHL credentials (stored via `/api/integrations/credentials/save`) are encrypted at rest, admin-only, GET-only, never logged, and never returned to the client.
 
 ## Other keys (pre-existing portal features, not required for Vault Core)
 `AI_PROVIDER`, `OPENAI_API_KEY`, `META_ACCESS_TOKEN`, `META_APP_SECRET`, `STRIPE_SECRET_KEY`, `ASSEMBLYAI_API_KEY` — all server-only, all optional, all documented in `.env.example`. Vault Core does not require any of them.

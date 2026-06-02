@@ -9,6 +9,18 @@ import { processTranscriptChunk } from "@/lib/victoria/agents/orchestrator";
 import { createDefaultSession } from "@/lib/victoria/types";
 import { insertVictoriaCall, updateVictoriaCall } from "@/lib/victoria/db";
 import type { StartCallRequest, SubmitChunkRequest } from "@/lib/victoria/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/victoria/test-call
@@ -19,6 +31,9 @@ import type { StartCallRequest, SubmitChunkRequest } from "@/lib/victoria/types"
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: Record<string, unknown>;
 
   try {
@@ -210,6 +225,9 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const callId = req.nextUrl.searchParams.get("call_id");
   if (!callId) {
     return NextResponse.json({ error: "call_id query param required" }, { status: 400 });

@@ -3,7 +3,7 @@
 // Renders inside the app shell, so the Vault Core sidebar section is shown.
 
 import Link from "next/link";
-import { Brain, Network, Activity, ArrowRight, type LucideIcon } from "lucide-react";
+import { Brain, Network, Activity, Fingerprint, ArrowRight, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { VCPageWrapper, VCStatusBadge } from "@/components/ui/VaultUI";
 import { CommandHubExecutiveBrief } from "@/components/core/CommandHubExecutiveBrief";
@@ -61,7 +61,8 @@ export default function VaultCoreHomePage() {
         <span className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: "#0081f2" }}>Vault Core Modules</span>
         <span className="h-px flex-1" style={{ background: "linear-gradient(90deg, rgba(0,129,242,0.28), transparent)" }} />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <ModuleTile href="/vault-core/identity" icon={Fingerprint} title="Identity Core" desc="Who Vault Co is, brand voice, and legacy learnings." />
         <ModuleTile href="/workforce" icon={Network} title="Workforce" desc="Five executives — reputation, objectives, and collaboration." />
         <ModuleTile href="/vault-memory" icon={Brain} title="Vault Memory" desc="The knowledge graph and intelligence signals." />
         <ModuleTile href="/runtime" icon={Activity} title="Runtime Activity" desc="The 24/7 continuous-operations feed and agent cycles." />

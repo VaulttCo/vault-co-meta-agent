@@ -10,12 +10,28 @@ import { insertVictoriaCall, updateVictoriaCall } from "@/lib/victoria/db";
 import { getProspectContextForSession } from "@/lib/victoria/agents/prospect-memory";
 import { extractPostCallMemory } from "@/lib/victoria/agents/prospect-memory";
 import type { StartCallRequest } from "@/lib/victoria/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Victoria live-call sessions are an internal AI feature. Gate every handler on
+// an authenticated user with AI-builder access before any session work.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/victoria/session — create a new session
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: StartCallRequest;
 
   try {
@@ -90,6 +106,9 @@ export async function POST(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const callId = req.nextUrl.searchParams.get("call_id");
 
   if (!callId) {
@@ -132,6 +151,9 @@ export async function GET(req: NextRequest) {
 // ─────────────────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest) {
+  const denied = await guard();
+  if (denied) return denied;
+
   let body: { call_id: string; status: "completed" | "abandoned" };
 
   try {

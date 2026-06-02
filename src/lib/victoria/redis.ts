@@ -64,6 +64,21 @@ function memDel(key: string): void {
   _memoryStore.delete(key);
 }
 
+// Atomic compare-and-delete for the in-memory fallback. Deletes only if the stored
+// value still matches `token` and has not expired. JS is single-threaded so this
+// get+compare+delete is effectively atomic in-process.
+function memDelIfMatch(key: string, token: string): boolean {
+  const entry = _memoryStore.get(key);
+  if (!entry) return false;
+  if (Date.now() > entry.expires_at) {
+    _memoryStore.delete(key);
+    return false;
+  }
+  if (entry.value !== token) return false;
+  _memoryStore.delete(key);
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Unified Victoria KV store — Redis when configured, memory fallback
 // All callers go through these functions — never import Upstash directly.
@@ -123,6 +138,27 @@ export async function kvSetNX(
     return res === "OK";
   }
   return memSetNX(key, value, ttlSeconds);
+}
+
+// Lua: delete the key ONLY if its current value equals the supplied token.
+// Runs atomically inside Redis, so a TTL expiry between read and delete cannot
+// cause us to delete a lock a different owner has since acquired.
+const COMPARE_AND_DELETE_LUA =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
+
+/**
+ * Atomic compare-and-delete. Deletes `key` only if its stored value still equals
+ * `token`, and returns true iff it deleted. Use to release a distributed lock so a
+ * slow/overrun owner can never delete a newer owner's lock. Falls back to an
+ * in-process atomic compare-and-delete when Redis is absent.
+ */
+export async function kvDelIfMatch(key: string, token: string): Promise<boolean> {
+  const redis = getRedis();
+  if (redis) {
+    const res = await redis.eval(COMPARE_AND_DELETE_LUA, [key], [token]);
+    return Number(res) === 1;
+  }
+  return memDelIfMatch(key, token);
 }
 
 export async function kvDel(key: string): Promise<void> {

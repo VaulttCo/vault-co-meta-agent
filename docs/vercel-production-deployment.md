@@ -19,7 +19,8 @@ Build command `next build`, output handled automatically. Package manager: **pnp
 In Vercel → Project → Settings → Environment Variables, add the values from
 `docs/vault-core-env-vars.md` (Production + Preview):
 - **Required:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
-- **Optional (Phase 6 live data):** `GHL_API_KEY`, `GHL_LOCATION_ID` — **only a freshly-rotated key** (see Step 9).
+- **Optional (Vault Core live GHL):** `VAULT_CO_GHL_API_KEY`, `VAULT_CO_GHL_LOCATION_ID`, `VAULT_CO_LEGACY_GHL_API_KEY`, `VAULT_CO_LEGACY_GHL_LOCATION_ID` — Vault Core reads ONLY these Vault-Co-owned accounts (**freshly-rotated keys only**, see Step 9).
+- **Optional (client-tracking legacy, NOT Vault Core):** generic `GHL_API_KEY`, `GHL_LOCATION_ID` — only for the client portal / Revenue Dashboard per-client tracking. Leave unset unless using those features.
 - Generate `CRON_SECRET` as a long random string (e.g. `openssl rand -hex 32`).
 
 > The app deploys and runs on **mock fallback** even with zero env vars — but set the required ones for live persistence + cron.
@@ -49,10 +50,14 @@ Command Hub shows the Daily Executive Brief + Executive Queue + Recommendations 
 Vault Memory shows the graph; Workforce shows the 5 active executives; Recommendations/Drafts/Proposals
 review actions work. (With SQL + service role, these reflect live data; otherwise seeded mock.)
 
-## Step 9 — Enable GHL read-only (only after rotating the key)
+## Step 9 — Enable Vault Core GHL read-only (only after rotating the key)
 1. **Revoke** the exposed GHL key; **create a new one.**
-2. Add `GHL_API_KEY` + `GHL_LOCATION_ID` in Vercel env; redeploy.
+2. Add the Vault-Co-owned vars in Vercel env; redeploy:
+   `VAULT_CO_GHL_API_KEY`, `VAULT_CO_GHL_LOCATION_ID` (current) and, if used,
+   `VAULT_CO_LEGACY_GHL_API_KEY`, `VAULT_CO_LEGACY_GHL_LOCATION_ID` (legacy archive).
+   Vault Core (incl. Veronica) uses ONLY these — it does NOT read the generic `GHL_*`.
 3. Veronica switches from mock to live read-only conversation data. **Read-only — never sends/mutates.**
+   (Generic `GHL_API_KEY` / `GHL_LOCATION_ID` remain client-tracking legacy only — see Step 3.)
 
 ---
 

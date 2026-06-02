@@ -2,11 +2,13 @@
  * GET /api/integrations/ghl/opportunities?clientId=xxx
  * Read stored GHL opportunity snapshots from Supabase.
  * READ-ONLY — no GHL API calls. Returns what was last synced.
+ *
+ * SCOPE: LEGACY per-client GHL data (Revenue Dashboard only). Reads snapshots for
+ * an arbitrary clientId. NOT used by Vault Core. Admin-only.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { readGHLOpportunitySnapshots } from "@/lib/integrations/ghl/client";
 import { resolveServerRole } from "@/lib/auth/server-role";
-import { can } from "@/lib/auth/permissions";
 
 export const runtime = "nodejs";
 
@@ -15,8 +17,8 @@ export async function GET(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewAnalytics")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);

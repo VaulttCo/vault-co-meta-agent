@@ -1,8 +1,17 @@
 // Vault Core — Workforce roster (Layer 2).
 //
-// Active: VEGA (P1) + VICTORIA (P3) + VALERIE (P4) + VANESSA (P5) + VERONICA (P6).
-// Only VIVIAN remains a metadata-only stub so the UI can render the full
-// workforce and a future phase can flip `active: true` and attach a runnable agent.
+// Currently ACTIVE (5): Vega, Veronica, Victoria, Valerie, Vanessa.
+// Metadata-only STUB (not active, not in the tick): Vivian — the UI renders the
+// full workforce; a future phase can flip `active: true` and attach a runnable agent.
+//
+// ROLE-SPLIT NOTE (spec stage — see docs/valentina-marketing-director-spec.md):
+//   The active "victoria" executive below performs the AI MARKETING DIRECTOR role.
+//   Per the corrected naming, that role is being repositioned as "Valentina (AI
+//   Marketing Director)", while the name "Victoria" now denotes the AI SALES COACH
+//   (the live sales-call product: src/lib/victoria/**, /api/victoria/**, /victoria).
+//   Valentina is SPEC-ONLY for now — NOT activated, NOT added to the tick, NO runtime
+//   change. The rename/activation of this executive is deferred to a future phase, so
+//   this entry's id/title/active/tiers are intentionally left unchanged here.
 //
 // This module is PURE metadata — no DB, no AI, no side effects — so it is safe
 // to import from both server runtime and (indirectly) the mock graph.
@@ -24,7 +33,7 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Intelligence Director",
     mission: "Identify patterns across everything and feed recommendations to the workforce.",
     color: CYAN,
-    active: true, // ← the only active agent in Phase 1
+    active: true, // active — Intelligence Director
     tiers: ["hourly", "daily"],
   },
   {
@@ -33,7 +42,7 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Lead Acquisition Director",
     mission: "Understand why leads convert.",
     color: BLUE,
-    active: true, // ← activated in Phase 6 (fifth active executive)
+    active: true, // active — Lead Acquisition Director
     tiers: ["hourly", "daily"],
   },
   {
@@ -42,7 +51,11 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Marketing Director",
     mission: "Understand how attention converts.",
     color: ORANGE,
-    active: true, // ← activated in Phase 3 (second active executive)
+    // active — performs the AI Marketing Director role. Per the role-split note above,
+    // this executive is slated to be renamed "Valentina (AI Marketing Director)" in a
+    // future phase; the "Victoria" name is being repositioned as the AI Sales Coach.
+    // Left unchanged here to avoid any runtime change (spec-only stage).
+    active: true,
     tiers: ["hourly", "daily"],
   },
   {
@@ -51,7 +64,7 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Operations Director",
     mission: "Increase operational efficiency.",
     color: GREEN,
-    active: false,
+    active: false, // stub — not active, not in the tick (future phase)
     tiers: ["daily", "weekly"],
   },
   {
@@ -60,7 +73,7 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Financial Director",
     mission: "Protect and grow financial performance.",
     color: GOLD,
-    active: true, // ← activated in Phase 4 (third active executive)
+    active: true, // active — Financial Director
     tiers: ["hourly", "daily"],
   },
   {
@@ -69,7 +82,7 @@ export const WORKFORCE: AgentMeta[] = [
     title: "Executive Director",
     mission: "Coordinate the workforce and convert intelligence into executive priorities.",
     color: PURPLE,
-    active: true, // ← activated in Phase 5 (fourth active executive)
+    active: true, // active — Executive Director
     tiers: ["hourly", "daily"],
   },
 ];

@@ -70,9 +70,9 @@ function statusFromRecency(d: number | null): ConversationStatus {
 }
 
 async function readLive(): Promise<NormalizedConversation[] | null> {
-  if (!isGhlConfigured()) return null;
+  if (!isGhlConfigured("current")) return null;
   try {
-    const res = await ghlGet<GhlConversationSearchResponse>("conversations/search", { limit: 50 });
+    const res = await ghlGet<GhlConversationSearchResponse>("current", "conversations/search", { limit: 50 });
     const rows = res?.conversations;
     if (!Array.isArray(rows) || rows.length === 0) return null;
     const mapped: NormalizedConversation[] = rows.map((c, i) => {

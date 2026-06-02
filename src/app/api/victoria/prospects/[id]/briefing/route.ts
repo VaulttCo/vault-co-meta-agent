@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { generatePreCallBriefing } from "@/lib/victoria/agents/prospect-memory";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/victoria/prospects/:id/briefing
@@ -15,6 +17,12 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   const result = await generatePreCallBriefing(id);

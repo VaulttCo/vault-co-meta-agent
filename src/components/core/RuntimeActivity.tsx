@@ -39,6 +39,11 @@ function runVariant(status: string): "success" | "danger" | "neutral" {
   return status === "success" ? "success" : status === "error" ? "danger" : "neutral";
 }
 
+// Module-scope helper keeps the impure Date.now() call out of the render body.
+function isWithin24h(iso: string): boolean {
+  return Date.now() - new Date(iso).getTime() <= 24 * 60 * 60 * 1000;
+}
+
 export function RuntimeActivity() {
   const [activity, setActivity] = useState<VaultActivityRow[]>([]);
   const [runs, setRuns] = useState<VaultAgentRunRow[]>([]);
@@ -67,7 +72,7 @@ export function RuntimeActivity() {
     load();
   }, [load]);
 
-  const last24h = activity.filter((a) => Date.now() - new Date(a.created_at).getTime() <= 864e5).length;
+  const last24h = activity.filter((a) => isWithin24h(a.created_at)).length;
   const activeAgents = new Set(runs.map((r) => r.agent)).size;
   const lastRun = runs[0]?.started_at ? timeAgo(runs[0].started_at) : "—";
 

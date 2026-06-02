@@ -5,6 +5,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getProspect, updateProspect, getProspectCallHistory } from "@/lib/victoria/db";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/victoria/prospects/:id
@@ -14,6 +26,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { id } = await params;
 
   const [prospect, callHistory] = await Promise.all([
@@ -36,6 +51,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { id } = await params;
 
   let body: Record<string, unknown>;

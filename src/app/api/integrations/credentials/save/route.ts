@@ -30,48 +30,30 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseSessionClient, getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { encryptCredential, hasEncryptionKey } from "@/lib/crypto/credentials";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export async function POST(req: NextRequest) {
-  // ── 1. Auth check (cookie-based session client) ────────────────────────────
-  // The service role client cannot read user sessions from cookies.
-  // We must use the @supabase/ssr createServerClient (anon key + cookies) here.
-  const sessionClient = await getSupabaseSessionClient();
-  if (!sessionClient) {
+  // ── 1. Auth + permission (shared, fail-closed role resolution) ─────────────
+  const auth = await resolveServerRole();
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!can(auth.role, "canConnectIntegrations")) {
     return NextResponse.json(
-      { error: "Supabase not configured." },
-      { status: 503 }
+      { error: "Admin role required to save integration credentials." },
+      { status: 403 }
     );
   }
 
-  const {
-    data: { user },
-  } = await sessionClient.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  // ── 2. Role check (service role client — bypasses RLS for user_profiles) ──
+  // ── 2. Service role client for the credential write (bypasses RLS) ─────────
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json(
       { error: "Supabase service role not configured." },
       { status: 503 }
-    );
-  }
-
-  const { data: profileRaw } = await supabase
-    .from("user_profiles")
-    .select("role")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const profile = profileRaw as any;
-  if (!profile || profile.role !== "admin") {
-    return NextResponse.json(
-      { error: "Admin role required to save integration credentials." },
-      { status: 403 }
     );
   }
 
@@ -164,7 +146,7 @@ export async function POST(req: NextRequest) {
     encrypted_data: encryptedData,
     account_id: accountId,
     account_label: accountLabel ?? null,
-    created_by: user.id,
+    created_by: auth.userId,
     updated_at: new Date().toISOString(),
   };
   const { error: upsertError } = await supabase

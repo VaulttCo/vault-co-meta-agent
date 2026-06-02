@@ -1,8 +1,8 @@
 // Server-side only — safe GHL connection status metadata per client.
 //
 // GET ?clientIds=id1,id2,...
-//   Admin or canViewReports. Returns safe metadata only — no API keys, no
-//   encrypted data, no secrets. Safe to send to the frontend.
+//   Admin or canConnectIntegrations only. Returns safe metadata only — no API
+//   keys, no encrypted data, no secrets, no raw location IDs.
 //
 // Checks GHL connection availability in priority order:
 //   1. client_revenue_settings.ghl_location_id / ghl_pipeline_id
@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
   const auth = await resolveServerRole();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!can(auth.role, "canViewReports")) {
+  // Admin or canConnectIntegrations only — exposes per-client GHL connection state.
+  // (canViewReports includes client_viewer, which must NOT see connection state.)
+  if (auth.role !== "admin" && !can(auth.role, "canConnectIntegrations")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

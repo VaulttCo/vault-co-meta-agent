@@ -5,6 +5,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type { HermesRunStatus } from "@/lib/supabase/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+import { kvGet, kvSet } from "@/lib/victoria/redis";
+
+// ── Rate limit ──────────────────────────────────────────────────────────────
+// Best-effort fixed-window limiter per authenticated user. Prevents an authed
+// user from spamming the external Hermes worker. Backed by Upstash when present,
+// process-local memory otherwise. Never blocks on infra failure (fails open).
+const RL_MAX = 10; // requests
+const RL_WINDOW_SECONDS = 60;
+
+async function checkRateLimit(userId: string): Promise<boolean> {
+  try {
+    const bucket = Math.floor(Date.now() / (RL_WINDOW_SECONDS * 1000));
+    const key = `veronica:hermes:rl:${userId}:${bucket}`;
+    const current = (await kvGet<number>(key)) ?? 0;
+    if (current >= RL_MAX) return false;
+    await kvSet(key, current + 1, RL_WINDOW_SECONDS);
+    return true;
+  } catch {
+    return true; // fail open — never let a KV blip break the feature
+  }
+}
 
 // nodejs runtime required for fetch with AbortController + DB writes.
 // maxDuration tells Vercel Pro to allow up to 60s before platform kill.
@@ -81,13 +104,14 @@ async function logRun(
   output: string | null,
   errorMsg: string | null,
   status: HermesRunStatus,
+  createdBy: string,
   taskId?: string | null
 ): Promise<string | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = getSupabaseServerClient() as any;
     if (!db) return null;
-    const insert: Record<string, unknown> = { prompt, output, error: errorMsg, status, created_by: "operator" };
+    const insert: Record<string, unknown> = { prompt, output, error: errorMsg, status, created_by: createdBy };
     if (taskId) insert.task_id = taskId;
     const { data } = await db
       .from("veronica_hermes_runs")
@@ -105,7 +129,8 @@ async function createSkill(
   name: string,
   category: string,
   description: string,
-  instructions: string
+  instructions: string,
+  createdBy: string
 ): Promise<string | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,7 +144,7 @@ async function createSkill(
         description,
         instructions,
         source_run_id: runId,
-        created_by: "operator",
+        created_by: createdBy,
         auto_created: true,
       })
       .select("id")
@@ -168,6 +193,13 @@ async function touchSkillUsage(skillId: string): Promise<void> {
 // ── Route handlers ────────────────────────────────────────────────────────────
 
 export async function GET() {
+  // ── Auth: AI-builder access required to view Hermes run history ──────────────
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = getSupabaseServerClient() as any;
@@ -185,6 +217,22 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // ── Auth: AI-builder access required before any prompt reaches Hermes ────────
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const userId = auth.userId;
+
+  // ── Rate limit (per authenticated user) ─────────────────────────────────────
+  if (!(await checkRateLimit(userId))) {
+    return NextResponse.json(
+      { output: null, error: "Rate limit exceeded. Please wait a moment and try again." },
+      { status: 429 }
+    );
+  }
+
   let body: { prompt?: string; skill_id?: string; task_id?: string };
   try {
     body = await req.json();
@@ -209,7 +257,7 @@ export async function POST(req: NextRequest) {
   const secret = process.env.HERMES_SECRET;
 
   if (!workerUrl || !secret) {
-    await logRun(trimmedPrompt, null, "Hermes is not configured on this deployment.", "error", safeTaskId);
+    await logRun(trimmedPrompt, null, "Hermes is not configured on this deployment.", "error", userId, safeTaskId);
     return NextResponse.json(
       { output: null, error: "Hermes is not configured on this deployment." },
       { status: 503 }
@@ -237,7 +285,7 @@ export async function POST(req: NextRequest) {
       ? "Strategy engine did not respond in time. Please try again."
       : "Hermes VPS is unreachable. Please try again later.";
     const status: HermesRunStatus = isTimeout ? "error" : "unreachable";
-    await logRun(trimmedPrompt, null, msg, status, safeTaskId);
+    await logRun(trimmedPrompt, null, msg, status, userId, safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: isTimeout ? 504 : 502 });
   }
 
@@ -246,13 +294,13 @@ export async function POST(req: NextRequest) {
     data = await res.json();
   } catch {
     const msg = `Hermes returned an unparseable response (HTTP ${res.status}).`;
-    await logRun(trimmedPrompt, null, msg, "error", safeTaskId);
+    await logRun(trimmedPrompt, null, msg, "error", userId, safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: 502 });
   }
 
   if (!res.ok) {
     const msg = data.error ?? `Hermes returned an error (HTTP ${res.status}).`;
-    await logRun(trimmedPrompt, null, msg, "error", safeTaskId);
+    await logRun(trimmedPrompt, null, msg, "error", userId, safeTaskId);
     return NextResponse.json({ output: null, error: msg }, { status: res.status });
   }
 
@@ -261,7 +309,7 @@ export async function POST(req: NextRequest) {
   const runStatus: HermesRunStatus = responseError ? "error" : "success";
 
   // Log the run; get ID for skill linking
-  const runId = await logRun(trimmedPrompt, output, responseError, runStatus, safeTaskId);
+  const runId = await logRun(trimmedPrompt, output, responseError, runStatus, userId, safeTaskId);
 
   // If this was a skill re-run, update usage stats
   if (incomingSkillId) {
@@ -280,7 +328,8 @@ export async function POST(req: NextRequest) {
         detection.name,
         detection.category,
         detection.description,
-        output
+        output,
+        userId
       );
       if (savedSkillId && runId) {
         linkSkillToRun(runId, savedSkillId); // fire-and-forget

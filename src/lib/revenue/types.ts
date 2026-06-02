@@ -138,7 +138,9 @@ export interface GHLDealPreview {
 export interface GHLPreviewResult {
   clientId: string;
   billingMonth: string;
-  ghlLocationId: string;
+  // Raw location ID is NOT returned to the client — kept server-side only. Use
+  // locationIdMasked / locationSource for display. Optional so the API can omit it.
+  ghlLocationId?: string;
   ghlPipelineId: string | null;
   closedWonDealsCount: number;
   closedWonRevenue: number;

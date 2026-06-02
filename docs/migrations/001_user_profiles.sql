@@ -22,8 +22,13 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 -- 2. Enable Row Level Security
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
--- 3. RLS Policies
+-- 3. RLS Policies (rerun-safe: DROP POLICY IF EXISTS before each CREATE)
+-- NOTE: migration 005 hardens the read policy below (replaces read-all with
+-- self-read + admin-read). This base migration stays permissive on read until 005
+-- is applied; run 005 immediately after on fresh installs.
+
 -- Users can read their own profile
+DROP POLICY IF EXISTS "Users can read own profile" ON public.user_profiles;
 CREATE POLICY "Users can read own profile"
   ON public.user_profiles
   FOR SELECT
@@ -31,7 +36,8 @@ CREATE POLICY "Users can read own profile"
 
 -- Admins can read all profiles (requires service role or a custom claim)
 -- For simplicity, allow authenticated users to read all profiles
--- (the role check happens in application code)
+-- (the role check happens in application code) — TIGHTENED by migration 005.
+DROP POLICY IF EXISTS "Authenticated users can read all profiles" ON public.user_profiles;
 CREATE POLICY "Authenticated users can read all profiles"
   ON public.user_profiles
   FOR SELECT
@@ -39,6 +45,7 @@ CREATE POLICY "Authenticated users can read all profiles"
   USING (true);
 
 -- Only service role (server-side) can insert/update profiles
+DROP POLICY IF EXISTS "Service role can manage profiles" ON public.user_profiles;
 CREATE POLICY "Service role can manage profiles"
   ON public.user_profiles
   FOR ALL
@@ -55,6 +62,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS user_profiles_updated_at ON public.user_profiles;
 CREATE TRIGGER user_profiles_updated_at
   BEFORE UPDATE ON public.user_profiles
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

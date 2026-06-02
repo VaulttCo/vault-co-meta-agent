@@ -18,6 +18,15 @@ export async function GET(
   const auth = await resolveServerRole();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // ── Permission ────────────────────────────────────────────────
+  // This row exposes client contact fields plus Meta/GHL reference IDs, so an
+  // authenticated-but-unprivileged role must not be able to read arbitrary client
+  // IDs. canViewClients is true for admin/media_buyer/setter and false for
+  // client_viewer — which keeps client_viewer from reading other clients here.
+  if (!can(auth.role, "canViewClients")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id: clientId } = await params;
   if (!clientId) return NextResponse.json({ error: "Client ID required" }, { status: 400 });
 

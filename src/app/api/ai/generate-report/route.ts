@@ -2,10 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateWeeklyReport } from "@/lib/ai/service";
 import type { WeeklyReportInput } from "@/lib/ai/service";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // ── Auth: generating + persisting a report is a staff write action ──────────
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canGenerateCampaigns")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: WeeklyReportInput;
 
   try {

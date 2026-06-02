@@ -29,6 +29,58 @@ async function checkRateLimit(userId: string): Promise<boolean> {
   }
 }
 
+// ── Strict command schema ─────────────────────────────────────────────────────
+// Hermes is a dev-ops/QA layer ONLY and the worker is OUTPUT-ONLY: it returns text
+// (audits, plans, drafts, summaries). It must NEVER be asked to execute, send,
+// publish, or mutate any external system. Enforced server-side below.
+const ALLOWED_MODES = ["audit", "plan", "draft", "summarize"] as const;
+type HermesMode = (typeof ALLOWED_MODES)[number];
+
+// Phrases implying execution / external mutation / sending / credential use.
+// Defense-in-depth: dispatch is admin-only + off-by-default + the worker is
+// text-only, but we still refuse prompts that request forbidden actions.
+const MUTATION_DENYLIST: RegExp[] = [
+  /\bsend(ing)?\s+(an?\s+|the\s+)?(email|sms|text|message|dm|reply)\b/i,
+  /\b(publish|launch|deploy|go\s*live|activate)\b/i,
+  /\b(delete|drop|truncate|wipe|erase)\s+(the\s+|all\s+)?(data|record|row|table|contact|lead|campaign|opportunity)\b/i,
+  /\b(charge|refund|invoice|capture\s+payment|bill\s+the)\b/i,
+  /\bstripe\b/i,
+  /\b(trigger|run|start|fire|enroll\s+in)\s+(a\s+|the\s+)?(workflow|automation|sequence|campaign)\b/i,
+  /\b(update|modify|mutate|write\s+to|push\s+to|post\s+to|sync\s+to)\s+(ghl|crm|meta|gohighlevel|leadconnector|pipeline|opportunit|contact)\b/i,
+  /\b(execute|run)\s+(this\s+)?(code|command|shell|script|sql)\b/i,
+  /\b(api[\s_-]?key|secret|credential|password|access[\s_-]?token|bearer\s+token)\b/i,
+];
+
+type CommandResult =
+  | { ok: true; mode: HermesMode }
+  | { ok: false; status: number; error: string };
+
+function validateHermesCommand(rawMode: unknown, prompt: string): CommandResult {
+  // Default a missing mode to the safest output-only mode so existing callers keep
+  // working without a UI change, but any SUPPLIED mode must be in the allowlist.
+  const mode =
+    typeof rawMode === "string" && rawMode.trim()
+      ? rawMode.trim().toLowerCase()
+      : "draft";
+  if (!ALLOWED_MODES.includes(mode as HermesMode)) {
+    return { ok: false, status: 400, error: `Invalid mode. Allowed: ${ALLOWED_MODES.join(", ")}.` };
+  }
+  if (prompt.length > 8000) {
+    return { ok: false, status: 413, error: "Prompt too long (max 8000 chars)." };
+  }
+  for (const rx of MUTATION_DENYLIST) {
+    if (rx.test(prompt)) {
+      return {
+        ok: false,
+        status: 422,
+        error:
+          "Rejected: Hermes is output-only (audit / plan / draft / summarize). It cannot execute, send, publish, or mutate any external system, CRM/GHL/Stripe/Meta, workflow, or credential.",
+      };
+    }
+  }
+  return { ok: true, mode: mode as HermesMode };
+}
+
 // nodejs runtime required for fetch with AbortController + DB writes.
 // maxDuration tells Vercel Pro to allow up to 60s before platform kill.
 export const runtime = "nodejs";
@@ -217,13 +269,27 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  // ── Auth: AI-builder access required before any prompt reaches Hermes ────────
+  // ── Auth: external worker dispatch is ADMIN-ONLY (dev-ops/QA) ────────────────
   const auth = await resolveServerRole();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!can(auth.role, "canViewAiBuilder")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
   const userId = auth.userId;
+
+  // ── Kill switch: dispatch is DISABLED unless explicitly enabled ─────────────
+  // Off by default so no authenticated user can reach the external worker until an
+  // operator opts in. Hermes stays a dev-ops/QA tool, never a runtime executor.
+  if (process.env.HERMES_WORKER_ENABLED !== "true") {
+    return NextResponse.json(
+      {
+        output: null,
+        error:
+          "Hermes worker dispatch is disabled. Set HERMES_WORKER_ENABLED=true to enable admin-only, output-only (audit/plan/draft/summarize) dispatch.",
+      },
+      { status: 501 }
+    );
+  }
 
   // ── Rate limit (per authenticated user) ─────────────────────────────────────
   if (!(await checkRateLimit(userId))) {
@@ -233,14 +299,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { prompt?: string; skill_id?: string; task_id?: string };
+  let body: { prompt?: string; mode?: string; skill_id?: string; task_id?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { prompt, skill_id: incomingSkillId, task_id: incomingTaskId } = body;
+  const { prompt, mode: incomingMode, skill_id: incomingSkillId, task_id: incomingTaskId } = body;
 
   // Validate task_id is a UUID if provided; discard malformed values
   const safeTaskId: string | null =
@@ -253,6 +319,14 @@ export async function POST(req: NextRequest) {
   }
 
   const trimmedPrompt = prompt.trim();
+
+  // ── Strict command schema: enforce allowed mode + reject mutation/execution ──
+  const command = validateHermesCommand(incomingMode, trimmedPrompt);
+  if (!command.ok) {
+    await logRun(trimmedPrompt, null, command.error, "error", userId, safeTaskId);
+    return NextResponse.json({ output: null, error: command.error }, { status: command.status });
+  }
+
   const workerUrl = process.env.HERMES_WORKER_URL;
   const secret = process.env.HERMES_SECRET;
 
@@ -274,7 +348,9 @@ export async function POST(req: NextRequest) {
     res = await fetch(`${workerUrl}/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: trimmedPrompt, secret }),
+      // Structured, validated command — never a raw arbitrary prompt. mode is one
+      // of the output-only allowlist values; prompt passed the mutation denylist.
+      body: JSON.stringify({ mode: command.mode, prompt: trimmedPrompt, secret }),
       signal: vpsAbortCtrl.signal,
     });
     clearTimeout(vpsTimeout);

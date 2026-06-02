@@ -7,8 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { processTranscriptChunk } from "@/lib/victoria/agents/orchestrator";
 import { getSession } from "@/lib/victoria/memory/session-store";
 import type { SubmitChunkRequest } from "@/lib/victoria/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export async function POST(req: NextRequest) {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: SubmitChunkRequest;
 
   try {

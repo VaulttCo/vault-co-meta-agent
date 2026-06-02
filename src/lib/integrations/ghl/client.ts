@@ -1,22 +1,23 @@
 /**
- * GoHighLevel Read-Only Integration Client — LEGACY (Revenue Dashboard ONLY)
+ * GoHighLevel Read-Only Integration Client — CLIENT TRACKING (NOT Vault Core)
  *
- * ⚠️ SCOPE: This is the legacy per-CLIENT GHL integration. It resolves a client's
- * own GHL sub-account from per-client encrypted credentials,
- * integration_connections, or clients.ghl_location_id, and is used ONLY by the
- * Revenue Dashboard. Every route that imports this module is admin-only.
+ * ⚠️ SCOPE: This is the per-CLIENT GHL integration powering the client portal /
+ * Revenue Dashboard / client reporting / Meta-GHL performance visibility. It
+ * resolves a client's OWN GHL sub-account (per-client encrypted credentials →
+ * integration_connections → clients.ghl_location_id → generic env). Every route
+ * that imports this module is admin-only / canConnectIntegrations and GET-only.
  *
- * ❌ NOT used by Vault Core. Vault Core has its own GHL client at
+ * ❌ NOT used by Vault Core executive runtime. Vault Core has its own GHL client at
  * src/lib/core/integrations/ghl/client.ts which is env-var-only and scoped to the
  * two Vault Co-owned locations ("current"/"legacy") — it never reads client
- * sub-accounts. Do NOT import this legacy module from src/lib/core/** or
- * src/app/api/core/**.
+ * sub-accounts and never uses the generic GHL_* fallback. Do NOT import this
+ * module from src/lib/core/** or src/app/api/core/**.
  *
- * 🔒 KILL SWITCH: the HTTP routes that expose this legacy per-client integration
- * (/api/integrations/ghl/*) are DISABLED (501) unless LEGACY_GHL_ROUTES_ENABLED=
- * "true" is explicitly set. They are off by default so arbitrary client GHL
- * sub-accounts cannot be read. Vault Core does not depend on this flag — it uses
- * the env-only core client regardless.
+ * 🔧 FEATURE FLAG: the HTTP routes that expose this per-client integration
+ * (/api/integrations/ghl/*, ghl-preview) honor CLIENT_GHL_TRACKING_ENABLED. It is
+ * ENABLED by default (client tracking is a supported product feature); set
+ * CLIENT_GHL_TRACKING_ENABLED="false" to hard-disable all per-client GHL access
+ * (routes return 501). Vault Core does not depend on this flag.
  *
  * READ-ONLY ONLY. This client can:
  * - Fetch contacts, opportunities, appointments, and pipelines
@@ -40,20 +41,22 @@ import type { GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 
-// ─── Kill switch ──────────────────────────────────────────────
-// The legacy per-client GHL HTTP routes are disabled unless this flag is set.
-// This guarantees no /api/integrations/ghl/* endpoint can read an arbitrary
-// client GHL sub-account by default. Vault Core never uses these routes.
-export function legacyGhlRoutesEnabled(): boolean {
-  return process.env.LEGACY_GHL_ROUTES_ENABLED === "true";
+// ─── Feature flag ─────────────────────────────────────────────
+// Per-client GHL tracking (client portal / Revenue Dashboard / reporting) is a
+// supported product feature, so it is ENABLED BY DEFAULT. Set
+// CLIENT_GHL_TRACKING_ENABLED="false" to hard-disable every /api/integrations/ghl/*
+// route + ghl-preview (they return 501). Vault Core never uses these routes and
+// does not depend on this flag.
+export function clientGhlTrackingEnabled(): boolean {
+  return process.env.CLIENT_GHL_TRACKING_ENABLED !== "false";
 }
 
-// Standard disabled-response payload for the legacy routes (kept here so every
-// route returns the identical, documented 501 shape).
-export const LEGACY_GHL_DISABLED_BODY = {
+// Standard disabled-response payload (kept here so every route returns the same
+// documented 501 shape when client GHL tracking is explicitly disabled).
+export const CLIENT_GHL_DISABLED_BODY = {
   error: "Disabled",
   message:
-    "Legacy per-client GHL routes are disabled. Vault Core never uses them. Set LEGACY_GHL_ROUTES_ENABLED=true to re-enable them for the Revenue Dashboard.",
+    "Per-client GHL tracking is disabled (CLIENT_GHL_TRACKING_ENABLED=false). This route is for the client portal / Revenue Dashboard and is never used by Vault Core.",
 } as const;
 
 // ─── Types ────────────────────────────────────────────────────

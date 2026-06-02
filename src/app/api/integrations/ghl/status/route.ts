@@ -7,15 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
-import { legacyGhlRoutesEnabled, LEGACY_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
+import { clientGhlTrackingEnabled, CLIENT_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
-  // Kill switch — this legacy route exposes per-client GHL connection data
-  // (integration_connections + snapshots). Disabled by default; Vault Core never uses it.
-  if (!legacyGhlRoutesEnabled()) {
-    return NextResponse.json(LEGACY_GHL_DISABLED_BODY, { status: 501 });
+  // Feature flag — per-client GHL connection data (integration_connections +
+  // snapshots) for client tracking. Enabled by default; set
+  // CLIENT_GHL_TRACKING_ENABLED=false to disable (501). Not used by Vault Core.
+  if (!clientGhlTrackingEnabled()) {
+    return NextResponse.json(CLIENT_GHL_DISABLED_BODY, { status: 501 });
   }
 
   // ── Auth guard (before any parameter validation) ──────────────────────────

@@ -51,6 +51,15 @@ function memSet(key: string, value: string, ttlSeconds: number): void {
   });
 }
 
+// Atomic set-if-absent for the in-memory fallback. Honors TTL expiry so a stale
+// entry doesn't block acquisition. Returns true only if the key was set.
+function memSetNX(key: string, value: string, ttlSeconds: number): boolean {
+  const existing = _memoryStore.get(key);
+  if (existing && Date.now() <= existing.expires_at) return false;
+  _memoryStore.set(key, { value, expires_at: Date.now() + ttlSeconds * 1000 });
+  return true;
+}
+
 function memDel(key: string): void {
   _memoryStore.delete(key);
 }
@@ -95,6 +104,25 @@ export async function kvSet(
     return;
   }
   memSet(key, serialized, ttlSeconds);
+}
+
+/**
+ * Atomic "set if not exists" with TTL. Returns true only when this caller won the
+ * key (i.e. it did not already exist). Use for distributed locks — the get + set
+ * happen atomically inside Redis (SET ... NX EX), eliminating the check-then-set
+ * race. Falls back to a process-local atomic operation when Redis is absent.
+ */
+export async function kvSetNX(
+  key: string,
+  value: string,
+  ttlSeconds = DEFAULT_TTL_SECONDS
+): Promise<boolean> {
+  const redis = getRedis();
+  if (redis) {
+    const res = await redis.set(key, value, { nx: true, ex: ttlSeconds });
+    return res === "OK";
+  }
+  return memSetNX(key, value, ttlSeconds);
 }
 
 export async function kvDel(key: string): Promise<void> {

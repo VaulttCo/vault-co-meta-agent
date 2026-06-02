@@ -45,12 +45,13 @@ export async function DELETE(req: NextRequest) {
       { status: 400 }
     );
   }
-  // ── GHL kill switch ────────────────────────────────────────────────────────
-  // The per-client GHL credential path is disabled by default (Vault Core invariant).
-  // Meta credential deletion is unaffected.
-  if (provider === "ghl" && process.env.LEGACY_GHL_ROUTES_ENABLED !== "true") {
+  // ── GHL feature flag ───────────────────────────────────────────────────────
+  // Per-client GHL credentials power client tracking. Enabled by default; set
+  // CLIENT_GHL_TRACKING_ENABLED=false to hard-disable. Meta deletion is unaffected.
+  // (Vault Core runtime never uses per-client GHL — it is Vault-Co env-only.)
+  if (provider === "ghl" && process.env.CLIENT_GHL_TRACKING_ENABLED === "false") {
     return NextResponse.json(
-      { error: "Per-client GHL credential storage is disabled. Vault Core uses VAULT_CO_* env vars only." },
+      { error: "Per-client GHL tracking is disabled (CLIENT_GHL_TRACKING_ENABLED=false)." },
       { status: 501 }
     );
   }

@@ -7,7 +7,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
-import { can } from "@/lib/auth/permissions";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   rowToRevenueSettings,
@@ -26,8 +25,9 @@ export async function GET(
   const auth = await resolveServerRole();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!can(auth.role, "canViewReports")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Admin-only: this row exposes GHL/Stripe IDs, fee splits, and notes.
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
 
   const { clientId } = await params;

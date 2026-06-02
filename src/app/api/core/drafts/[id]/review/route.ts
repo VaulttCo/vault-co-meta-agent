@@ -46,6 +46,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   if (!ACTIONS.includes(action)) {
     return NextResponse.json({ error: `Invalid action. One of: ${ACTIONS.join(", ")}` }, { status: 400 });
   }
+
+  // ── Action-level governance ───────────────────────────────────────────────
+  // approve needs approval authority; edit/reject stay at canViewApprovals.
+  // (Approving a draft is internal-only and still never sends anything.)
+  if (action === "approve" && !(auth.role === "admin" || can(auth.role, "canApproveCampaigns"))) {
+    return NextResponse.json(
+      { error: "Forbidden — approval authority required to approve" },
+      { status: 403 }
+    );
+  }
+
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) || null : null;
   const newBody = typeof body.body === "string" ? body.body.slice(0, 2000) : null;
 

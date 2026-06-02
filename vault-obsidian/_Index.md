@@ -23,6 +23,13 @@ Obsidian graph view stays connected.
 - [[ADR-0006-executive-oversight-layer]] — Vanessa + executive oversight
 - [[ADR-0007-conversation-intelligence-layer]] — Veronica + conversation intelligence + GHL
 - [[ADR-0008-production-deployment-readiness]] — Vercel deployment readiness + security
+- [[ADR-0009-Vault-Co-GHL-Scopes]] — Vault Co GHL scopes + Identity Core
+
+## Vault Co Identity
+- [[Vault Co Identity Core]] — who Vault Co is (positioning, voice, audience, offer)
+- [[Legacy GHL Messaging Lessons]] — what the old GHL archive teaches
+- [[What Vault Co Should Stop Doing]] · [[What Vault Co Should Double Down On]]
+- [[Legacy GHL Automation Map]] — read-only legacy workflow map
 
 ## Workforce (Layer 2)
 - [[Veronica]] — Lead Acquisition Director *(active)*

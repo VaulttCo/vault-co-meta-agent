@@ -10,11 +10,26 @@ import {
   getRepCallLogs,
 } from "@/lib/victoria/reps/profiles";
 import type { RepCallStatsUpdate } from "@/lib/victoria/reps/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ rep_id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { rep_id } = await params;
   const profile = await getRepProfile(rep_id);
 
@@ -33,6 +48,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ rep_id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { rep_id } = await params;
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) {

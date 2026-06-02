@@ -32,8 +32,10 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = getSupabaseServerClient() as any;
   if (!supabase) {
+    // Mock mode (no DB): never report a real "ready" — there is no draft to verify.
+    // Signal mock_ready so the UI cannot mistake this for a validated, push-ready draft.
     return NextResponse.json({
-      validation_status: "ready",
+      validation_status: "mock_ready",
       validation_errors: [],
       mockMode: true,
     });

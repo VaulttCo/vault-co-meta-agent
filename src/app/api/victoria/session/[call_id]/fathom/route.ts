@@ -16,6 +16,18 @@ import { reconcileTranscripts } from "@/lib/victoria/fathom/reconcile";
 import { getRepProfile } from "@/lib/victoria/reps/profiles";
 import { upsertFathomIngestion, getFathomIngestion } from "@/lib/victoria/db";
 import type { FathomIngestRequest, FathomIngestion } from "@/lib/victoria/fathom/types";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
+
+// Gate every handler on an authenticated user with AI-builder access.
+async function guard(): Promise<NextResponse | null> {
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canViewAiBuilder")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // GET — fetch stored ingestion
@@ -25,6 +37,9 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ call_id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { call_id } = await params;
   const row = await getFathomIngestion(call_id);
   if (!row) {
@@ -41,6 +56,9 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ call_id: string }> }
 ) {
+  const denied = await guard();
+  if (denied) return denied;
+
   const { call_id } = await params;
   const start = Date.now();
 

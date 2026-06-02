@@ -11,6 +11,7 @@
 
 import { clients as mockClients } from "@/lib/data";
 import { WORKFORCE } from "../agents/registry";
+import { identityNodeSpecs } from "../identity/vault-co-identity";
 import type {
   VaultGraph,
   VaultNodeRow,
@@ -266,6 +267,43 @@ export function buildMockGraph(): VaultGraph {
   const leadClient = mockClients[1];
   if (leadClient) edges.push(edge("convo-insight", `client-${leadClient.id}`, "related_to", 0.6, "veronica"));
 
+  // Vault Co Identity Core nodes (Phase 6.8) — company DNA, defines the company.
+  identityNodeSpecs().forEach((spec, i) => {
+    nodes.push(
+      node(`identity-${spec.key}`, spec.category, spec.label, {
+        summary: spec.summary,
+        confidence: 0.95,
+        source_agent: "vault_co",
+        created_at: iso(20 * DAY),
+        updated_at: iso((i + 1) * 20 * MINUTE),
+        metadata: { identity: true },
+      })
+    );
+    edges.push(edge(`identity-${spec.key}`, "memory-core", "defines", 0.8, "vault_co"));
+  });
+
+  // Legacy GHL learning nodes (Phase 6.8) — historical lessons.
+  const legacyLearnings: Array<[string, string, string]> = [
+    ["legacy-followup", "“Just following up” texts were ignored", "Generic check-ins with no new value or specific ask were the most-ghosted legacy messages."],
+    ["legacy-timing", "Late missed-call texts lost the lead", "Missed-call follow-up sent hours late (not minutes) missed the intent window."],
+    ["legacy-reactivation", "Reactivation flow was too aggressive", "Daily reactivation texts drove opt-outs; cadence was not value-led."],
+    ["legacy-price", "“Price seems high” handled with discounts", "Historically met with price drops instead of reframing to cost-per-booked-job."],
+  ];
+  legacyLearnings.forEach(([id, label, summary], i) => {
+    nodes.push(
+      node(id, "legacy_learning", label, {
+        summary,
+        confidence: 0.72,
+        source_agent: "veronica",
+        created_at: iso((i + 1) * 8 * HOUR),
+        updated_at: iso((i + 1) * 45 * MINUTE),
+        metadata: { legacy: true },
+      })
+    );
+    edges.push(edge(id, "memory-core", "influences", 0.6, "veronica"));
+  });
+  edges.push(edge("legacy-followup", "identity-messaging_principle", "supports", 0.7, "veronica"));
+
   return { nodes, edges };
 }
 
@@ -424,6 +462,30 @@ export function buildMockRecommendations(): VaultRecommendationRow[] {
       implemented_at: null,
       vanessa_priority: "high",
       priority_reason: "high-intent lead awaiting human follow-up",
+    },
+    {
+      id: nid("rec-legacy-1"),
+      agent: "veronica",
+      title: "Stop using weak “just following up” language",
+      body: "Legacy Vault Co GHL data shows generic check-ins were the most-ignored messages. Replace with value- or specific-ask follow-ups and update the follow-up framework. Nothing sends automatically.",
+      impact: "Higher reply + booking rate on follow-ups",
+      priority_score: 0.7,
+      status: "pending_review",
+      node_id: nid("legacy-followup"),
+      metadata: { confidence: 0.75, legacy: true, suggested_human_action: "Adopt into the Vault Co messaging standard." },
+      created_at: iso(5 * HOUR),
+      influence_score: 0.65,
+      revenue_impact: null,
+      related_clients: [],
+      related_campaigns: [],
+      related_conversations: [],
+      related_node_ids: [nid("legacy-followup"), nid("identity-messaging_principle")],
+      reviewed_by: null,
+      reviewed_at: null,
+      review_notes: null,
+      implemented_at: null,
+      vanessa_priority: "medium",
+      priority_reason: "company messaging standard · derived from legacy history",
     },
   ];
 }

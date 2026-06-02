@@ -30,7 +30,10 @@ const AUTH_MODE =
   (process.env.NEXT_PUBLIC_AUTH_MODE as "supabase" | "demo" | undefined) ??
   "supabase";
 
-const IS_DEMO_MODE = AUTH_MODE === "demo";
+// Demo mode is DEV/LOCAL ONLY. It can never activate in a production build, even if
+// NEXT_PUBLIC_AUTH_MODE=demo is set in production env vars — production always uses
+// real Supabase auth.
+const IS_DEMO_MODE = AUTH_MODE === "demo" && process.env.NODE_ENV !== "production";
 
 // ── Context value ─────────────────────────────────────────────────────────────
 interface AuthContextValue {

@@ -163,7 +163,8 @@ export async function POST(req: NextRequest) {
   const preview: GHLPreviewResult = {
     clientId:              clientId.trim(),
     billingMonth,
-    ghlLocationId,
+    // Raw ghlLocationId intentionally OMITTED from the response — kept server-side
+    // only. The masked value + source are returned below for display/debug.
     ghlPipelineId,
     closedWonDealsCount:   result.dealCount,
     closedWonRevenue:      result.totalRevenue,

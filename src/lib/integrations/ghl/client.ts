@@ -12,6 +12,12 @@
  * sub-accounts. Do NOT import this legacy module from src/lib/core/** or
  * src/app/api/core/**.
  *
+ * 🔒 KILL SWITCH: the HTTP routes that expose this legacy per-client integration
+ * (/api/integrations/ghl/*) are DISABLED (501) unless LEGACY_GHL_ROUTES_ENABLED=
+ * "true" is explicitly set. They are off by default so arbitrary client GHL
+ * sub-accounts cannot be read. Vault Core does not depend on this flag — it uses
+ * the env-only core client regardless.
+ *
  * READ-ONLY ONLY. This client can:
  * - Fetch contacts, opportunities, appointments, and pipelines
  * - Sync pipeline/appointment data to Supabase
@@ -33,6 +39,22 @@ import type { GHLDealPreview } from "@/lib/revenue/types";
 import type { GHLOpportunitySnapshotRow } from "@/lib/supabase/types";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
+
+// ─── Kill switch ──────────────────────────────────────────────
+// The legacy per-client GHL HTTP routes are disabled unless this flag is set.
+// This guarantees no /api/integrations/ghl/* endpoint can read an arbitrary
+// client GHL sub-account by default. Vault Core never uses these routes.
+export function legacyGhlRoutesEnabled(): boolean {
+  return process.env.LEGACY_GHL_ROUTES_ENABLED === "true";
+}
+
+// Standard disabled-response payload for the legacy routes (kept here so every
+// route returns the identical, documented 501 shape).
+export const LEGACY_GHL_DISABLED_BODY = {
+  error: "Disabled",
+  message:
+    "Legacy per-client GHL routes are disabled. Vault Core never uses them. Set LEGACY_GHL_ROUTES_ENABLED=true to re-enable them for the Revenue Dashboard.",
+} as const;
 
 // ─── Types ────────────────────────────────────────────────────
 

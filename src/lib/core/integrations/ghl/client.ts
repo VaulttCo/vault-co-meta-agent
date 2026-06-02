@@ -32,6 +32,27 @@ interface GhlConfig {
   locationId: string;
 }
 
+// Reserved query params a caller must NEVER supply — they would change which GHL
+// account/location is read. ghlGet() drops these and force-sets the Vault-Co
+// location itself. Compared case-insensitively.
+const RESERVED_SCOPE_PARAMS: ReadonlySet<string> = new Set([
+  "locationid",
+  "location_id",
+  "location",
+  "accountid",
+  "account_id",
+]);
+
+// Query params accepted by ghlGet(). Reserved scope identifiers are typed as
+// `never` so they cannot be supplied at compile time (runtime also drops them).
+export type GhlReadParams = Record<string, string | number | undefined> & {
+  locationId?: never;
+  location_id?: never;
+  location?: never;
+  accountId?: never;
+  account_id?: never;
+};
+
 // Resolve config for a specific Vault Co account. Returns null (fail-safe) if
 // that account's vars are absent. Only these two accounts are ever resolvable.
 function resolveConfig(account: GhlAccount): GhlConfig | null {
@@ -77,17 +98,22 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 export async function ghlGet<T = unknown>(
   account: GhlAccount,
   path: string,
-  params: Record<string, string | number | undefined> = {}
+  params: GhlReadParams = {}
 ): Promise<T | null> {
   const config = resolveConfig(account);
   if (!config) return null;
 
   const url = new URL(path.replace(/^\//, ""), GHL_BASE + "/");
-  // Always scope to THIS account's configured location — never any other.
-  url.searchParams.set("locationId", config.locationId);
+  // Apply caller params FIRST, but NEVER allow a caller to override the account's
+  // location/account scope — reserved scope params are dropped outright.
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined) url.searchParams.set(k, String(v));
+    if (v === undefined) continue;
+    if (RESERVED_SCOPE_PARAMS.has(k.toLowerCase())) continue; // reject scope overrides
+    url.searchParams.set(k, String(v));
   }
+  // Force THIS account's configured location LAST so it can never be overridden,
+  // even if a reserved param slipped through. Vault Core is Vault-Co-only.
+  url.searchParams.set("locationId", config.locationId);
 
   try {
     const res = await fetchWithTimeout(url.toString(), {

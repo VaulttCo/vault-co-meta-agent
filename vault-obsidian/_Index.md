@@ -24,6 +24,10 @@ Obsidian graph view stays connected.
 - [[ADR-0007-conversation-intelligence-layer]] — Veronica + conversation intelligence + GHL
 - [[ADR-0008-production-deployment-readiness]] — Vercel deployment readiness + security
 - [[ADR-0009-Vault-Co-GHL-Scopes]] — Vault Co GHL scopes + Identity Core
+- [[ADR-0010-Hermes-Codex-QA]] — Hermes QA + Codex bridge (dev-ops)
+
+## Development QA
+- [[Hermes QA System]] — Build Operations & QA Director (Claude builds · Codex audits · Hermes coordinates)
 
 ## Vault Co Identity
 - [[Vault Co Identity Core]] — who Vault Co is (positioning, voice, audience, offer)

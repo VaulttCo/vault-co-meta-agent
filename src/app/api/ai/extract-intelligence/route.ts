@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractClientIntelligence } from "@/lib/ai/service";
+import { resolveServerRole } from "@/lib/auth/server-role";
+import { can } from "@/lib/auth/permissions";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
+  // ── Auth: extracting + persisting client intelligence is a staff write ──────
+  const auth = await resolveServerRole();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!can(auth.role, "canGenerateCampaigns")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const { clientId, onboardingSummary } = body;

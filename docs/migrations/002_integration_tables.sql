@@ -18,8 +18,12 @@ CREATE TABLE IF NOT EXISTS public.integration_connections (
 
 ALTER TABLE public.integration_connections ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "integration_connections_all" ON public.integration_connections
-  FOR ALL USING (true) WITH CHECK (true);
+-- Service-role-only from the start. The app reads/writes this table exclusively via
+-- the server-side service-role client. No anon/authenticated direct access.
+DROP POLICY IF EXISTS "integration_connections_all" ON public.integration_connections;
+DROP POLICY IF EXISTS "integration_connections_service_role" ON public.integration_connections;
+CREATE POLICY "integration_connections_service_role" ON public.integration_connections
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ─── meta_campaign_snapshots ──────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.meta_campaign_snapshots (
@@ -47,8 +51,10 @@ CREATE TABLE IF NOT EXISTS public.meta_campaign_snapshots (
 
 ALTER TABLE public.meta_campaign_snapshots ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "meta_campaign_snapshots_all" ON public.meta_campaign_snapshots
-  FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "meta_campaign_snapshots_all" ON public.meta_campaign_snapshots;
+DROP POLICY IF EXISTS "meta_campaign_snapshots_service_role" ON public.meta_campaign_snapshots;
+CREATE POLICY "meta_campaign_snapshots_service_role" ON public.meta_campaign_snapshots
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ─── ghl_pipeline_snapshots ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.ghl_pipeline_snapshots (
@@ -70,8 +76,10 @@ CREATE TABLE IF NOT EXISTS public.ghl_pipeline_snapshots (
 
 ALTER TABLE public.ghl_pipeline_snapshots ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ghl_pipeline_snapshots_all" ON public.ghl_pipeline_snapshots
-  FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "ghl_pipeline_snapshots_all" ON public.ghl_pipeline_snapshots;
+DROP POLICY IF EXISTS "ghl_pipeline_snapshots_service_role" ON public.ghl_pipeline_snapshots;
+CREATE POLICY "ghl_pipeline_snapshots_service_role" ON public.ghl_pipeline_snapshots
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ─── updated_at trigger for integration_connections ───────────
 CREATE OR REPLACE FUNCTION public.set_updated_at()

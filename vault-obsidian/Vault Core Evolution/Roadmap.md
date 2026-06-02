@@ -38,6 +38,9 @@ organizational brain (Vault Memory + Obsidian).
 - **Phase 6.8** — [[ADR-0009-Vault-Co-GHL-Scopes]]: [[Vault Co Identity Core]] + legacy Vault Co GHL
   read-only learning archive (current + legacy accounts only; no client scanning). Messaging
   intelligence + improvement recommendations; `/vault-core/identity` view.
+- **Phase 6.9** — [[ADR-0010-Hermes-Codex-QA]]: [[Hermes QA System]] + Codex second-opinion review
+  (dev-ops layer; not a business executive). `/hermes-qa` skill + `scripts/hermes-qa.mjs` + Codex
+  prompts/playbook. No production runtime change.
 
 ## Next (proposed order)
 

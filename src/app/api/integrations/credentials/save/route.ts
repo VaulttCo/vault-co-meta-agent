@@ -89,14 +89,15 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  // ── GHL kill switch ────────────────────────────────────────────────────────
-  // Storing per-client GHL credentials creates a client-sub-account access path,
-  // which violates the Vault Core invariant (GHL = Vault-Co env-only). Disabled by
-  // default; only the legacy Revenue Dashboard may opt in via LEGACY_GHL_ROUTES_ENABLED.
+  // ── GHL feature flag ───────────────────────────────────────────────────────
+  // Per-client GHL credentials power client tracking (client portal / Revenue
+  // Dashboard / reporting) and are admin-only + encrypted at rest + GET-only when
+  // read. Enabled by default; set CLIENT_GHL_TRACKING_ENABLED=false to hard-disable.
+  // (Vault Core runtime never uses per-client GHL — it is Vault-Co env-only.)
   // Meta credential storage is unaffected.
-  if (provider === "ghl" && process.env.LEGACY_GHL_ROUTES_ENABLED !== "true") {
+  if (provider === "ghl" && process.env.CLIENT_GHL_TRACKING_ENABLED === "false") {
     return NextResponse.json(
-      { error: "Per-client GHL credential storage is disabled. Vault Core uses VAULT_CO_* env vars only." },
+      { error: "Per-client GHL tracking is disabled (CLIENT_GHL_TRACKING_ENABLED=false)." },
       { status: 501 }
     );
   }

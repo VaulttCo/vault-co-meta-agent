@@ -35,6 +35,9 @@ organizational brain (Vault Memory + Obsidian).
 - **Phase 6.6** — [[ADR-0008-production-deployment-readiness]]: Vercel deployment prep — security
   audit (no committed secrets), env-var + SQL-order + route-verification docs, deployment guide.
   **Ready to deploy** (rotate the GHL key first).
+- **Phase 6.8** — [[ADR-0009-Vault-Co-GHL-Scopes]]: [[Vault Co Identity Core]] + legacy Vault Co GHL
+  read-only learning archive (current + legacy accounts only; no client scanning). Messaging
+  intelligence + improvement recommendations; `/vault-core/identity` view.
 
 ## Next (proposed order)
 

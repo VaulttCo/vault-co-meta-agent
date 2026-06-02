@@ -64,7 +64,20 @@ export type VaultNodeCategory =
   | "nurture_sequence_draft"
   | "sms_draft"
   | "hot_lead_signal"
-  | "dead_conversation_signal";
+  | "dead_conversation_signal"
+  // Phase 6.8 — Vault Co Identity Core + legacy learning
+  | "company_identity"
+  | "brand_voice"
+  | "target_market"
+  | "core_offer"
+  | "sales_positioning"
+  | "objection_handling"
+  | "messaging_principle"
+  | "differentiation"
+  | "proof_point"
+  | "pricing_context"
+  | "internal_principle"
+  | "legacy_learning";
 
 export type VaultEdgeRelationship =
   | "connected_to"
@@ -74,7 +87,10 @@ export type VaultEdgeRelationship =
   | "derived_from"
   | "related_to"
   | "supports"
-  | "requires_approval";
+  | "requires_approval"
+  | "has_identity"
+  | "defines"
+  | "guides";
 
 export type VaultActivityKind =
   | "insight"
@@ -601,4 +617,26 @@ export interface ExecutiveBrief {
   suggestedHumanActions: string[];
   systemHealth: string;
   topPerformers: { agent: string; trust: number; adoption: number }[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Phase 6.8 — Vault Co Identity Core + GHL source status
+// ─────────────────────────────────────────────────────────────
+
+export interface GhlSourceStatus {
+  account: "current" | "legacy";
+  configured: boolean;        // env vars present (NEVER exposes the key)
+  locationId: string | null;  // non-secret location id when configured
+}
+
+export interface IdentitySummary {
+  positioning: string;
+  targetMarket: string;
+  coreOffer: string;
+  brandVoice: string[];
+  messagingPrinciples: string[];
+  avoid: string[];            // what Vault Co should stop doing / never say
+  doubleDownOn: string[];     // what to repeat
+  legacyLearnings: { title: string; detail: string }[];
+  sources: GhlSourceStatus[];
 }

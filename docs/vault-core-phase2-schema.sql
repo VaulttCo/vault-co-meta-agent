@@ -2,8 +2,19 @@
 -- Vault Core — Phase 2 schema migration (Command Hub Integration)
 -- Run in your Supabase SQL editor AFTER docs/vault-core-schema.sql.
 --
--- Purely additive: extends vault_recommendations with traceability + review
--- fields and adds a review-history table. Existing rows are migrated in place.
+-- NOT purely additive. This migration:
+--   • ADDS columns to vault_recommendations and a new review-history table
+--     (additive), AND
+--   • UPDATES existing vault_recommendations rows to the new status model, AND
+--   • CHANGES the default value of vault_recommendations.status.
+--
+-- IDEMPOTENT / SAFE TO RE-RUN. Every statement is guarded:
+--   • ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS
+--   • The status UPDATEs only match legacy values ('open','reviewed','accepted',
+--     'dismissed'); after the first run those rows no longer exist, so a re-run is
+--     a no-op and will NOT clobber human review decisions (pending_review /
+--     approved / rejected / archived / implemented are left untouched).
+--   • ALTER COLUMN ... SET DEFAULT is naturally idempotent.
 -- Mock fallback continues to work with zero database.
 -- ─────────────────────────────────────────────────────────────
 

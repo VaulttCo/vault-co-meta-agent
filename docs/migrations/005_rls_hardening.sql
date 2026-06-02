@@ -71,7 +71,10 @@ CREATE POLICY "profiles_service_role_all"
   WITH CHECK (true);
 
 -- ── 4. integration_connections: service-role-only ───────────────────────────
+-- (Migration 002 now also creates this from the start; both names dropped for
+--  rerun-safety and order-independence.)
 DROP POLICY IF EXISTS "integration_connections_all" ON public.integration_connections;
+DROP POLICY IF EXISTS "integration_connections_service_role" ON public.integration_connections;
 CREATE POLICY "integration_connections_service_role"
   ON public.integration_connections
   FOR ALL
@@ -81,6 +84,7 @@ CREATE POLICY "integration_connections_service_role"
 
 -- ── 5. meta_campaign_snapshots: service-role-only ───────────────────────────
 DROP POLICY IF EXISTS "meta_campaign_snapshots_all" ON public.meta_campaign_snapshots;
+DROP POLICY IF EXISTS "meta_campaign_snapshots_service_role" ON public.meta_campaign_snapshots;
 CREATE POLICY "meta_campaign_snapshots_service_role"
   ON public.meta_campaign_snapshots
   FOR ALL
@@ -90,6 +94,7 @@ CREATE POLICY "meta_campaign_snapshots_service_role"
 
 -- ── 6. ghl_pipeline_snapshots: service-role-only ────────────────────────────
 DROP POLICY IF EXISTS "ghl_pipeline_snapshots_all" ON public.ghl_pipeline_snapshots;
+DROP POLICY IF EXISTS "ghl_pipeline_snapshots_service_role" ON public.ghl_pipeline_snapshots;
 CREATE POLICY "ghl_pipeline_snapshots_service_role"
   ON public.ghl_pipeline_snapshots
   FOR ALL

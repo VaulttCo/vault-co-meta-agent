@@ -57,17 +57,42 @@ review actions work. (With SQL + service role, these reflect live data; otherwis
 ---
 
 ## Cron / runtime notes
-`vercel.json` declares six cron tiers: `5min`, `15min`, `hourly`, `daily`, `weekly`, `monthly`
-(all hit `/api/core/tick?tier=…`). Vercel auto-attaches `Authorization: Bearer <CRON_SECRET>` when
-`CRON_SECRET` is set.
 
-- **Vercel Hobby:** cron runs **at most once per day** and is limited in count — the sub-daily tiers
-  (`5min`/`15min`/`hourly`) will **not** fire. Only `daily` (and the weekly/monthly dailies) run.
-- **Vercel Pro (recommended):** all tiers fire as declared. Use Pro for hourly+ intelligence cycles.
-- **External pinger alternative:** on Hobby, schedule an external cron (cron-job.org, GitHub Actions)
-  to `GET /api/core/tick?tier=hourly` with the `Authorization: Bearer <CRON_SECRET>` header.
+**`vercel.json` ships with a single DAILY cron (Hobby-compatible):**
+```json
+{ "crons": [ { "path": "/api/core/tick?tier=daily", "schedule": "0 9 * * *" } ] }
+```
+This runs the full daily workforce cycle once per day at 09:00 UTC. Vercel auto-attaches
+`Authorization: Bearer <CRON_SECRET>` to the request when `CRON_SECRET` is set.
+
+> **Why only one daily cron?** **Vercel Hobby accounts only allow daily cron jobs** — a sub-daily
+> expression like `*/5 * * * *` (every 5 min) fails deployment with
+> *"Hobby accounts are limited to daily cron jobs."* So the committed config is daily-only and
+> deploys cleanly on Hobby.
+
+### Running more frequent cycles
+The runtime engine, Upstash locks, and `/api/core/tick` all still support **every** tier
+(`5min` · `15min` · `hourly` · `daily` · `weekly` · `monthly`) — only the *Vercel-scheduled* cadence
+is reduced for Hobby. To run hourly/sub-daily cycles, pick one:
+
+- **Vercel Pro:** edit `vercel.json` to add sub-daily schedules, e.g.
+  `{ "path": "/api/core/tick?tier=hourly", "schedule": "0 * * * *" }`. Pro permits any cadence.
+- **External pinger (works on Hobby):** schedule an external cron (cron-job.org, GitHub Actions, etc.)
+  to call:
+  ```
+  curl "https://<your-app>.vercel.app/api/core/tick?tier=hourly" \
+    -H "Authorization: Bearer <CRON_SECRET>"
+  ```
+  every hour. This drives the hourly cycle without changing the Vercel plan.
+- **Manual:** an admin can POST `/api/core/tick?tier=hourly` from the app, or hit the GET endpoint
+  with the `CRON_SECRET` bearer, at any time.
+
+### Notes
 - **Locks:** Upstash provides best-effort per-tier locks to prevent overlapping runs; without Upstash,
-  locks are per-instance (acceptable for low volume).
+  locks are per-instance (acceptable for low volume). Unchanged by this cron-cadence change.
+- **Daily tier coverage:** all five active executives (Vega, Victoria, Valerie, Vanessa, Veronica) run
+  on the `daily` tier, and the System Creation Engine also runs daily — so the single daily cron
+  exercises the full workforce.
 
 ## Rollback
 Vercel keeps immutable deployments — use **Instant Rollback** to a prior deployment if needed.

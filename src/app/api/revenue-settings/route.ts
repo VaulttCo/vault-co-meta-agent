@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
-import { can } from "@/lib/auth/permissions";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { rowToRevenueSettings } from "@/lib/revenue/types";
 
@@ -13,13 +12,14 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────
+  // Admin-only: revenue settings expose GHL/Stripe IDs, fee splits, and notes.
+  // (canViewReports includes client_viewer, which must NOT see this data.)
   const auth = await resolveServerRole();
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  if (!can(auth.role, "canViewReports")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (auth.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden — admin role required" }, { status: 403 });
   }
 
   // ── Fetch ─────────────────────────────────────────────────────

@@ -477,17 +477,28 @@ h1, h2, h3, h4, h5, h6 {
 }
 .vm-float { animation: vmFloat 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
-/* Organic 2-axis drift — used by the full brain so nodes orbit/wander subtly
-   rather than bobbing in lockstep. Applied to a node WRAPPER (purely cosmetic;
-   it does not move graph edge anchors). */
+/* Bounded, deterministic 2-axis drift — applied to a node WRAPPER (purely
+   cosmetic; never moves graph edge anchors). Amplitude/duration/phase come from
+   per-node CSS variables set by brainViz.driftVars(): each node returns smoothly
+   to its home position, so motion is alive but controlled — no wandering, no
+   layout shift. Defaults keep it safe if variables are absent. */
 @keyframes vmDrift {
-  0%   { transform: translate(0, 0); }
-  25%  { transform: translate(2.5px, -3px); }
-  50%  { transform: translate(-2px, 2.5px); }
-  75%  { transform: translate(3px, 1.5px); }
-  100% { transform: translate(0, 0); }
+  0%   { transform: translate(0px, 0px); }
+  25%  { transform: translate(var(--vm-ax, 4px), calc(var(--vm-ay, 4px) * -1)); }
+  50%  { transform: translate(calc(var(--vm-ax, 4px) * -0.75), var(--vm-ay, 4px)); }
+  75%  { transform: translate(calc(var(--vm-ax, 4px) * 0.55), calc(var(--vm-ay, 4px) * 0.6)); }
+  100% { transform: translate(0px, 0px); }
 }
-.vm-drift { animation: vmDrift 9s ease-in-out infinite; will-change: transform; }
+.vm-drift {
+  animation: vmDrift var(--vm-dur, 9s) ease-in-out infinite;
+  animation-delay: var(--vm-delay, 0s);
+  will-change: transform;
+}
+
+/* Memory-node labels — hidden by default to keep the network breathable; revealed
+   on hover (and forced visible for selected / fresh nodes via inline opacity). */
+.vm-node-label-mem { transition: opacity 140ms ease; }
+.vm-node:hover .vm-node-label-mem { opacity: 1 !important; }
 
 /* Relationship lines — signal traveling along the pathway (dash march). */
 @keyframes vmSignal {

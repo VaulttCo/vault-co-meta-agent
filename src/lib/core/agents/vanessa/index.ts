@@ -2,7 +2,7 @@
 //
 // Mission: coordinate the workforce and convert intelligence into executive
 // priorities. Vanessa is the Executive Oversight Layer: she reads outputs from
-// the active executives (Vega, Victoria, Valerie), prioritizes, generates the
+// the active executives (Vega, Valentina, Valerie), prioritizes, generates the
 // Daily Executive Brief, writes executive memory nodes, sets Vanessa-priority on
 // open recommendations, and pushes the top item to the Command Hub.
 //

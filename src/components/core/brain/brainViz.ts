@@ -11,7 +11,7 @@
 import { styleFor } from "../categoryStyle";
 
 // ── Color system ───────────────────────────────────────────────
-// The five active executives carry distinct accents so the network reads as
+// The six active executives carry distinct accents so the network reads as
 // several minds, not a uniform cloud. Anything unmapped falls back to the
 // category color (agents → cyan).
 export const AGENT_ACCENT: Record<string, string> = {
@@ -20,6 +20,7 @@ export const AGENT_ACCENT: Record<string, string> = {
   valentina: "#ff8400",
   valerie: "#c9a84c",
   vanessa: "#a78bfa",
+  vivian: "#22c55e", // AI Client Success / Experience Operator (active, recommend-only)
 };
 
 export const CORE_COLOR = styleFor("memory_core").color; // #0081f2

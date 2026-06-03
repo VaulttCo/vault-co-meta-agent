@@ -14,17 +14,25 @@ human explicitly approves. Pair with `/hermes-qa`.
 >   references as the old marketing executive.
 > - There is intentionally **no** `victoria` Vault Core executive anymore. Spec:
 >   `docs/valentina-marketing-director-spec.md` (now implemented as the rename).
-> - **Vivian = AI Client Success / Experience Operator — DORMANT / PLANNED, NOT ACTIVE.**
->   She exists only as an `active: false` metadata stub in `registry.ts` and may appear in
->   docs, the roadmap, dormant metadata, and clearly-labeled dormant UI/brain references.
->   She must **NOT** appear in `ACTIVE_AGENT_IDS`, **NOT** in `RUNNABLE_AGENTS`
->   (`src/lib/core/agents/index.ts`), **NOT** in the dispatcher, and **NOT** in the tick;
->   she must not be counted as an active executive/contributor, and must not mutate any
->   external system. Do NOT flag Vivian's dormant stub or her docs/roadmap/labeled-dormant
->   UI as a problem. **DO flag as P0** any sign that Vivian is active runtime before an
->   explicit approved activation phase: in `ACTIVE_AGENT_IDS`, in `RUNNABLE_AGENTS`, in the
->   dispatcher/tick, counted as active, or performing any external mutation. ACTIVE_AGENT_IDS
->   must remain exactly the 5. Spec: `docs/vivian-client-success-operator-spec.md`.
+> - **Vivian = AI Client Success / Experience Operator — ACTIVE (Phase 8.2), RECOMMEND-ONLY.**
+>   She is now the **sixth** active Vault Core runtime agent: `active: true` in `registry.ts`,
+>   in `ACTIVE_AGENT_IDS`, in `RUNNABLE_AGENTS` (`vivianAgent`, module
+>   `src/lib/core/agents/vivian/index.ts`), and in the tick. **ACTIVE_AGENT_IDS / RUNNABLE_AGENTS
+>   are now exactly 6** (vega, veronica, valentina, valerie, vanessa, vivian) — do NOT flag the
+>   count as wrong; expect Vivian as the sixth. Vivian is **recommend-only**: she reads safe
+>   internal data only (no raw contact PII / no credentials / no tokens / no raw provider
+>   payloads), writes Vault Memory + recommendation candidates for HUMAN approval, and must
+>   **never** mutate any external system. **DO flag as P0** any Vivian code that emails/texts/
+>   calls clients, updates GHL/CRM, triggers workflows, touches Stripe/billing, mutates Meta,
+>   sends reports, auto-creates external tasks, or auto-executes a recommendation; or that imports
+>   GHL/Stripe/Meta write paths or SMS/email/calling tools. Spec:
+>   `docs/vivian-client-success-operator-spec.md`.
+> - **Vera + Vesper = backend recommendation QA layer, NOT executives.** Pure functions in
+>   `src/lib/core/recommendations/*` (scoring/dedupe/quality-gate) wired into
+>   `insertRecommendation`. They must NOT be in `ACTIVE_AGENT_IDS`/`RUNNABLE_AGENTS`, must make
+>   no external calls, and must mutate nothing. The gate is FAIL-OPEN and does not require Codex.
+>   **Codex must never be a production runtime dependency** — flag P1 if any production code path
+>   imports/invokes Codex. Spec: `docs/vera-vesper-recommendation-quality-gate.md`.
 
 ---
 
@@ -56,11 +64,13 @@ Vault Core safety invariants (flag ANY violation as P0):
   from Vault Core runtime.
 - Demo auth (NEXT_PUBLIC_AUTH_MODE=demo) must never bypass auth in a production build (gated on
   NODE_ENV !== "production" in both middleware and AuthProvider).
-- Workforce roster: ACTIVE_AGENT_IDS and RUNNABLE_AGENTS must remain EXACTLY the 5 active
-  executives (vega, veronica, valentina, valerie, vanessa). Vivian (AI Client Success Operator) is a
-  DORMANT `active: false` stub — flag P0 if she is in ACTIVE_AGENT_IDS, RUNNABLE_AGENTS, the
-  dispatcher, the tick, counted as active, or mutating any external system. A clearly-labeled dormant
-  stub / docs / roadmap / dimmed UI reference is expected and must NOT be flagged.
+- Workforce roster: ACTIVE_AGENT_IDS and RUNNABLE_AGENTS are EXACTLY the 6 active executives
+  (vega, veronica, valentina, valerie, vanessa, vivian). Vivian (AI Client Success Operator) is now
+  ACTIVE but RECOMMEND-ONLY — flag P0 if Vivian (or any agent) mutates an external system, contacts a
+  client, sends/launches/charges, triggers a workflow, auto-creates external tasks, or auto-executes a
+  recommendation; flag P0 if a 7th unapproved agent appears. Vera/Vesper are backend QA (pure
+  functions), NOT runtime executives, and must not appear in ACTIVE_AGENT_IDS/RUNNABLE_AGENTS. Codex
+  must not be a production runtime dependency.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

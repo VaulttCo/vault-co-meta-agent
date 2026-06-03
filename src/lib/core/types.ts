@@ -77,7 +77,12 @@ export type VaultNodeCategory =
   | "proof_point"
   | "pricing_context"
   | "internal_principle"
-  | "legacy_learning";
+  | "legacy_learning"
+  // Phase 8.2 — Vivian, AI Client Success / Experience Operator (recommend-only)
+  | "client_success_signal"
+  | "client_experience_signal"
+  | "retention_risk"
+  | "onboarding_health";
 
 export type VaultEdgeRelationship =
   | "connected_to"

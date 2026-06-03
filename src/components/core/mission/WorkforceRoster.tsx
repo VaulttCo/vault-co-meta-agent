@@ -32,9 +32,9 @@ import { relativeTime } from "./relativeTime";
 const STEEL = "#6b7a99";
 const PURPLE = "#b89eff";
 
-// The five ACTIVE Vault Core executives, in registry order. This list is the
+// The six ACTIVE Vault Core executives, in registry order. This list is the
 // truthful structural workforce; it must stay in sync with WORKFORCE (active).
-// Vivian (stub) and Victoria (product) are intentionally absent.
+// Victoria (product) is intentionally absent. Vivian is RECOMMEND-ONLY.
 interface ExecConfig {
   id: string;
   name: string;
@@ -46,11 +46,12 @@ interface ExecConfig {
 }
 
 const EXECUTIVES: ExecConfig[] = [
-  { id: "vega",      name: "Vega",      role: "Intelligence Director",    mission: "Identify patterns across everything and feed recommendations to the workforce.", icon: Radar,     accent: "#22d3ee", href: "/workforce" },
-  { id: "veronica",  name: "Veronica",  role: "Lead Acquisition Director", mission: "Understand why leads convert.",                                                 icon: Bot,       accent: "#0081f2", href: "/ai-agent" },
-  { id: "valentina", name: "Valentina", role: "AI Marketing Director",     mission: "Understand how attention converts.",                                            icon: Megaphone, accent: "#ff8400", href: "/workforce" },
-  { id: "valerie",   name: "Valerie",   role: "Financial Director",        mission: "Protect and grow financial performance.",                                       icon: Wallet,    accent: "#c9a84c", href: "/revenue-dashboard" },
-  { id: "vanessa",   name: "Vanessa",   role: "Executive Director",        mission: "Convert intelligence into executive priorities.",                               icon: Crown,     accent: "#a78bfa", href: "/proposals" },
+  { id: "vega",      name: "Vega",      role: "Intelligence Director",    mission: "Identify patterns across everything and feed recommendations to the workforce.", icon: Radar,          accent: "#22d3ee", href: "/workforce" },
+  { id: "veronica",  name: "Veronica",  role: "Lead Acquisition Director", mission: "Understand why leads convert.",                                                 icon: Bot,            accent: "#0081f2", href: "/ai-agent" },
+  { id: "valentina", name: "Valentina", role: "AI Marketing Director",     mission: "Understand how attention converts.",                                            icon: Megaphone,      accent: "#ff8400", href: "/workforce" },
+  { id: "valerie",   name: "Valerie",   role: "Financial Director",        mission: "Protect and grow financial performance.",                                       icon: Wallet,         accent: "#c9a84c", href: "/revenue-dashboard" },
+  { id: "vanessa",   name: "Vanessa",   role: "Executive Director",        mission: "Convert intelligence into executive priorities.",                               icon: Crown,          accent: "#a78bfa", href: "/proposals" },
+  { id: "vivian",    name: "Vivian",    role: "Client Success Operator",   mission: "Protect client experience, retention, and onboarding health — recommend-only.",  icon: HeartHandshake, accent: "#22c55e", href: "/recommendations" },
 ];
 
 interface WorkforceRosterProps {
@@ -209,37 +210,6 @@ function HermesCard({
   );
 }
 
-// Vivian — DORMANT future operator. Rendered here as a clearly-labeled roadmap
-// reference ONLY: dimmed, non-interactive, never counted as an active executive
-// or contributor, never placed with the five active execs. She is not in
-// ACTIVE_AGENT_IDS / RUNNABLE_AGENTS / dispatcher / tick.
-function VivianDormantCard({ index }: { index: number }) {
-  return (
-    <VCBentoCell index={index} colSpan={1} accent={STEEL} minHeight={96}>
-      <div className="flex items-center justify-between gap-4 h-full p-5 flex-wrap" style={{ opacity: 0.6 }}>
-        <div className="flex items-center gap-3 min-w-0">
-          <VCGlowIcon icon={HeartHandshake} color={STEEL} size={18} ringSize={40} />
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--t-dim)" }}>
-              AI Client Success · Roadmap
-            </p>
-            <p
-              className="text-[16px] font-bold leading-tight"
-              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-muted)", letterSpacing: "0.02em" }}
-            >
-              Vivian
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <VCStatusBadge label="Future · Dormant" variant="neutral" />
-          <VCChip label="not in runtime" color={STEEL} />
-        </div>
-      </div>
-    </VCBentoCell>
-  );
-}
-
 export function WorkforceRoster({
   loading,
   workforce,
@@ -251,7 +221,7 @@ export function WorkforceRoster({
 
   return (
     <div className="hub-fade-up w-full flex flex-col gap-4">
-      <VCSectionLabel>Active Workforce · 5 Vault Core Executives</VCSectionLabel>
+      <VCSectionLabel>Active Workforce · 6 Vault Core Executives</VCSectionLabel>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {EXECUTIVES.map((cfg, i) => (
           <ExecutiveCard
@@ -266,15 +236,14 @@ export function WorkforceRoster({
 
       <VCDivider className="my-1" />
 
-      <VCSectionLabel>Product Surface · System Layer · Roadmap</VCSectionLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <VCSectionLabel>Product Surface &amp; System Layer</VCSectionLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <VictoriaProductCard index={EXECUTIVES.length} />
         <HermesCard
           index={EXECUTIVES.length + 1}
           skillCount={loading ? 0 : hermesSkillCount}
           lastRun={loading ? null : hermesLastRun}
         />
-        <VivianDormantCard index={EXECUTIVES.length + 2} />
       </div>
     </div>
   );

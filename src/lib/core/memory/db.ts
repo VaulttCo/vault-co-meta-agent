@@ -11,6 +11,8 @@
 //     throws just because the database isn't wired.
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { runQualityGate, gateMetadata } from "../recommendations/quality-gate";
+import type { ExistingRecommendation, RecommendationCandidate } from "../recommendations/types";
 import {
   buildMockGraph,
   buildMockActivity,
@@ -310,31 +312,106 @@ export async function insertActivity(input: VaultActivityInput): Promise<boolean
   }
 }
 
+// Vesper "merge": fold a near-duplicate candidate's evidence into the existing
+// canonical open recommendation. Updates METADATA ONLY (merge count, latest
+// evidence, timestamp) — it never changes status, never approves, and takes no
+// external action. Non-fatal: a failure here just means the merge note is skipped.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function mergeRecommendationEvidence(client: any, targetId: string, candidate: RecommendationCandidate): Promise<void> {
+  try {
+    const { data: row } = await client
+      .from("vault_recommendations")
+      .select("metadata")
+      .eq("id", targetId)
+      .single();
+    const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+    const mergeCount = typeof meta.merge_count === "number" ? (meta.merge_count as number) + 1 : 1;
+    await client
+      .from("vault_recommendations")
+      .update({
+        metadata: {
+          ...meta,
+          merge_count: mergeCount,
+          last_merged_at: new Date().toISOString(),
+          latest_merged_evidence: (candidate.body ?? candidate.title ?? "").slice(0, 500),
+        },
+      })
+      .eq("id", targetId);
+  } catch (e) {
+    console.error(`${LOG} mergeRecommendationEvidence (non-fatal):`, (e as Error).message);
+  }
+}
+
 export async function insertRecommendation(
   input: VaultRecommendationInput
 ): Promise<string | null> {
   const client = db();
   if (!client) return null;
+
+  // ── Recommendation Quality Gate (Vera + Vesper) ───────────────────────────
+  // Runs before persistence so weak/duplicate recommendations never reach
+  // Mission Control. Applies to EVERY agent (vega…vivian). Pure + in-memory: no
+  // external calls. TRULY FAIL-OPEN — the existing open recommendations are read
+  // with a DIRECT query that THROWS on a DB error (so the catch keeps the
+  // candidate); we never compare a live recommendation against mock fallback data.
+  // Surviving rows are still created as `pending_review` (human approval unchanged).
+  let finalInput = input;
+  try {
+    const { data: openRows, error: openErr } = await client
+      .from("vault_recommendations")
+      .select("id, agent, title, body, status, related_clients, created_at, metadata")
+      .eq("status", "pending_review")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (openErr) throw new Error(openErr.message); // → caught below → keep candidate
+    const open = (openRows ?? []) as ExistingRecommendation[];
+
+    const decision = runQualityGate(input, open);
+    if (decision.finalDecision === "suppress") {
+      console.log(`${LOG} quality-gate suppress [${input.agent}]: ${decision.reason}`);
+      return null; // duplicate / low-value — do not create a new row
+    }
+    if (decision.finalDecision === "merge") {
+      // Fold the candidate's evidence into the existing canonical recommendation
+      // (internal metadata only — status untouched, humans still approve) rather
+      // than silently dropping it or creating a second row for the same issue.
+      if (decision.mergeTargetId) await mergeRecommendationEvidence(client, decision.mergeTargetId, input);
+      console.log(`${LOG} quality-gate merge [${input.agent}] → ${decision.mergeTargetId}: ${decision.reason}`);
+      return null;
+    }
+    finalInput = {
+      ...input,
+      metadata: { ...(input.metadata ?? {}), ...gateMetadata(decision) },
+      // Downgrade lowers the priority so borderline items don't crowd strong ones.
+      priority_score:
+        decision.finalDecision === "downgrade"
+          ? Math.max(0.1, (input.priority_score ?? 0.5) * 0.6)
+          : input.priority_score,
+    };
+  } catch (e) {
+    console.error(`${LOG} quality-gate error (fail-open, recommendation kept):`, (e as Error).message);
+  }
+
   try {
     const { data, error } = await client
       .from("vault_recommendations")
       .insert({
-        agent: input.agent,
-        title: input.title,
-        body: input.body ?? null,
-        impact: input.impact ?? null,
-        priority_score: input.priority_score ?? 0.5,
+        agent: finalInput.agent,
+        title: finalInput.title,
+        body: finalInput.body ?? null,
+        impact: finalInput.impact ?? null,
+        priority_score: finalInput.priority_score ?? 0.5,
         status: "pending_review", // created for human review — only humans advance it
-        node_id: input.node_id ?? null,
-        metadata: input.metadata ?? {},
-        influence_score: input.influence_score ?? 0.5,
-        revenue_impact: input.revenue_impact ?? null,
-        related_clients: input.related_clients ?? [],
-        related_campaigns: input.related_campaigns ?? [],
-        related_conversations: input.related_conversations ?? [],
-        related_node_ids: input.related_node_ids ?? [],
-        vanessa_priority: input.vanessa_priority ?? null,
-        priority_reason: input.priority_reason ?? null,
+        node_id: finalInput.node_id ?? null,
+        metadata: finalInput.metadata ?? {},
+        influence_score: finalInput.influence_score ?? 0.5,
+        revenue_impact: finalInput.revenue_impact ?? null,
+        related_clients: finalInput.related_clients ?? [],
+        related_campaigns: finalInput.related_campaigns ?? [],
+        related_conversations: finalInput.related_conversations ?? [],
+        related_node_ids: finalInput.related_node_ids ?? [],
+        vanessa_priority: finalInput.vanessa_priority ?? null,
+        priority_reason: finalInput.priority_reason ?? null,
       })
       .select("id")
       .single();

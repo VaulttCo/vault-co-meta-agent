@@ -5,7 +5,7 @@ runtime is `src/lib/core/agents/registry.ts` (`WORKFORCE`, `ACTIVE_AGENT_IDS`) a
 `src/lib/core/agents/index.ts` (`RUNNABLE_AGENTS`). This doc must stay consistent
 with those files.
 
-## Active Vault Core runtime executives (5)
+## Active Vault Core runtime executives (6)
 
 These are in `ACTIVE_AGENT_IDS` **and** `RUNNABLE_AGENTS`, run in the tick, and are
 counted as active. All are **read / analyze / recommend / prioritize only** — they
@@ -18,30 +18,35 @@ never send, launch, charge, or mutate external systems; humans approve everythin
 | `valentina` | Valentina | AI Marketing Director |
 | `valerie` | Valerie | Financial Director |
 | `vanessa` | Vanessa | Executive Director |
+| `vivian` | Vivian | AI Client Success / Experience Operator — **recommend-only** (activated Phase 8.2) |
 
-## Planned / dormant (NOT active)
+**Vivian** (activated Phase 8.2) is the sixth active runtime agent and is
+**recommend-only**: she reads safe internal data, surfaces client-success /
+experience / retention recommendations for **human approval**, and never mutates
+any external system (no GHL/Stripe/Meta/SMS/email/workflow, no client contact, no
+auto tasks). Her recommendations pass the Vera/Vesper quality gate. See
+[`vivian-client-success-operator-spec.md`](./vivian-client-success-operator-spec.md).
 
-| ID | Name | Role | Status |
-|---|---|---|---|
-| `vivian` | Vivian | AI Client Success / Experience Operator | **PLANNED · DORMANT · NOT ACTIVE · NOT IN RUNTIME** |
+## Backend QA layer (NOT active executives)
 
-**Vivian** is a metadata stub only (`active: false`). She is **planned, not
-active**: not in `ACTIVE_AGENT_IDS`, not in `RUNNABLE_AGENTS`, not in the
-dispatcher, not in the tick, and **not a runtime executive yet**. She is not
-counted as an active contributor. In Mission Control and the Vault Memory brain she
-appears (if at all) only as a clearly-labeled dormant/roadmap reference, dimmed and
-outside the active executive ring. Activation is a separate, explicitly-approved
-phase — see [`vivian-client-success-operator-spec.md`](./vivian-client-success-operator-spec.md).
+| Name | What it is |
+|---|---|
+| Vera | **Recommendation Quality Auditor** — pure backend scoring. Not a runtime agent, not in `ACTIVE_AGENT_IDS`/`RUNNABLE_AGENTS`. |
+| Vesper | **Recommendation Deduplication / Coherence Auditor** — pure backend dedupe. Not a runtime agent. |
+
+See [`vera-vesper-recommendation-quality-gate.md`](./vera-vesper-recommendation-quality-gate.md).
 
 ## Not Vault Core executives (do not add to the runtime workforce)
 
 | Name | What it is |
 |---|---|
 | Victoria | **AI Sales Coach — product surface only** (`src/lib/victoria/**`, `/victoria`). Not a Vault Core executive, not in the registry, not in the tick. |
-| Hermes | **QA / dev-ops layer only** (Execution & Validation). Not a business operator, not a runtime executive. |
+| Hermes | **QA / dev-ops coordinator only** (can audit the quality gate). Not a business operator, not a runtime executive. |
+| Codex | **Manual, read-only second-opinion audit tool.** Never called from production runtime. |
 
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,
-valerie, vanessa`. Adding a sixth active executive (including activating Vivian)
-requires an explicit, approved activation phase and a full safety re-verification.
+valerie, vanessa, vivian` (6). Vera and Vesper are backend QA only. Adding a
+seventh active executive requires an explicit, approved activation phase and a full
+safety re-verification.

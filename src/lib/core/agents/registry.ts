@@ -1,12 +1,13 @@
 // Vault Core — Workforce roster (Layer 2).
 //
-// Currently ACTIVE (5): Vega, Veronica, Valentina, Valerie, Vanessa.
-// Metadata-only STUB (not active, not in the tick): Vivian — the AI Client
-// Success / Experience Operator (DORMANT, planned). The UI renders the full
-// workforce; a future, separately-approved activation phase can flip
-// `active: true` and attach a runnable agent. Vivian is NOT in ACTIVE_AGENT_IDS,
-// NOT in RUNNABLE_AGENTS (src/lib/core/agents/index.ts), NOT in the dispatcher,
-// and NOT in the tick. See docs/vivian-client-success-operator-spec.md.
+// Currently ACTIVE (6): Vega, Veronica, Valentina, Valerie, Vanessa, Vivian.
+// Vivian — the AI Client Success / Experience Operator — was activated in Phase
+// 8.2 as a RECOMMEND-ONLY runtime agent: she is in ACTIVE_AGENT_IDS, in
+// RUNNABLE_AGENTS (src/lib/core/agents/index.ts → vivianAgent), and runs on the
+// existing tick. She reads only safe internal data, recommends internal client-
+// success actions for HUMAN approval, and never mutates any external system
+// (no GHL/Stripe/Meta/SMS/email/workflow, no client contact, no auto tasks).
+// See docs/vivian-client-success-operator-spec.md.
 //
 // NAMING (corrected — see docs/valentina-marketing-director-spec.md):
 //   • Valentina = AI Marketing Director — the active marketing executive below.
@@ -64,9 +65,9 @@ export const WORKFORCE: AgentMeta[] = [
     mission:
       "Monitor client experience, onboarding health, sentiment, fulfillment gaps, retention risk, and renewal readiness — and recommend internal actions that help Vault Co retain and support clients.",
     color: GREEN,
-    active: false, // DORMANT stub — AI Client Success / Experience Operator. Not active,
-                   // not runnable, not in the tick. Activation requires a separate
-                   // approved phase (see docs/vivian-client-success-operator-spec.md).
+    active: true, // ACTIVE (Phase 8.2) — AI Client Success / Experience Operator,
+                  // RECOMMEND-ONLY. Runnable (vivianAgent), in the tick. Never mutates
+                  // external systems. See docs/vivian-client-success-operator-spec.md.
     tiers: ["daily", "weekly"],
   },
   {

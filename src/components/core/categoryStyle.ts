@@ -74,6 +74,11 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   pricing_context: { label: "Pricing Context", color: "#d4b35a" },
   internal_principle: { label: "Internal Principle", color: "#818cf8" },
   legacy_learning: { label: "Legacy Learning", color: "#f59e0b" },
+  // Phase 8.2 — Vivian, AI Client Success / Experience Operator (green — retention)
+  client_success_signal: { label: "Client Success", color: "#22c55e" },
+  client_experience_signal: { label: "Client Experience", color: "#34d399" },
+  retention_risk: { label: "Retention Risk", color: "#ef4444" },
+  onboarding_health: { label: "Onboarding Health", color: "#2dd4bf" },
 };
 
 export function styleFor(category: string): CategoryStyle {

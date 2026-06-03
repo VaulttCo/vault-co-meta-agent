@@ -25,8 +25,8 @@ import { styleFor } from "@/components/core/categoryStyle";
 import { AGENT_ACCENT, CORE_GRADIENT_STOPS, agentColor, isFresh } from "@/components/core/brain/brainViz";
 import type { VaultGraph } from "@/lib/core/types";
 
-// Structural fallback brain — the five active executives around the core.
-const FALLBACK_AGENTS = ["vega", "veronica", "valentina", "valerie", "vanessa"];
+// Structural fallback brain — the six active executives around the core.
+const FALLBACK_AGENTS = ["vega", "veronica", "valentina", "valerie", "vanessa", "vivian"];
 
 const CX = 320;
 const CY = 168;

@@ -1,11 +1,19 @@
-# Vivian — AI Client Success / Experience Operator (DORMANT SPEC)
+# Vivian — AI Client Success / Experience Operator (ACTIVE · RECOMMEND-ONLY)
 
-> **Status: PLANNED · DORMANT · NOT ACTIVE · NOT IN RUNTIME.**
-> Vivian is a metadata stub only (`active: false` in `src/lib/core/agents/registry.ts`).
-> She is **not** in `ACTIVE_AGENT_IDS`, **not** in `RUNNABLE_AGENTS`
-> (`src/lib/core/agents/index.ts`), **not** in the dispatcher, and **not** in the
-> tick. Activating her is a separate, explicitly-approved future phase (see
-> _Future activation checklist_ below). This document is the dormant specification.
+> **Status: ACTIVE · RECOMMEND-ONLY (activated Phase 8.2).**
+> Vivian is the **sixth** active Vault Core runtime agent. She is `active: true` in
+> `src/lib/core/agents/registry.ts`, in `ACTIVE_AGENT_IDS`, in `RUNNABLE_AGENTS`
+> (`src/lib/core/agents/index.ts` → `vivianAgent`, module
+> `src/lib/core/agents/vivian/index.ts`), and runs on the existing tick (daily /
+> weekly tiers — cadence unchanged).
+>
+> She is **RECOMMEND-ONLY**: she reads only safe internal data, writes Vault Memory
+> nodes + internal recommendation candidates for **human approval**, and **never**
+> mutates any external system — no GHL/Stripe/Meta/SMS/email/workflow, no client
+> contact, no auto-created tasks, nothing sent. Every recommendation she produces
+> passes through the Vera + Vesper quality gate before it is saved/surfaced.
+>
+> Active workforce is now **6**: vega, veronica, valentina, valerie, vanessa, vivian.
 
 ---
 
@@ -71,16 +79,16 @@ or mutates anything externally.
 
 > **Vivian recommends. Vivian does not send. Vivian does not mutate. Humans approve.**
 
-## What Vivian is NOT allowed to do
+## What Vivian is NOT allowed to do (permanent, even while active)
 
-- Run in the tick before an approved activation phase.
-- Appear in `ACTIVE_AGENT_IDS`.
-- Appear in `RUNNABLE_AGENTS`.
-- Be wired into the dispatcher or any active runtime execution path.
-- Be counted as an active executive or active contributor.
+- Email, text, or call clients; contact clients in any way.
+- Update GHL or CRM records; trigger workflows.
+- Change billing or touch Stripe; mutate Meta.
+- Send reports; auto-create external tasks.
 - Use per-client GHL credentials for executive runtime (Vault Core executive
   runtime must only ever use `VAULT_CO_*` — unchanged by Vivian).
-- Perform any external mutation (GHL / Stripe / Meta / SMS / email / workflows).
+- Perform ANY external mutation (GHL / Stripe / Meta / SMS / email / workflows).
+- Bypass human approval, or auto-execute any recommendation.
 
 ## Human approval model
 
@@ -91,40 +99,44 @@ or mutates anything externally.
 4. Approval updates **internal status only**. Nothing is sent, launched, charged,
    or mutated. No external side effects, ever.
 
-## Future data sources (safe, read-only — NOT wired yet)
+## Live implementation (Phase 8.2)
 
-When activated, Vivian should read only existing, already-collected, role-guarded
-internal signals. **Do not wire any new runtime ingestion in the dormant phase.**
-Candidate inputs:
+**Agent module:** `src/lib/core/agents/vivian/index.ts` (pure analysis in
+`src/lib/core/agents/vivian/signals.ts`). Follows the same `RunnableAgent` pattern
+as the other five; mock-safe (writes no-op without a DB).
 
-- client onboarding stage
-- last client communication date
-- report delivery history
-- client sentiment notes
-- unresolved tasks
-- open approvals
-- fulfillment status
-- support / communication notes
-- revenue retention risk signals
-- inactive clients
-- delayed launches
-- missing assets / access
-- overdue reports
+**Safe data sources read (READ-ONLY, no PII surfaced):** the client list via
+`getDataProvider().getClients()` — client `status`, onboarding phase, access fields
+(Meta account / pixel / GHL location *presence* only), basic `stats`, campaign
+status, `intelligenceScore`. Vivian does **not** read raw contact PII (emails,
+phones, messages), raw provider payloads, credentials, or tokens. When the DB is
+unavailable she uses mock/fallback data.
 
-## Future activation checklist (separate, approved phase only)
+**Output — recommend-only candidates** (shape in `signals.ts`,
+`VivianRecommendationCandidate`): `clientId`, `clientName` (business name only),
+`riskType`, `severity`, `evidence`, `recommendedHumanAction`, `confidence`,
+`sourceSignals`, `neverAutoExecute: true`. Risk types: missing access/assets,
+delayed launch, churn/retention risk, fulfillment gap, low confidence. Every
+recommendation states a clear next **human** action and is created as
+`pending_review`.
 
-Do **all** of the following, in order, only after explicit approval:
+**Quality gate:** every Vivian recommendation flows through Vera + Vesper (see
+`docs/vera-vesper-recommendation-quality-gate.md`) inside `insertRecommendation`
+before it is saved/surfaced.
 
-1. Confirm leadership sign-off to activate a sixth Vault Core executive.
-2. Flip `active: true` for `vivian` in `src/lib/core/agents/registry.ts`.
-3. Implement her agent module (recommend-only; no external mutation; mirrors the
-   safety posture of the existing five) and add it to `RUNNABLE_AGENTS` in
-   `src/lib/core/agents/index.ts`.
-4. Confirm she reads only existing role-guarded data (no new external ingestion).
-5. Verify she emits recommendations/drafts into the existing internal queues only.
-6. Re-run the full safety suite: `pnpm build`, `pnpm exec tsc --noEmit`,
-   `node scripts/hermes-qa.mjs`, and a Codex review.
-7. Confirm the active executive count and the Mission Control / brain treatment
-   intentionally move her from "Roadmap / dormant" to "active executive."
+## Activation checklist (completed in Phase 8.2)
 
-Until every step is complete and approved, Vivian remains dormant.
+- [x] Leadership sign-off to activate a sixth Vault Core executive.
+- [x] `active: true` for `vivian` in `registry.ts` (→ in `ACTIVE_AGENT_IDS`).
+- [x] Agent module implemented (recommend-only; no external mutation) and added to
+      `RUNNABLE_AGENTS` (`vivianAgent`).
+- [x] Reads only existing role-guarded internal data; no new external ingestion.
+- [x] Emits recommendations into the existing internal `pending_review` queue only.
+- [x] Recommendations pass the Vera/Vesper quality gate.
+- [x] Full safety suite re-run: `pnpm build`, `pnpm exec tsc --noEmit`,
+      `node scripts/hermes-qa.mjs`, Codex review.
+- [x] Mission Control + Vault Memory brain show Vivian as the 6th active executive.
+
+**Rollback:** to deactivate, set `active: false` in `registry.ts` and remove
+`vivian` from `RUNNABLE_AGENTS` — the dispatcher then drops her immediately (it
+runs only agents that are both `active` and present in `RUNNABLE_AGENTS`).

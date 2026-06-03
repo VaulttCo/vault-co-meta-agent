@@ -27,10 +27,18 @@ human explicitly approves. Pair with `/hermes-qa`.
 >   sends reports, auto-creates external tasks, or auto-executes a recommendation; or that imports
 >   GHL/Stripe/Meta write paths or SMS/email/calling tools. Spec:
 >   `docs/vivian-client-success-operator-spec.md`.
-> - **Vera + Vesper = backend recommendation QA layer, NOT executives.** Pure functions in
->   `src/lib/core/recommendations/*` (scoring/dedupe/quality-gate) wired into
->   `insertRecommendation`. They must NOT be in `ACTIVE_AGENT_IDS`/`RUNNABLE_AGENTS`, must make
->   no external calls, and must mutate nothing. The gate is FAIL-OPEN and does not require Codex.
+> - **Vera + Vesper = always-on backend recommendation HYGIENE layer, NOT executives.** Pure
+>   functions in `src/lib/core/recommendations/*` (scoring/dedupe/quality-gate/memory-context/hygiene).
+>   They run in TWO fail-open places: the insert-time gate (`insertRecommendation`) and the end-of-tick
+>   hygiene pass (`runRecommendationHygiene()` in `dispatcher.ts`). They MAY read a bounded, NON-PII
+>   Vault Memory context (open recs, related nodes/edges, recent activity, prior actions) and MAY
+>   soft-classify/suppress/merge/downgrade recommendations via reversible `metadata.hygiene` +
+>   `metadata.quality_gate`. They must NOT be in `ACTIVE_AGENT_IDS`/`RUNNABLE_AGENTS`, must NOT appear
+>   in the active workforce ring, must NOT become client-facing agents, must make NO external calls,
+>   must NEVER change a recommendation's `status` / approve / reject / implement, must NEVER hard-delete
+>   or erase audit history, and must expose NO raw credentials/PII/provider payloads. Approvals stay
+>   human-only. The hygiene pass is fail-open and must never fail the tick. Expect a `hygiene` activity
+>   entry (agent `"hygiene"`) and a `mission_visible` count — these are backend QA, not executives.
 >   **Codex must never be a production runtime dependency** — flag P1 if any production code path
 >   imports/invokes Codex. Spec: `docs/vera-vesper-recommendation-quality-gate.md`.
 

@@ -9,6 +9,7 @@ import { getRunnableAgent } from "../agents";
 import { insertAgentRun } from "../memory/db";
 import { runCollaborationCycle, runSystemCreationCycle } from "../collab/orchestrator";
 import { runIdentityAndLearningCycle } from "../identity/ingest";
+import { runRecommendationHygiene, type HygieneSummary } from "../recommendations/hygiene";
 import { setLastRun } from "./kv";
 import type { AgentTier } from "../types";
 
@@ -37,6 +38,7 @@ export interface TierRunSummary {
     legacyNodes: number;
     recommendations: number;
   };
+  hygiene?: HygieneSummary;
 }
 
 /** Active + runnable agents scheduled for this tier. */
@@ -144,6 +146,15 @@ export async function runTier(
     } catch (e) {
       console.error(`[VaultCore:dispatcher] identity cycle failed:`, (e as Error).message);
     }
+  }
+
+  // ── Vera/Vesper recommendation hygiene (ALWAYS-ON, runs after all agents).
+  // Fail-open: a hygiene error must never fail the tick. Soft metadata only — no
+  // status changes, no deletes, no approvals, no external calls.
+  try {
+    summary.hygiene = await runRecommendationHygiene();
+  } catch (e) {
+    console.error(`[VaultCore:dispatcher] recommendation hygiene failed (non-fatal):`, (e as Error).message);
   }
 
   await setLastRun(tier);

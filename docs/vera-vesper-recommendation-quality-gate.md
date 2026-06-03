@@ -16,13 +16,49 @@
 
 ## Where the gate runs
 
-The gate is wired into **`insertRecommendation`** (`src/lib/core/memory/db.ts`) —
-the single chokepoint every agent uses to persist a recommendation. It runs
-**after** an agent produces a candidate and **before** the row is saved/surfaced,
-so it applies uniformly to **every** active agent (Vega, Veronica, Valentina,
-Valerie, Vanessa, and **Vivian**). It is **fail-open**: if the gate (or the read of
-existing recommendations) throws, the recommendation is kept. Surviving rows are
-still created as `pending_review` — **human approval is unchanged**.
+Vera/Vesper run in **two** always-on places — both fail-open, both backend-only,
+neither approves/rejects/implements anything:
+
+1. **Future recommendations (insert-time gate)** — wired into **`insertRecommendation`**
+   (`src/lib/core/memory/db.ts`), the single chokepoint every agent uses. It runs
+   after an agent produces a candidate and before the row is saved, applying to
+   **every** active agent (Vega, Veronica, Valentina, Valerie, Vanessa, **Vivian**).
+   Fail-open: if the gate or the live read throws, the recommendation is kept.
+
+2. **Current recommendations (end-of-tick hygiene pass)** — `runRecommendationHygiene()`
+   (`src/lib/core/recommendations/hygiene.ts`) runs at the **end of every Vault
+   Core tick** (wired in `dispatcher.ts`, after all agents). It re-reviews the
+   **existing open** recommendations using full Vault Memory context and applies
+   **soft, reversible** metadata only — never changing `status`, never deleting,
+   never erasing evidence. A hygiene error never fails the tick.
+
+Surviving rows are always `pending_review` — **human approval is unchanged**.
+
+## Safe Vault Memory context
+
+Both paths can read a **bounded, non-PII** memory context via
+`buildRecommendationMemoryContext` (`src/lib/core/recommendations/memory-context.ts`):
+related open recommendations, related memory nodes/edges, recent agent activity,
+prior (resolved/merged) actions for the same client/topic, duplicate candidates,
+and stale/contradiction indicators. It is capped (max related recs/nodes/edges/
+activity) and returns only ids, categories, labels, summaries, and timestamps —
+**never** raw credentials, GHL contacts/payloads, emails/phones/messages, Stripe
+secrets, Meta tokens, env values, or giant graph blobs. The insert-time gate uses
+a lightweight context (open recs only); the hygiene pass uses the full context
+(open recs + graph + activity). When context is unavailable, scoring continues
+recommendation-only.
+
+## Soft visibility (keeps Mission Control high-signal)
+
+The hygiene pass classifies each current recommendation as `keep_visible`,
+`merge_into_existing`, `suppress_from_mission_control`, `downgrade_priority`,
+`needs_human_review`, or `stale_archive_candidate`, and writes it to
+`metadata.hygiene` (classification, visibility, reason, mergeTargetId,
+relatedRecommendationIds, `reviewedBy: ["vera","vesper"]`, `neverAutoExecute`).
+Items marked `visibility: "hidden"` are excluded from Mission Control's count
+(`getRecommendationCounts().mission_visible`) — **soft and reversible**; the full
+recommendations queue still shows every row for human review/audit. A single
+auditable hygiene summary is written to the activity feed each pass.
 
 ## Scoring each candidate
 

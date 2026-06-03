@@ -12,6 +12,14 @@ import { VCPanel, VCPanelHeader, VCStatusBadge, VCChip } from "@/components/ui/V
 import { STATUS_META } from "./recommendationStatus";
 import type { VaultRecommendationRow, RecommendationCounts } from "@/lib/core/types";
 
+// Recommendations soft-hidden by the Vera/Vesper hygiene pass are excluded from
+// this compact Mission Control panel (the full /recommendations queue still shows
+// them for human review/audit).
+function isHidden(r: VaultRecommendationRow): boolean {
+  const hy = (r.metadata as { hygiene?: { visibility?: string } } | undefined)?.hygiene;
+  return hy?.visibility === "hidden";
+}
+
 export function CommandHubRecommendationsPanel() {
   const [recs, setRecs] = useState<VaultRecommendationRow[]>([]);
   const [counts, setCounts] = useState<RecommendationCounts | null>(null);
@@ -24,7 +32,7 @@ export function CommandHubRecommendationsPanel() {
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => {
         if (cancelled) return;
-        setRecs((d.recommendations ?? []).slice(0, 4));
+        setRecs(((d.recommendations ?? []) as VaultRecommendationRow[]).filter((r) => !isHidden(r)).slice(0, 4));
         setCounts(d.counts ?? null);
         setLoaded(true);
       })
@@ -41,7 +49,9 @@ export function CommandHubRecommendationsPanel() {
   // Operators without approval access simply don't see the panel.
   if (forbidden) return null;
 
-  const pending = counts?.pending_review ?? recs.length;
+  // Prefer the hygiene-aware visible count so suppressed items don't inflate the
+  // badge (falls back to raw pending_review).
+  const pending = counts?.mission_visible ?? counts?.pending_review ?? recs.length;
 
   return (
     <VCPanel accent="orange">

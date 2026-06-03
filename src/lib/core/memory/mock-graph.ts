@@ -267,6 +267,30 @@ export function buildMockGraph(): VaultGraph {
   const leadClient = mockClients[1];
   if (leadClient) edges.push(edge("convo-insight", `client-${leadClient.id}`, "related_to", 0.6, "veronica"));
 
+  // Client success / experience nodes (Vivian, Phase 8.2 — recommend-only). Seeds
+  // her as a visible active contributor in the brain. All human-action-required.
+  const clientSuccess: Array<[string, VaultNodeCategory, string, string]> = [
+    ["vivian-onboarding", "onboarding_health", "Onboarding health: 1 client missing access/assets", "An onboarding client is missing Meta access/assets — human should follow up manually. Recommend-only."],
+    ["vivian-retention", "retention_risk", "Retention risk: 1 paused client", "A paused client is a renewal/retention risk — human should check in. Recommend-only."],
+    ["vivian-experience", "client_success_signal", "Client experience: fulfillment gap flagged", "An active client shows a fulfillment/experience gap — human should review touchpoints. Recommend-only."],
+  ];
+  clientSuccess.forEach(([id, cat, label, summary], i) => {
+    nodes.push(
+      node(id, cat, label, {
+        summary,
+        confidence: 0.7 - i * 0.03,
+        source_agent: "vivian",
+        created_at: iso((i + 1) * 18 * MINUTE),
+        updated_at: iso((i + 1) * 6 * MINUTE),
+        metadata: { recommendOnly: true, humanApprovalRequired: true },
+      })
+    );
+    edges.push(edge(id, "agent-vivian", "contributed_by", 0.9, "vivian"));
+    edges.push(edge(id, "memory-core", "influences", 0.65, "vivian"));
+  });
+  const successClient = mockClients[2];
+  if (successClient) edges.push(edge("vivian-experience", `client-${successClient.id}`, "related_to", 0.6, "vivian"));
+
   // Vault Co Identity Core nodes (Phase 6.8) — company DNA, defines the company.
   identityNodeSpecs().forEach((spec, i) => {
     nodes.push(

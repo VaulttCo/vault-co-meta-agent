@@ -114,7 +114,7 @@ export function useMissionData(): MissionData {
           getJson<{ workforce: WorkforceMember[] }>("/api/core/workforce"),
           getJson<{ tasks: { status: string; priority: string }[] }>("/api/operator-tasks"),
           getJson<{ activity: VaultActivityRow[]; runs: VaultAgentRunRow[] }>("/api/core/activity"),
-          getJson<{ counts: { pending_review: number } | null }>(
+          getJson<{ counts: { pending_review: number; mission_visible?: number } | null }>(
             "/api/core/recommendations?status=pending_review"
           ),
           getJson<{ counts: { draft: number } | null }>("/api/core/drafts"),
@@ -162,7 +162,9 @@ export function useMissionData(): MissionData {
         activeAutomations: workforce.filter((m) => m.meta.active).length,
         openTaskCount,
         urgentTaskCount,
-        recPending: recRes?.counts?.pending_review ?? 0,
+        // Prefer the hygiene-aware visible count so Vera/Vesper-suppressed items
+        // don't inflate Mission Control (falls back to raw pending_review).
+        recPending: recRes?.counts?.mission_visible ?? recRes?.counts?.pending_review ?? 0,
         draftPending: draftRes?.counts?.draft ?? 0,
         propPending: propRes?.counts?.pending_review ?? 0,
         latestByAgent,

@@ -17,8 +17,10 @@ export interface ClientSuccessSnapshot {
   phase?: string;
   hasMetaAccount: boolean;
   hasPixel: boolean;
-  activeCampaignCount: number;
-  leads: number;
+  // null = UNKNOWN (e.g. live `clients` table doesn't carry these). The signal
+  // rules only fire on a known 0, so unknown never produces a false positive.
+  activeCampaignCount: number | null;
+  leads: number | null;
   intelligenceScore?: number;
 }
 
@@ -73,11 +75,11 @@ export async function getClientSuccessSnapshots(): Promise<ClientSuccessSnapshot
       phase: r.phase ?? undefined,
       hasMetaAccount: !!r.meta_ad_account_id?.trim(),
       hasPixel: !!r.meta_pixel_id?.trim(),
-      // Live per-client lead/campaign counts are not columns on `clients`; they
-      // are surfaced through dedicated snapshot tables. Default to 0 here so
-      // Vivian never infers PII-bearing detail from the clients table.
-      activeCampaignCount: 0,
-      leads: 0,
+      // Live per-client lead/campaign counts are not columns on `clients` (they
+      // live in dedicated snapshot tables). Mark UNKNOWN (null) — never 0 — so the
+      // lead/campaign rules don't fire false fulfillment/launch signals at runtime.
+      activeCampaignCount: null,
+      leads: null,
       intelligenceScore: r.intelligence_score ?? undefined,
     }));
   } catch {

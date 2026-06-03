@@ -13,6 +13,7 @@
 import { scoreRecommendation, type QualityScore, type Priority, type SafetyStatus } from "./scoring";
 import { findDuplicate } from "./dedupe";
 import type { RecommendationCandidate, ExistingRecommendation } from "./types";
+import type { RecommendationMemoryContext } from "./memory-context";
 
 export type FinalDecision = "keep" | "merge" | "suppress" | "downgrade" | "needs_human_review";
 
@@ -27,6 +28,12 @@ export interface GateDecision {
   reason: string;
   /** Existing open recommendation this candidate duplicates / merges into. */
   mergeTargetId: string | null;
+  /** Whether safe Vault Memory context informed this decision. */
+  memoryContextUsed: boolean;
+  /** Related open recommendation ids surfaced from memory context. */
+  relatedRecommendationIds: string[];
+  /** Related memory node ids surfaced from memory context. */
+  relatedNodeIds: string[];
 }
 
 // Thresholds tuned conservatively — the gate is a quality SAFETY NET, so it
@@ -41,7 +48,8 @@ const DOWNGRADE_QUALITY = 0.5; // below this → keep but lower priority
  */
 export function runQualityGate(
   candidate: RecommendationCandidate,
-  existingOpen: ExistingRecommendation[]
+  existingOpen: ExistingRecommendation[],
+  context?: RecommendationMemoryContext
 ): GateDecision {
   const q: QualityScore = scoreRecommendation(candidate);
   const dup = findDuplicate(candidate, existingOpen);
@@ -59,17 +67,27 @@ export function runQualityGate(
     finalDecision = "merge";
     reason = `Near-duplicate of open recommendation ${dup.duplicateOfId} (same issue) — merged.`;
   }
-  // 2. Safety: wording implies external execution → never silently drop; flag it.
+  // 2. Memory context: the same client/topic issue was already resolved → suppress.
+  else if (context?.priorActions.some((p) => p.status === "implemented" || p.status === "approved")) {
+    finalDecision = "suppress";
+    reason = "Vault Memory shows this client/topic issue was already actioned (resolved) — suppressed.";
+  }
+  // 3. Memory context: conflicts with an existing open recommendation → human review.
+  else if (context && context.contradictionIndicators.length > 0) {
+    finalDecision = "needs_human_review";
+    reason = `Possible conflict with existing knowledge (${context.contradictionIndicators.join("; ")}) — flagged for human review.`;
+  }
+  // 4. Safety: wording implies external execution → never silently drop; flag it.
   else if (q.safetyStatus === "unsafe") {
     finalDecision = "needs_human_review";
     reason = "Wording implies external execution — flagged for human review (Vault Core is recommend-only).";
   }
-  // 3. Quality: clearly weak/vague with no evidence → suppress the noise.
+  // 5. Quality: clearly weak/vague with no evidence → suppress the noise.
   else if (q.qualityScore < SUPPRESS_QUALITY && q.actionability < 0.4) {
     finalDecision = "suppress";
     reason = `Low quality (${q.qualityScore.toFixed(2)}) and not actionable — suppressed. ${q.issues.join(" ")}`.trim();
   }
-  // 4. Borderline → keep but downgrade priority so it doesn't crowd strong items.
+  // 6. Borderline → keep but downgrade priority so it doesn't crowd strong items.
   else if (q.qualityScore < DOWNGRADE_QUALITY) {
     finalDecision = "downgrade";
     reason = `Borderline quality (${q.qualityScore.toFixed(2)}) — kept but downgraded. ${q.issues.join(" ")}`.trim();
@@ -85,6 +103,9 @@ export function runQualityGate(
     finalDecision,
     reason,
     mergeTargetId: dup.duplicateOfId,
+    memoryContextUsed: !!context?.used,
+    relatedRecommendationIds: context?.relatedOpenRecommendations.map((r) => r.id) ?? [],
+    relatedNodeIds: context?.relatedMemoryNodes.map((n) => n.id) ?? [],
   };
 }
 
@@ -98,7 +119,12 @@ export function gateMetadata(decision: GateDecision): Record<string, unknown> {
       actionability: Number(decision.actionability.toFixed(3)),
       safetyStatus: decision.safetyStatus,
       finalDecision: decision.finalDecision,
-      checkedBy: ["vera", "vesper"],
+      memoryContextUsed: decision.memoryContextUsed,
+      relatedRecommendationIds: decision.relatedRecommendationIds,
+      relatedNodeIds: decision.relatedNodeIds,
+      mergeTargetId: decision.mergeTargetId,
+      reviewedBy: ["vera", "vesper"],
+      neverAutoExecute: true,
     },
   };
 }

@@ -12,6 +12,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { runQualityGate, gateMetadata } from "../recommendations/quality-gate";
+import { buildRecommendationMemoryContext } from "../recommendations/memory-context";
 import type { ExistingRecommendation, RecommendationCandidate } from "../recommendations/types";
 import {
   buildMockGraph,
@@ -331,9 +332,13 @@ async function mergeRecommendationEvidence(client: any, targetId: string, candid
       .update({
         metadata: {
           ...meta,
+          // NON-PII merge trace only — never persist verbatim body/title text,
+          // which can contain lead/client names. The insert-time candidate has no
+          // persisted id yet, so the source path is marked instead of a row id.
           merge_count: mergeCount,
           last_merged_at: new Date().toISOString(),
-          latest_merged_evidence: (candidate.body ?? candidate.title ?? "").slice(0, 500),
+          merged_source_agent: candidate.agent,
+          merged_source: "insert_gate",
         },
       })
       .eq("id", targetId);
@@ -366,7 +371,10 @@ export async function insertRecommendation(
     if (openErr) throw new Error(openErr.message); // → caught below → keep candidate
     const open = (openRows ?? []) as ExistingRecommendation[];
 
-    const decision = runQualityGate(input, open);
+    // Lightweight Vault Memory context at insert time (open recs only — the full
+    // graph/activity context is used by the end-of-tick hygiene pass).
+    const context = buildRecommendationMemoryContext(input, { openRecs: open, allRecs: open });
+    const decision = runQualityGate(input, open, context);
     if (decision.finalDecision === "suppress") {
       console.log(`${LOG} quality-gate suppress [${input.agent}]: ${decision.reason}`);
       return null; // duplicate / low-value — do not create a new row
@@ -479,6 +487,17 @@ export async function getRecommendationReviews(
   }
 }
 
+/**
+ * A recommendation is hidden from MISSION CONTROL (only) when the Vera/Vesper
+ * hygiene pass soft-marked it (`metadata.hygiene.visibility === "hidden"`). This
+ * is reversible visibility control — the row is never deleted and the full
+ * recommendations queue still shows it for human review/audit.
+ */
+export function isHiddenFromMissionControl(rec: VaultRecommendationRow): boolean {
+  const hy = (rec.metadata as { hygiene?: { visibility?: string } } | undefined)?.hygiene;
+  return hy?.visibility === "hidden";
+}
+
 export async function getRecommendationCounts(): Promise<RecommendationCounts> {
   const recs = await getRecommendations(500);
   const counts: RecommendationCounts = {
@@ -488,11 +507,49 @@ export async function getRecommendationCounts(): Promise<RecommendationCounts> {
     archived: 0,
     implemented: 0,
     total: recs.length,
+    mission_visible: 0,
   };
   for (const r of recs) {
     if (r.status in counts) counts[r.status] += 1;
+    if (r.status === "pending_review" && !isHiddenFromMissionControl(r)) {
+      counts.mission_visible = (counts.mission_visible ?? 0) + 1;
+    }
   }
   return counts;
+}
+
+/**
+ * Soft-merge a metadata patch into a recommendation. Used by the Vera/Vesper
+ * hygiene pass for auditable, reversible classification/visibility — it NEVER
+ * changes `status`, never approves/rejects/implements, and never hard-deletes.
+ * Mock-safe + non-fatal (logs internally only on failure).
+ */
+export async function patchRecommendationMetadata(
+  id: string,
+  patch: Record<string, unknown>
+): Promise<boolean> {
+  const client = db();
+  if (!client) return false;
+  try {
+    const { data: row } = await client
+      .from("vault_recommendations")
+      .select("metadata")
+      .eq("id", id)
+      .single();
+    const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+    const { error } = await client
+      .from("vault_recommendations")
+      .update({ metadata: { ...meta, ...patch } })
+      .eq("id", id);
+    if (error) {
+      console.error(`${LOG} patchRecommendationMetadata:`, error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`${LOG} patchRecommendationMetadata threw:`, (e as Error).message);
+    return false;
+  }
 }
 
 /**

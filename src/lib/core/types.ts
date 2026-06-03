@@ -333,6 +333,9 @@ export interface RecommendationCounts {
   archived: number;
   implemented: number;
   total: number;
+  // Phase 8.3 — pending_review recommendations NOT hidden from Mission Control by
+  // the Vera/Vesper hygiene pass (soft visibility; the full queue still shows all).
+  mission_visible?: number;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -11,7 +11,7 @@ organizational brain (Vault Memory + Obsidian).
 
 ## Layers
 1. **Vault Memory** — permanent intelligence layer ✅ (Phase 1)
-2. **Workforce Agents** — specialized executives ◐ (Vega + Victoria + Valerie + Vanessa + Veronica active; 1 stub: Vivian)
+2. **Workforce Agents** — specialized executives ◐ (Vega + Veronica + Valentina + Valerie + Vanessa active; 1 stub: Vivian)
 3. **Collaboration Engine** — agents exchange knowledge ✅ (Phase 3)
 4. **Command Hub** — human review & approval ✅ (Phase 2 Part 1)
 5. **Portal Systems** — dashboards, tools, reports ◐ (pre-existing portal)
@@ -42,25 +42,17 @@ organizational brain (Vault Memory + Obsidian).
   (dev-ops layer; not a business executive). `/hermes-qa` skill + `scripts/hermes-qa.mjs` + Codex
   prompts/playbook. No production runtime change.
 
-## Recommendation — Victoria / Valentina role split (SPEC ONLY)
+## Victoria / Valentina role split — ✅ DONE (2026-06-02)
 
-See `docs/valentina-marketing-director-spec.md`. Corrected naming:
-- **Victoria = AI Sales Coach** (live sales-call product: Fathom/live-listen, rep coaching,
-  objection detection, call summaries, deal risk, follow-up coaching, sales-training intelligence).
-- **Valentina = AI Marketing Director** (marketing strategy, Meta/Google campaign direction, creative
-  strategy, offer positioning, ad diagnosis, hooks/copy/angles, content calendar, market intelligence,
-  client growth recs, coordination with Veronica for campaign drafts).
-
-The active executive currently registered as `victoria` (title "Marketing Director") performs the
-**Valentina** role. **Spec only for now — NOT activated, NO runtime change.** The rename/activation is
-deferred to a future phase (see the spec's activation checklist). Recommend doing this BEFORE
-activating Vivian so the workforce naming is correct first.
+See `docs/valentina-marketing-director-spec.md`. Corrected naming, now implemented in runtime:
+- **Valentina = AI Marketing Director** — **active executive**, renamed from the old `victoria`
+  executive (registry id, agent module, RUNNABLE_AGENTS, mock/collab/brief). Same behavior/tiers/safety.
+- **Victoria = AI Sales Coach** — the live sales-call product (`src/lib/victoria/**`, `/victoria`),
+  not a Vault Core executive. `ACTIVE_AGENT_IDS` stays 5.
 
 ## Next (proposed order)
 
 1. **Activate Vivian** (Operations) — the last stub: SOPs, bottlenecks, onboarding (read-only).
-2. **Reposition Victoria → Valentina (AI Marketing Director)** and scope Victoria to AI Sales Coach
-   — execute `docs/valentina-marketing-director-spec.md` (spec ready; not started).
 2. **Collaboration depth** — multi-round agent dialogue across all six executives.
 3. **System Creation Engine V2** — data-aware gap detection (not a single canned proposal).
 4. **Outbound (post-Phase 6, gated)** — only after explicit human-in-the-loop send controls;

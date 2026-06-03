@@ -3,16 +3,17 @@
 Reusable, read-only Codex prompts. Codex **reviews and reports**; it does not edit files unless a
 human explicitly approves. Pair with `/hermes-qa`.
 
-> **Workforce naming (role split — for audit context):**
-> - **Victoria = AI Sales Coach** (live sales-call product: `src/lib/victoria/**`, `/api/victoria/**`,
->   `/victoria`). Do NOT flag Victoria for not being a marketing director, and do NOT expect Victoria
->   to do marketing.
-> - **Valentina = AI Marketing Director** — **SPEC ONLY** (`docs/valentina-marketing-director-spec.md`).
->   Valentina is intentionally **not active**, not in the tick, not a runnable agent. Do NOT flag her
->   absence from runtime as a defect.
-> - Transitional reality: the active executive registered as `victoria` (title "Marketing Director")
->   currently performs the Valentina role; its rename/activation is a deferred future phase. Flag a
->   NEW finding only if runtime behavior actually changes — not for the documented transitional naming.
+> **Workforce naming (for audit context):**
+> - **Valentina = AI Marketing Director — ACTIVE** Vault Core executive (`src/lib/core/agents/valentina/`,
+>   registry id `valentina`, in `RUNNABLE_AGENTS`). It was renamed from the old `victoria` executive;
+>   same read-only behavior/tiers/safety. ACTIVE_AGENT_IDS = 5 (vega, veronica, valentina, valerie, vanessa).
+> - **Victoria = AI Sales Coach** — the live sales-call product (`src/lib/victoria/**`, `/api/victoria/**`,
+>   `/victoria`, `victoria_*` DB tables). It is **NOT** a Vault Core executive and is **not** in the
+>   workforce registry or the tick. Do NOT flag Victoria for not being a marketing director, do NOT
+>   expect it in `WORKFORCE`/`RUNNABLE_AGENTS`, and do NOT treat the remaining "Victoria" product
+>   references as the old marketing executive.
+> - There is intentionally **no** `victoria` Vault Core executive anymore. Spec:
+>   `docs/valentina-marketing-director-spec.md` (now implemented as the rename).
 
 ---
 

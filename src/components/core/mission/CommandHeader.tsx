@@ -12,7 +12,7 @@
 //                        (count of engaged gates — NOT a fabricated uptime %)
 
 import Image from "next/image";
-import { Activity, ClipboardCheck, ListChecks, ShieldCheck, RefreshCw } from "lucide-react";
+import { Activity, ClipboardCheck, ListChecks, ShieldCheck, RefreshCw, UserCircle2 } from "lucide-react";
 import { VCStat, VCStatusBadge } from "@/components/ui/VaultUI";
 import { relativeTime } from "./relativeTime";
 
@@ -25,6 +25,9 @@ interface CommandHeaderProps {
   safetyGatesActive: number;
   safetyGatesTotal: number;
   lastUpdate: string | null;
+  /** Authenticated operator context, shown when available. */
+  userName?: string | null;
+  userRole?: string | null;
 }
 
 export function CommandHeader({
@@ -35,6 +38,8 @@ export function CommandHeader({
   safetyGatesActive,
   safetyGatesTotal,
   lastUpdate,
+  userName,
+  userRole,
 }: CommandHeaderProps) {
   return (
     <div className="hub-fade-up w-full flex flex-col gap-5">
@@ -58,16 +63,33 @@ export function CommandHeader({
           </div>
         </div>
 
-        {/* Last System Update — newest real activity timestamp */}
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border-subtle)" }}>
-          <RefreshCw size={12} style={{ color: "var(--t-dim)" }} />
-          <div className="flex flex-col leading-tight">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--t-dim)" }}>
-              Last System Update
-            </span>
-            <span className="text-[12px] font-semibold" style={{ color: "var(--t-muted)" }}>
-              {loading ? "…" : relativeTime(lastUpdate)}
-            </span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Authenticated operator context — only when available */}
+          {userName && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border-subtle)" }}>
+              <UserCircle2 size={13} style={{ color: "var(--t-dim)" }} />
+              <div className="flex flex-col leading-tight">
+                <span className="text-[12px] font-semibold" style={{ color: "var(--t-muted)" }}>{userName}</span>
+                {userRole && (
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--t-dim)" }}>
+                    {userRole.replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Last System Update — newest real activity timestamp */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border-subtle)" }}>
+            <RefreshCw size={12} style={{ color: "var(--t-dim)" }} />
+            <div className="flex flex-col leading-tight">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em]" style={{ color: "var(--t-dim)" }}>
+                Last System Update
+              </span>
+              <span className="text-[12px] font-semibold" style={{ color: "var(--t-muted)" }}>
+                {loading ? "…" : relativeTime(lastUpdate)}
+              </span>
+            </div>
           </div>
         </div>
       </div>

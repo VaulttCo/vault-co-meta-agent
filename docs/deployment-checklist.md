@@ -18,6 +18,8 @@ Complete this checklist before giving anyone outside the team access to the port
 - [x] `SUPABASE_SERVICE_ROLE_KEY` added
 - [ ] No API keys committed to git (check `git log --all --full-history -- .env*`)
 
+> **Secrets hygiene:** `.env.local` is gitignored (`.gitignore` has `.env*` with a `!.env.example` exception) and must **never** be committed. If `MAGIC_API_KEY` or `CRON_SECRET` were ever exposed in local logs, terminal output, or chat, **rotate them** and update the Vercel env vars.
+
 ## Database (Supabase)
 
 - [x] Schema applied: all 8 tables exist (clients, approvals, campaign_drafts, reports, client_intelligence, creative_assets, files, integration_connections)
@@ -32,8 +34,8 @@ Complete this checklist before giving anyone outside the team access to the port
 
 ## Auth (CRITICAL — do before client access)
 
-- [ ] **Demo auth replaced with Supabase Auth** — the current `AuthProvider` uses hardcoded demo accounts. Before giving access to real team members or clients, replace it with Supabase Auth (email/password, magic link, or SSO).
-- [ ] Demo credentials (`admin@vaultco.com`, `manager@vaultco.com`, etc.) removed from source code
+- [x] **Supabase Auth is implemented by default** — `AuthProvider` uses Supabase Auth (email/password, magic link, or SSO) for real users. The demo role-picker is **local/dev only**: it is gated by `NODE_ENV !== "production"` and only activates when `NEXT_PUBLIC_AUTH_MODE=demo`.
+- [ ] **Production must NOT set `NEXT_PUBLIC_AUTH_MODE=demo`** — confirm it is unset (or any value other than `demo`) in the Vercel production environment. Demo mode cannot activate in production regardless, but do not rely on that alone.
 - [ ] Real user accounts created in Supabase Auth with correct roles
 
 ## AI / Veronica
@@ -74,5 +76,5 @@ Walk through each of these after deploying to production:
 
 - [ ] Share the URL only with intended users
 - [ ] Document who has access and their roles
-- [ ] Set a reminder to replace demo auth before expanding access
+- [ ] Confirm production is running Supabase Auth (no `NEXT_PUBLIC_AUTH_MODE=demo`) before expanding access
 - [ ] Monitor Vercel function logs for the first 24 hours

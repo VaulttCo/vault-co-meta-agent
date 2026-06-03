@@ -59,6 +59,37 @@ export const CLIENT_GHL_DISABLED_BODY = {
     "Per-client GHL tracking is disabled (CLIENT_GHL_TRACKING_ENABLED=false). This route is for the client portal / Revenue Dashboard and is never used by Vault Core.",
 } as const;
 
+export interface GHLStatusMetadata {
+  contactsCount: number;
+  opportunitiesCount: number;
+  appointmentsCount: number;
+  bookedAppointmentsCount: number;
+  totalPipelineValue: number;
+  closedWonRevenue: number;
+}
+
+/**
+ * Whitelist `integration_connections.metadata` down to NON-PII aggregate counts
+ * before it leaves the server. Raw metadata may contain full contact objects
+ * (names / emails / phones) — from older sync rows that stored the whole array —
+ * so the GHL status endpoint must NEVER return it wholesale. This helper is the
+ * single sanitization point: it only ever emits coerced numeric aggregates, never
+ * raw blobs, arrays, names, emails, phones, addresses, messages, or credentials.
+ */
+export function sanitizeGhlStatusMetadata(metadata: unknown): GHLStatusMetadata {
+  const m = (metadata && typeof metadata === "object" ? metadata : {}) as Record<string, unknown>;
+  // Tolerate both shapes: new rows store a count; legacy rows stored the array.
+  const count = (v: unknown): number => (Array.isArray(v) ? v.length : Number(v) || 0);
+  return {
+    contactsCount: count(m.contacts),
+    opportunitiesCount: count(m.opportunities),
+    appointmentsCount: count(m.appointments),
+    bookedAppointmentsCount: count(m.booked_appointments),
+    totalPipelineValue: Number(m.pipeline_value) || 0,
+    closedWonRevenue: Number(m.closed_revenue) || 0,
+  };
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 export interface GHLCredentials {
@@ -591,7 +622,8 @@ export async function syncGHLPipelineForClient(clientId: string): Promise<GHLSyn
           connection_status: "connected",
           last_synced_at: new Date().toISOString(),
           metadata: {
-            contacts,
+            // Store the COUNT only — never the full contact objects (PII at rest).
+            contacts: contacts.length,
             opportunities: opportunities.length,
             appointments: appointments.length,
             booked_appointments: bookedAppointments,

@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
-import { clientGhlTrackingEnabled, CLIENT_GHL_DISABLED_BODY } from "@/lib/integrations/ghl/client";
+import { clientGhlTrackingEnabled, CLIENT_GHL_DISABLED_BODY, sanitizeGhlStatusMetadata } from "@/lib/integrations/ghl/client";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewAnalytics")) {
+  // Exposes provider account/location IDs, metadata, and global credential-
+  // presence — restrict to integration managers (admin or canConnectIntegrations),
+  // not broad canViewAnalytics.
+  if (!(auth.role === "admin" || can(auth.role, "canConnectIntegrations"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -57,10 +60,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ connected: false, hasCredentials: !!process.env.GHL_API_KEY });
     }
 
-    // Get latest pipeline snapshot
+    // Get latest pipeline snapshot — explicit NON-PII aggregate columns only.
+    // Never select `*`/`raw_payload`: that JSONB can hold raw provider payloads
+    // (legacy/manual rows), which would bypass the metadata PII whitelist.
     const { data: snapshotRaw } = await supabase
       .from("ghl_pipeline_snapshots")
-      .select("*")
+      .select(
+        "leads, contacts, appointments, booked_appointments, show_rate, opportunities, pipeline_value, closed_revenue, synced_at"
+      )
       .eq("client_id", clientId)
       .order("synced_at", { ascending: false })
       .limit(1)
@@ -75,7 +82,9 @@ export async function GET(req: NextRequest) {
       lastSyncedAt: conn.last_synced_at,
       hasCredentials: !!process.env.GHL_API_KEY,
       snapshot: snapshot ?? null,
-      metadata: conn.metadata,
+      // Whitelisted, non-PII aggregates only — never the raw metadata blob, which
+      // may contain full contact PII from legacy sync rows.
+      metadata: sanitizeGhlStatusMetadata(conn.metadata),
     });
   } catch (err) {
     return NextResponse.json(

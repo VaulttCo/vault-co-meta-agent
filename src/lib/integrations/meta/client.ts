@@ -127,12 +127,18 @@ async function metaGet(
   params: Record<string, string>,
   credentials: MetaCredentials
 ): Promise<Response> {
+  // SECURITY: the access token is sent in the Authorization header, never as an
+  // `access_token` query param — query strings leak through logs, proxies, and
+  // error telemetry. Only non-secret params go in the URL. (Graph API accepts a
+  // bearer token in the Authorization header.)
   const url = new URL(`${META_API_BASE}${path}`);
-  url.searchParams.set("access_token", credentials.accessToken);
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v);
   }
-  return fetch(url.toString(), { method: "GET" });
+  return fetch(url.toString(), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${credentials.accessToken}` },
+  });
 }
 
 // ─── Public functions ─────────────────────────────────────────

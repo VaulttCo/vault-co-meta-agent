@@ -16,7 +16,10 @@ export async function GET(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewAnalytics")) {
+  // Exposes provider account ID, metadata, and global credential-presence —
+  // restrict to integration managers (admin or canConnectIntegrations), not
+  // broad canViewAnalytics.
+  if (!(auth.role === "admin" || can(auth.role, "canConnectIntegrations"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   // ─────────────────────────────────────────────────────────────────────────

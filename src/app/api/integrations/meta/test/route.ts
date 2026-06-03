@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!can(auth.role, "canViewStrategyData")) {
+  // Invokes saved/global Meta credentials — restrict to integration managers
+  // (admin or canConnectIntegrations), matching the GHL test/sync routes.
+  // NOT broad canViewStrategyData.
+  if (!(auth.role === "admin" || can(auth.role, "canConnectIntegrations"))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

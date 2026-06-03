@@ -81,3 +81,53 @@ export function newestNodeId<T extends { id: string; created_at?: string }>(rows
 export function staggerDelay(index: number, span = 7, step = 0.5): string {
   return `${(index % span) * step}s`;
 }
+
+// ── Bounded deterministic drift ────────────────────────────────
+// Each node gets stable, organic, in-place motion derived ONLY from its id, so it
+// looks alive but never wanders or shifts the layout. Motion is expressed by the
+// single `vm-drift` keyframe (globals.css) reading these CSS variables — pure CSS,
+// GPU-friendly, no per-frame JS, no Math.random in render.
+
+export type DriftKind = "agent" | "memory" | "fresh";
+
+// [ampMin, ampMax (px), durMin, durMax (s)] — bounded amplitude per node kind.
+// Larger/structural nodes move less; smaller/fresher memory moves a touch more.
+const DRIFT_RANGE: Record<DriftKind, [number, number, number, number]> = {
+  agent: [2, 5, 8, 12],
+  memory: [6, 14, 7, 12],
+  fresh: [8, 16, 6, 11],
+};
+
+/** FNV-1a hash → stable unsigned int from a node id. */
+function hashId(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** CSS custom properties driving the bounded `vm-drift` animation for one node.
+ *  Returns a style object: amplitude (x/y), duration, and a negative delay so
+ *  every node starts mid-cycle (desynchronized, no synchronized "pop" on mount). */
+export function driftVars(id: string, kind: DriftKind): Record<string, string> {
+  const h = hashId(id);
+  const r0 = (h & 0xff) / 255;
+  const r1 = ((h >> 8) & 0xff) / 255;
+  const r2 = ((h >> 16) & 0xff) / 255;
+  const r3 = ((h >> 24) & 0xff) / 255;
+  const [aMin, aMax, dMin, dMax] = DRIFT_RANGE[kind];
+
+  const ax = (aMin + r0 * (aMax - aMin)) * (h & 1 ? 1 : -1);
+  const ay = (aMin + r1 * (aMax - aMin)) * (h & 2 ? 1 : -1);
+  const dur = dMin + r2 * (dMax - dMin);
+  const delay = r3 * dur; // up to one full cycle
+
+  return {
+    "--vm-ax": `${ax.toFixed(2)}px`,
+    "--vm-ay": `${ay.toFixed(2)}px`,
+    "--vm-dur": `${dur.toFixed(2)}s`,
+    "--vm-delay": `-${delay.toFixed(2)}s`,
+  };
+}

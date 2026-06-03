@@ -144,14 +144,14 @@ export function buildMockGraph(): VaultGraph {
     edges.push(edge(revId, cId, "impacts", 0.8));
   }
 
-  // A few hooks / scripts Victoria-style knowledge (static, illustrative)
+  // A few hooks / scripts Valentina-style knowledge (static, illustrative)
   const hooks = [
     ["hook-1", "“Booked solid in 30 days” roofing hook"],
     ["hook-2", "Storm-season urgency hook"],
   ];
   for (const [id, label] of hooks) {
-    nodes.push(node(id, "hook", label, { confidence: 0.72, source_agent: "victoria" }));
-    edges.push(edge(id, "memory-core", "connected_to", 0.5, "victoria"));
+    nodes.push(node(id, "hook", label, { confidence: 0.72, source_agent: "valentina" }));
+    edges.push(edge(id, "memory-core", "connected_to", 0.5, "valentina"));
   }
 
   // Insights + recommendations attributed to Vega (the active agent)
@@ -219,7 +219,7 @@ export function buildMockGraph(): VaultGraph {
     ["exec-priority-1", "executive_priority", "[CRITICAL] Review unpaid / open client invoices", "Prioritized critical — financial risk with revenue exposure. Source: valerie."],
     ["risk-summary", "risk_summary", "Top risks (2)", "Open/past-due invoices ($7k) · revenue concentration 41%."],
     ["opportunity-summary", "opportunity_summary", "Top opportunities (1)", "Replicate winning creative angle across lagging accounts."],
-    ["workforce-perf", "workforce_performance_summary", "Workforce performance summary", "Victoria (trust 94) · Vega (92) · Valerie (88) leading on trust + adoption."],
+    ["workforce-perf", "workforce_performance_summary", "Workforce performance summary", "Valentina (trust 94) · Vega (92) · Valerie (88) leading on trust + adoption."],
   ];
   executive.forEach(([id, cat, label, summary], i) => {
     nodes.push(

@@ -68,7 +68,10 @@ export const WORKFORCE: AgentMeta[] = [
     active: true, // ACTIVE (Phase 8.2) — AI Client Success / Experience Operator,
                   // RECOMMEND-ONLY. Runnable (vivianAgent), in the tick. Never mutates
                   // external systems. See docs/vivian-client-success-operator-spec.md.
-    tiers: ["daily", "weekly"],
+    // Runs on the SAME tiers as the other five active executives so she is included
+    // in the hourly tick (the dispatcher filters by `tiers.includes(tier)`). This
+    // is runtime inclusion only — it does NOT change tick cadence/cron schedule.
+    tiers: ["hourly", "daily"],
   },
   {
     id: "valerie",

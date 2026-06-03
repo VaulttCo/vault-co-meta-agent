@@ -1,5 +1,10 @@
 # Vault Core — Phase 3 Handoff
 
+> **Naming update (2026-06-02):** the "Victoria — Marketing Director" executive described in this
+> historical handoff was later renamed to **Valentina (AI Marketing Director)**. The name "Victoria"
+> now refers to the AI Sales Coach product. See `docs/valentina-marketing-director-spec.md`. This
+> handoff is kept as a point-in-time record.
+
 **Status:** shipped, build clean (71 routes). Fully functional with **zero database** (mock fallback preserved). Read / analyze / recommend only — no client-side actions; human approval mandatory.
 
 Phase 3 turns the agents into a **collaborating workforce**: Victoria activated, a Collaboration Engine, Reputation + Objectives, and System Creation Engine V1. Decision record: `ADR-0004` (in the Obsidian vault).

@@ -38,7 +38,7 @@ interface PrimaryConfig {
 
 const PRIMARY: PrimaryConfig[] = [
   { id: "veronica", name: "Veronica", role: "Lead Acquisition", icon: Bot,  accent: "#0081f2", href: "/ai-agent" },
-  { id: "victoria", name: "Victoria", role: "Marketing",        icon: Mic2, accent: "#b89eff", href: "/victoria" },
+  { id: "victoria", name: "Victoria", role: "AI Sales Coach",   icon: Mic2, accent: "#b89eff", href: "/victoria" },
 ];
 
 interface WorkforceRosterProps {

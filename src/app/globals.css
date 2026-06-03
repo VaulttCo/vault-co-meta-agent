@@ -470,12 +470,24 @@ h1, h2, h3, h4, h5, h6 {
 }
 .vm-breathe { animation: vmBreathe 4.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
-/* Agent / memory nodes — gentle drift. Staggered via per-node delay. */
+/* Agent / memory nodes — gentle vertical drift. Staggered via per-node delay. */
 @keyframes vmFloat {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-3.5px); }
 }
 .vm-float { animation: vmFloat 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Organic 2-axis drift — used by the full brain so nodes orbit/wander subtly
+   rather than bobbing in lockstep. Applied to a node WRAPPER (purely cosmetic;
+   it does not move graph edge anchors). */
+@keyframes vmDrift {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(2.5px, -3px); }
+  50%  { transform: translate(-2px, 2.5px); }
+  75%  { transform: translate(3px, 1.5px); }
+  100% { transform: translate(0, 0); }
+}
+.vm-drift { animation: vmDrift 9s ease-in-out infinite; will-change: transform; }
 
 /* Relationship lines — signal traveling along the pathway (dash march). */
 @keyframes vmSignal {
@@ -497,9 +509,27 @@ h1, h2, h3, h4, h5, h6 {
 }
 .vm-emerge { animation: vmEmerge 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; transform-box: fill-box; transform-origin: center; }
 
+/* New-memory reaction — a ring that ripples outward from the newest node and
+   fades. Loops slowly so the freshest memory keeps signalling it just formed. */
+@keyframes vmRipple {
+  0%   { opacity: 0.55; transform: scale(0.6); }
+  70%  { opacity: 0;    transform: scale(2.1); }
+  100% { opacity: 0;    transform: scale(2.1); }
+}
+.vm-ripple { animation: vmRipple 3.2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Traveling electron/particle along a pathway (CSS fallback fade for nodes that
+   carry a moving light without SVG animateMotion). */
+@keyframes vmSpark {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 1; }
+}
+.vm-spark { animation: vmSpark 1.8s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .hub-fade-up, .hub-fade-up-1, .hub-fade-up-2, .hub-fade-up-3,
-  .vm-breathe, .vm-float, .vm-signal, .vm-glow, .vm-emerge {
+  .vm-breathe, .vm-float, .vm-drift, .vm-signal, .vm-glow, .vm-emerge,
+  .vm-ripple, .vm-spark {
     animation: none !important;
   }
 }

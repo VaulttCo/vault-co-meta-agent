@@ -14,6 +14,17 @@ human explicitly approves. Pair with `/hermes-qa`.
 >   references as the old marketing executive.
 > - There is intentionally **no** `victoria` Vault Core executive anymore. Spec:
 >   `docs/valentina-marketing-director-spec.md` (now implemented as the rename).
+> - **Vivian = AI Client Success / Experience Operator — DORMANT / PLANNED, NOT ACTIVE.**
+>   She exists only as an `active: false` metadata stub in `registry.ts` and may appear in
+>   docs, the roadmap, dormant metadata, and clearly-labeled dormant UI/brain references.
+>   She must **NOT** appear in `ACTIVE_AGENT_IDS`, **NOT** in `RUNNABLE_AGENTS`
+>   (`src/lib/core/agents/index.ts`), **NOT** in the dispatcher, and **NOT** in the tick;
+>   she must not be counted as an active executive/contributor, and must not mutate any
+>   external system. Do NOT flag Vivian's dormant stub or her docs/roadmap/labeled-dormant
+>   UI as a problem. **DO flag as P0** any sign that Vivian is active runtime before an
+>   explicit approved activation phase: in `ACTIVE_AGENT_IDS`, in `RUNNABLE_AGENTS`, in the
+>   dispatcher/tick, counted as active, or performing any external mutation. ACTIVE_AGENT_IDS
+>   must remain exactly the 5. Spec: `docs/vivian-client-success-operator-spec.md`.
 
 ---
 
@@ -45,6 +56,11 @@ Vault Core safety invariants (flag ANY violation as P0):
   from Vault Core runtime.
 - Demo auth (NEXT_PUBLIC_AUTH_MODE=demo) must never bypass auth in a production build (gated on
   NODE_ENV !== "production" in both middleware and AuthProvider).
+- Workforce roster: ACTIVE_AGENT_IDS and RUNNABLE_AGENTS must remain EXACTLY the 5 active
+  executives (vega, veronica, valentina, valerie, vanessa). Vivian (AI Client Success Operator) is a
+  DORMANT `active: false` stub — flag P0 if she is in ACTIVE_AGENT_IDS, RUNNABLE_AGENTS, the
+  dispatcher, the tick, counted as active, or mutating any external system. A clearly-labeled dormant
+  stub / docs / roadmap / dimmed UI reference is expected and must NOT be flagged.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

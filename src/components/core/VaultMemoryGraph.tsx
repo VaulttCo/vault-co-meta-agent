@@ -219,7 +219,10 @@ function seedFromId(id: string): { a: number; r: number } {
 // ── Radial layout ──────────────────────────────────────────────
 function layout(graph: VaultGraph, selectedId: string | null): { nodes: Node[]; edges: Edge[] } {
   const core = graph.nodes.find((n) => n.category === "memory_core") ?? graph.nodes[0];
-  const agents = graph.nodes.filter((n) => n.category === "agent");
+  // Active executive ring only — DORMANT agents (metadata.active === false, e.g.
+  // Vivian) are kept out of the five-executive brain. DB agents without the flag
+  // are treated as active so live graphs are unaffected.
+  const agents = graph.nodes.filter((n) => n.category === "agent" && n.metadata?.active !== false);
   const others = graph.nodes.filter((n) => n.category !== "agent" && n.id !== core?.id);
 
   const newestId = newestNodeId(others);

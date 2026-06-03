@@ -16,7 +16,7 @@
 // than fabricating activity. Victoria and Vivian are never shown as executives.
 
 import Link from "next/link";
-import { Bot, Mic2, Radar, Megaphone, Wallet, Crown, Wrench, type LucideIcon } from "lucide-react";
+import { Bot, Mic2, Radar, Megaphone, Wallet, Crown, Wrench, HeartHandshake, type LucideIcon } from "lucide-react";
 import {
   VCBentoCell,
   VCGlowIcon,
@@ -209,6 +209,37 @@ function HermesCard({
   );
 }
 
+// Vivian — DORMANT future operator. Rendered here as a clearly-labeled roadmap
+// reference ONLY: dimmed, non-interactive, never counted as an active executive
+// or contributor, never placed with the five active execs. She is not in
+// ACTIVE_AGENT_IDS / RUNNABLE_AGENTS / dispatcher / tick.
+function VivianDormantCard({ index }: { index: number }) {
+  return (
+    <VCBentoCell index={index} colSpan={1} accent={STEEL} minHeight={96}>
+      <div className="flex items-center justify-between gap-4 h-full p-5 flex-wrap" style={{ opacity: 0.6 }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <VCGlowIcon icon={HeartHandshake} color={STEEL} size={18} ringSize={40} />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--t-dim)" }}>
+              AI Client Success · Roadmap
+            </p>
+            <p
+              className="text-[16px] font-bold leading-tight"
+              style={{ fontFamily: "var(--font-rajdhani), Rajdhani, sans-serif", color: "var(--t-muted)", letterSpacing: "0.02em" }}
+            >
+              Vivian
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <VCStatusBadge label="Future · Dormant" variant="neutral" />
+          <VCChip label="not in runtime" color={STEEL} />
+        </div>
+      </div>
+    </VCBentoCell>
+  );
+}
+
 export function WorkforceRoster({
   loading,
   workforce,
@@ -235,14 +266,15 @@ export function WorkforceRoster({
 
       <VCDivider className="my-1" />
 
-      <VCSectionLabel>Product Surface &amp; System Layer</VCSectionLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <VCSectionLabel>Product Surface · System Layer · Roadmap</VCSectionLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <VictoriaProductCard index={EXECUTIVES.length} />
         <HermesCard
           index={EXECUTIVES.length + 1}
           skillCount={loading ? 0 : hermesSkillCount}
           lastRun={loading ? null : hermesLastRun}
         />
+        <VivianDormantCard index={EXECUTIVES.length + 2} />
       </div>
     </div>
   );

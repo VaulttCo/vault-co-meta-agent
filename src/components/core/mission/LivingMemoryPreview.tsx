@@ -59,7 +59,11 @@ function buildScene(graph: VaultGraph | null): { nodes: Placed[]; links: Link[] 
   const realNodes = graph?.nodes ?? [];
 
   const coreRow = realNodes.find((n) => n.category === "memory_core") ?? null;
-  const agentRows = realNodes.filter((n) => n.category === "agent").slice(0, 6);
+  // Active executives only — DORMANT agents (metadata.active === false, e.g. Vivian)
+  // are excluded from the preview's five-executive ring.
+  const agentRows = realNodes
+    .filter((n) => n.category === "agent" && n.metadata?.active !== false)
+    .slice(0, 6);
   const memoryRows = realNodes
     .filter((n) => n.category !== "agent" && n.category !== "memory_core" && n.id !== coreRow?.id)
     // newest first so the preview shows the freshest thinking

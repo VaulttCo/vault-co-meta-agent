@@ -37,11 +37,14 @@ Obsidian graph view stays connected.
 
 ## Workforce (Layer 2)
 - [[Veronica]] — Lead Acquisition Director *(active)*
-- [[Victoria]] — AI Sales Coach *(the active executive still runs the AI Marketing Director role, being repositioned as Valentina — spec only; see `docs/valentina-marketing-director-spec.md`)*
+- [[Valentina]] — AI Marketing Director *(active — renamed from the old "victoria" executive)*
 - [[Vivian]] — Operations Director
 - [[Valerie]] — Financial Director *(active)*
 - [[Vega]] — Intelligence Director *(active)*
 - [[Vanessa]] — Executive Director *(active)*
+
+**Product (not a workforce executive):**
+- [[Victoria]] — AI Sales Coach *(live sales-call product: `src/lib/victoria/**`, `/victoria`)*
 
 ## Knowledge domains
 - Executive Briefings → `/Executive Briefings`

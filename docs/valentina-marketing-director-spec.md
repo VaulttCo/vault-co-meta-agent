@@ -1,9 +1,15 @@
-# Valentina — AI Marketing Director (SPEC / RECOMMENDATION ONLY)
+# Valentina — AI Marketing Director
 
-**Status:** SPEC ONLY — **not active**, not in the runtime tick, not a runnable agent.
-**Do not** activate Valentina, add her to `WORKFORCE` as active, wire her into the dispatcher,
-or give her any external write capability based on this document. This is a design spec for a
-future activation phase.
+**Status (updated 2026-06-02):** ✅ **RENAME IMPLEMENTED.** Valentina is now the **active** AI
+Marketing Director Vault Core executive — the old `victoria` executive was renamed to `valentina`
+(registry id, agent module `src/lib/core/agents/valentina/`, `RUNNABLE_AGENTS`, mock data, collab,
+brief). Behavior/tiers/safety are unchanged; this was an identity correction only. `ACTIVE_AGENT_IDS`
+remains 5 (vega, veronica, valentina, valerie, vanessa). The name **Victoria** now refers exclusively
+to the AI Sales Coach product (`src/lib/victoria/**`).
+
+The responsibilities/guardrails below remain the canonical definition of the role. Any *further*
+enhancement of Valentina's analysis logic (beyond the rename) is future work and must preserve every
+guardrail here — **still no external mutation, no sending, no auto-execution.**
 
 ---
 

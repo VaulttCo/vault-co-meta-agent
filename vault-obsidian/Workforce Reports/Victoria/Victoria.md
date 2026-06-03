@@ -1,38 +1,28 @@
 ---
-title: "Victoria — Marketing Director"
+title: "Victoria — AI Sales Coach"
 agent: Victoria
-status: active
+status: product
 created: 2026-05-31
-tags: [workforce, victoria, active]
+updated: 2026-06-02
+tags: [victoria, sales-coach, product]
 ---
 
-# Victoria — Marketing Director 🎯
+# Victoria — AI Sales Coach 🎙️
 
-> ⚠️ **ROLE SPLIT (naming correction — see `docs/valentina-marketing-director-spec.md`).**
-> **Victoria is now the AI Sales Coach** (live sales-call product: Fathom/live-listen, rep coaching,
-> objection detection, call summaries, deal risk, follow-up coaching, sales-training intelligence).
-> The **AI Marketing Director** function described in this file is being repositioned as **Valentina**.
-> The active executive still running under id `victoria` performs the Valentina (marketing) role for
-> now — **spec only, no runtime change yet**; rename/activation is a future phase. The marketing
-> content below documents the Valentina-to-be role.
+> **Naming:** Victoria is the **AI Sales Coach** — the live sales-call product. The AI Marketing
+> Director role that previously lived under the name "Victoria" is now **[[Valentina]]** (the active
+> Vault Core marketing executive). Victoria is **not** a Vault Core workforce executive and is **not**
+> in the runtime tick; it is the live-call product surface.
 
-**Mission:** Understand how attention converts.
-**Status: ACTIVE** — activated in Phase 3 ([[ADR-0004-workforce-collaboration-engine]]).
-Code: `src/lib/core/agents/victoria/`. Reads creative/campaign data (READ-ONLY), surfaces
-winning content/hook patterns, and **opens collaborations** requesting Vega's impact analysis.
+**Scope:** live sales-call support — Fathom / live-listen, rep coaching, objection detection, sales
+call summaries, deal risk, follow-up coaching, sales-training intelligence.
 
-## Stores here
-- Competitor research
-- Viral content analysis
-- Hook libraries
-- Script libraries
-- Offer research
+**Where it lives:** `src/lib/victoria/**`, `/api/victoria/**`, `/victoria` (+ `victoria_*` Supabase
+tables). Purple "Victoria AI" theme.
 
-## Tasks (when activated)
-Monitor competitors · analyze ads, content, trends · generate hooks, scripts, and content
-opportunities.
-
-Add notes with: `node scripts/obsidian.mjs workforce victoria "<title>"` or `/victoria`.
+## Guardrails
+Read / analyze / coach only. No external mutation, no sending, no auto-execution. Live transcription
+tokens are short-lived and auth-gated; all Victoria API routes require auth + AI-builder permission.
 
 ## Related
-- [[_Index]] · [[Vega]] · [[Roadmap]]
+- [[Valentina]] (AI Marketing Director — the renamed marketing executive) · [[_Index]] · [[Roadmap]]

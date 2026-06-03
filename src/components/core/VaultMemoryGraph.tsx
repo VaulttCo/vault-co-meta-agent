@@ -41,9 +41,10 @@ import {
   agentColor,
   isFresh,
   newestNodeId,
-  staggerDelay,
+  driftVars,
   CORE_GRADIENT_STOPS,
   BRAIN_MOTION,
+  type DriftKind,
 } from "./brain/brainViz";
 import type { VaultGraph } from "@/lib/core/types";
 
@@ -52,55 +53,57 @@ interface VCNodeData extends Record<string, unknown> {
   label: string;
   category: string;
   color: string;
-  isCore: boolean;
+  kind: "core" | "agent" | "memory";
+  size: number;
   selected: boolean;
   fresh: boolean;
   newest: boolean;
-  delay: string;
 }
 
-function VCGraphNode({ data }: NodeProps) {
+function VCGraphNode({ id, data }: NodeProps) {
   const reduced = useReducedMotion() ?? false;
   const d = data as VCNodeData;
-  const size = d.isCore ? 132 : 92;
+  const isCore = d.kind === "core";
+  const isMemory = d.kind === "memory";
+  const size = d.size;
   const animate = !reduced;
 
-  // Cosmetic drift on a wrapper — purely visual, does not affect edge anchors.
-  const driftClass = animate && !d.isCore ? "vm-drift" : "";
+  // Bounded, deterministic drift on a wrapper — purely visual, returns to home,
+  // never moves edge anchors. The core only breathes; agents/memory drift within
+  // their per-kind amplitude bounds (brainViz.driftVars).
+  const drift = animate && !isCore;
+  const driftKind: DriftKind = isCore ? "memory" : d.kind === "agent" ? "agent" : d.fresh ? "fresh" : "memory";
+  const wrapperStyle: React.CSSProperties = {
+    position: "relative",
+    width: size,
+    height: size,
+    ...(drift ? (driftVars(id, driftKind) as React.CSSProperties) : {}),
+  };
+
+  // Memory labels stay hidden until hover/selection so the network breathes;
+  // fresh memory keeps a dim label so recent thoughts remain legible.
+  const memLabelOpacity = d.selected ? 1 : d.fresh ? 0.55 : 0;
 
   return (
-    <div className={driftClass} style={{ position: "relative", width: size, height: size, animationDelay: d.delay }}>
+    <div className={`vm-node ${drift ? "vm-drift" : ""}`} style={wrapperStyle}>
       {/* New-memory ripple — only the single freshest node */}
       {animate && d.newest && (
         <span
           className="vm-ripple"
-          style={{
-            position: "absolute",
-            inset: -6,
-            borderRadius: "50%",
-            border: `1.5px solid ${d.color}`,
-            pointerEvents: "none",
-          }}
+          style={{ position: "absolute", inset: -6, borderRadius: "50%", border: `1.5px solid ${d.color}`, pointerEvents: "none" }}
         />
       )}
 
       {/* Glow halo — core always, recently-updated nodes too */}
-      {animate && (d.isCore || d.fresh) && (
+      {animate && (isCore || d.fresh) && (
         <span
-          className={d.isCore ? "vm-breathe" : "vm-glow"}
-          style={{
-            position: "absolute",
-            inset: d.isCore ? -10 : -6,
-            borderRadius: "50%",
-            border: `1px solid ${d.color}`,
-            opacity: 0.4,
-            pointerEvents: "none",
-          }}
+          className={isCore ? "vm-breathe" : "vm-glow"}
+          style={{ position: "absolute", inset: isCore ? -10 : -6, borderRadius: "50%", border: `1px solid ${d.color}`, opacity: 0.4, pointerEvents: "none" }}
         />
       )}
 
       <div
-        className={animate && d.isCore ? "vm-breathe" : ""}
+        className={`${animate && isCore ? "vm-breathe" : ""} ${animate && d.newest ? "vm-emerge" : ""}`.trim()}
         style={{
           width: size,
           height: size,
@@ -110,17 +113,17 @@ function VCGraphNode({ data }: NodeProps) {
           justifyContent: "center",
           textAlign: "center",
           padding: 8,
-          fontSize: d.isCore ? 13 : 10.5,
-          fontWeight: d.isCore ? 700 : 600,
+          fontSize: isCore ? 13 : 10,
+          fontWeight: isCore ? 700 : 600,
           lineHeight: 1.15,
-          color: d.isCore ? "#f8f8f7" : "#e2e8f0",
-          background: d.isCore
+          color: isCore ? "#f8f8f7" : "#e2e8f0",
+          background: isCore
             ? `radial-gradient(circle at 50% 40%, ${d.color}33, #0D1520 72%)`
             : `radial-gradient(circle at 50% 40%, ${d.color}1f, #0D1520 78%)`,
           border: `1.5px solid ${d.color}${d.selected ? "" : "55"}`,
           boxShadow: d.selected
             ? `0 0 0 2px ${d.color}, 0 0 26px ${d.color}66`
-            : d.isCore
+            : isCore
             ? `0 0 30px ${d.color}55`
             : d.fresh
             ? `0 0 18px ${d.color}44`
@@ -133,7 +136,16 @@ function VCGraphNode({ data }: NodeProps) {
       >
         <Handle type="target" position={Position.Top} style={{ opacity: 0, pointerEvents: "none" }} />
         <Handle type="source" position={Position.Bottom} style={{ opacity: 0, pointerEvents: "none" }} />
-        <span style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        <span
+          className={isMemory ? "vm-node-label-mem" : ""}
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            opacity: isMemory ? memLabelOpacity : 1,
+          }}
+        >
           {d.label}
         </span>
       </div>
@@ -192,6 +204,18 @@ function VCSignalEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
 const nodeTypes = { vc: VCGraphNode };
 const edgeTypes = { vc: VCSignalEdge };
 
+// Deterministic per-node seed (two values in [0,1)) from its id — used only for
+// stable layout jitter so the bands read organic, never Math.random per render.
+function seedFromId(id: string): { a: number; r: number } {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  h = h >>> 0;
+  return { a: (h & 0xffff) / 0xffff, r: ((h >> 16) & 0xffff) / 0xffff };
+}
+
 // ── Radial layout ──────────────────────────────────────────────
 function layout(graph: VaultGraph, selectedId: string | null): { nodes: Node[]; edges: Edge[] } {
   const core = graph.nodes.find((n) => n.category === "memory_core") ?? graph.nodes[0];
@@ -201,6 +225,12 @@ function layout(graph: VaultGraph, selectedId: string | null): { nodes: Node[]; 
   const newestId = newestNodeId(others);
   const agentIds = new Set(agents.map((a) => a.id));
 
+  // Per-kind node sizes — memory nodes are smaller so the network reads as a
+  // breathable neural cloud rather than a wall of touching bubbles.
+  const CORE_SIZE = 132;
+  const AGENT_SIZE = 92;
+  const MEM_SIZE = 76;
+
   const nodes: Node[] = [];
 
   if (core) {
@@ -208,34 +238,46 @@ function layout(graph: VaultGraph, selectedId: string | null): { nodes: Node[]; 
       id: core.id,
       type: "vc",
       position: { x: 0, y: 0 },
-      data: { label: core.label, category: core.category, color: styleFor(core.category).color, isCore: true, selected: core.id === selectedId, fresh: false, newest: false, delay: "0s" },
+      data: { label: core.label, category: core.category, color: styleFor(core.category).color, kind: "core", size: CORE_SIZE, selected: core.id === selectedId, fresh: false, newest: false },
       draggable: true,
     });
   }
 
-  const agentR = 270;
+  const agentR = 300;
   agents.forEach((n, i) => {
     const a = (i / Math.max(1, agents.length)) * Math.PI * 2 - Math.PI / 2;
     nodes.push({
       id: n.id,
       type: "vc",
       position: { x: Math.cos(a) * agentR, y: Math.sin(a) * agentR },
-      data: { label: n.label, category: n.category, color: agentColor(n), isCore: false, selected: n.id === selectedId, fresh: isFresh(n.updated_at), newest: false, delay: staggerDelay(i) },
+      data: { label: n.label, category: n.category, color: agentColor(n), kind: "agent", size: AGENT_SIZE, selected: n.id === selectedId, fresh: isFresh(n.updated_at), newest: false },
       draggable: true,
     });
   });
 
-  const outerR = 620;
-  others.forEach((n, i) => {
-    const a = (i / Math.max(1, others.length)) * Math.PI * 2 - Math.PI / 2;
-    // slight radius variation so the ring reads as an organic cloud, not a perfect circle
-    const r = outerR + ((i % 3) - 1) * 70;
-    nodes.push({
-      id: n.id,
-      type: "vc",
-      position: { x: Math.cos(a) * r, y: Math.sin(a) * r },
-      data: { label: n.label, category: n.category, color: styleFor(n.category).color, isCore: false, selected: n.id === selectedId, fresh: isFresh(n.updated_at), newest: n.id === newestId, delay: staggerDelay(i + 2) },
-      draggable: true,
+  // Memory nodes spread across 2–3 soft orbital bands (instead of one crowded
+  // ring): far fewer nodes per band → wide angular gaps + clear radial separation.
+  const BANDS = others.length <= 6 ? 1 : others.length <= 16 ? 2 : 3;
+  const BAND_BASE = 500;
+  const BAND_STEP = 215;
+  const bandLists: Array<typeof others> = Array.from({ length: BANDS }, () => []);
+  others.forEach((n, i) => bandLists[i % BANDS].push(n));
+
+  bandLists.forEach((list, band) => {
+    const R = BAND_BASE + band * BAND_STEP;
+    const bandOffset = band * 0.5 - Math.PI / 2; // rotate each band so they interleave
+    list.forEach((n, k) => {
+      const s = seedFromId(n.id);
+      // even angular slot per band + small deterministic jitter so it reads organic
+      const a = (k / Math.max(1, list.length)) * Math.PI * 2 + bandOffset + (s.a - 0.5) * 0.16;
+      const r = R + (s.r - 0.5) * 46;
+      nodes.push({
+        id: n.id,
+        type: "vc",
+        position: { x: Math.cos(a) * r, y: Math.sin(a) * r },
+        data: { label: n.label, category: n.category, color: styleFor(n.category).color, kind: "memory", size: MEM_SIZE, selected: n.id === selectedId, fresh: isFresh(n.updated_at), newest: n.id === newestId },
+        draggable: true,
+      });
     });
   });
 

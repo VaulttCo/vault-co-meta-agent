@@ -99,15 +99,15 @@ export async function runSystemCreationCycle(): Promise<{ proposals: number }> {
     agent: "vega",
     title: "Add a Competitor Intelligence dashboard",
     category: "missing_dashboard",
-    problem: "Victoria's competitor and creative findings are scattered with no dedicated view.",
+    problem: "Valentina's competitor and creative findings are scattered with no dedicated view.",
     impact: "Operators can't quickly see competitive shifts, slowing strategic response.",
     opportunity: "A focused dashboard makes competitive moves immediately visible.",
-    solution: "A /competitor-intel route over Victoria's competitor/hook nodes with trend views.",
+    solution: "A /competitor-intel route over Valentina's competitor/hook nodes with trend views.",
     technical_requirements: "Read API over competitor-category nodes; reuse graph + VaultUI.",
     ui_requirements: "Veronica Design dashboard: offer-shift timeline, hook leaderboard, competitor cards.",
     estimated_effort: "M (~2 days)",
     priority_score: 0.74,
-    expected_outcome: "Faster competitive response; higher Victoria adoption rate.",
+    expected_outcome: "Faster competitive response; higher Valentina adoption rate.",
   });
   if (id) {
     await insertActivity({

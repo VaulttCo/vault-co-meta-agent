@@ -12,7 +12,7 @@
 //                        (count of engaged gates — NOT a fabricated uptime %)
 
 import Image from "next/image";
-import { Activity, ClipboardCheck, ListChecks, ShieldCheck, RefreshCw, UserCircle2 } from "lucide-react";
+import { Activity, ClipboardCheck, ListChecks, ShieldCheck, RefreshCw, UserCircle2, LogOut } from "lucide-react";
 import { VCStat, VCStatusBadge } from "@/components/ui/VaultUI";
 import { relativeTime } from "./relativeTime";
 
@@ -28,6 +28,11 @@ interface CommandHeaderProps {
   /** Authenticated operator context, shown when available. */
   userName?: string | null;
   userRole?: string | null;
+  /** Sign-out handler — renders a sign-out control in the header when provided.
+   *  Mission Control is a standalone surface (no shell topbar), so this is the
+   *  only sign-out affordance on `/`. Placing it inside the header avoids the
+   *  fixed-overlay overlap that a floating button caused on small screens. */
+  onSignOut?: () => void;
 }
 
 export function CommandHeader({
@@ -40,6 +45,7 @@ export function CommandHeader({
   lastUpdate,
   userName,
   userRole,
+  onSignOut,
 }: CommandHeaderProps) {
   return (
     <div className="hub-fade-up w-full flex flex-col gap-5">
@@ -91,6 +97,18 @@ export function CommandHeader({
               </span>
             </div>
           </div>
+
+          {/* Sign out — only affordance on the standalone Mission Control surface */}
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="mc-signout flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-semibold cursor-pointer"
+              style={{ backgroundColor: "var(--t-surface)", border: "1px solid var(--t-border-subtle)", color: "var(--t-dim)" }}
+            >
+              <LogOut size={12} />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          )}
         </div>
       </div>
 

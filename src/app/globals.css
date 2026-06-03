@@ -457,6 +457,13 @@ h1, h2, h3, h4, h5, h6 {
 .hub-fade-up-2 { animation: hubFadeUp 0.55s ease 0.16s both; }
 .hub-fade-up-3 { animation: hubFadeUp 0.55s ease 0.24s both; }
 
+/* Mission Control sign-out — subtle premium hover */
+.mc-signout { transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
+.mc-signout:hover {
+  border-color: rgba(0,129,242,0.32) !important;
+  color: rgba(0,129,242,0.9) !important;
+}
+
 /* ───────────────────────────────────────────────────────────────
    Living Vault Memory — the brain "feels alive". All purely decorative,
    GPU-friendly (transform/opacity only), and fully disabled under

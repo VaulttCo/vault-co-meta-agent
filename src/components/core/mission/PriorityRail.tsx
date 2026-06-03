@@ -1,14 +1,15 @@
 "use client";
 
 // Vault OS Mission Control — Priority Rail (Section 2, moved above Workforce).
-// Surfaces urgent items immediately below the header. Collapses ENTIRELY when
-// there is nothing to act on — no empty card, no placeholder, zero dead space.
+// Surfaces urgent items immediately below the header. When there is nothing to
+// act on it shows a single calm "all clear" line (not a big empty card) so the
+// standby state reads as intentional — the system checked, nothing needs a human.
 //
 // All counts are real (passed from the page's mission-data hook + plans/clients).
 // Severity order: failed runs → launch blockers → urgent tasks → approvals.
 
 import Link from "next/link";
-import { ArrowRight, AlertTriangle } from "lucide-react";
+import { ArrowRight, AlertTriangle, ShieldCheck } from "lucide-react";
 import { VCPanel, VCPriorityDot, priorityColors } from "@/components/ui/VaultUI";
 
 type Priority = "urgent" | "high" | "medium" | "low";
@@ -48,8 +49,25 @@ export function PriorityRail({
   ];
   const rows = allRows.filter((r) => r.count > 0);
 
-  // Collapse entirely when nothing needs attention.
-  if (rows.length === 0) return null;
+  // Nothing needs a human right now — show a calm, intentional all-clear line
+  // rather than an empty card. This communicates the system actively checked.
+  if (rows.length === 0) {
+    return (
+      <div className="hub-fade-up w-full">
+        <VCPanel accent="green">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <ShieldCheck size={15} style={{ color: "#22c55e", flexShrink: 0 }} />
+            <span className="text-[13px] font-semibold" style={{ color: "var(--t-text)" }}>
+              All clear
+            </span>
+            <span className="text-[12px]" style={{ color: "var(--t-muted)" }}>
+              Nothing needs human action right now. New priorities surface here the moment they appear.
+            </span>
+          </div>
+        </VCPanel>
+      </div>
+    );
+  }
 
   return (
     <div className="hub-fade-up w-full">

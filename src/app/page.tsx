@@ -16,7 +16,6 @@
 // product surface; Vivian is not started.
 
 import { useEffect, useState } from "react";
-import { LogOut } from "lucide-react";
 
 import { getDataProvider } from "@/lib/data/data-provider";
 import type { Client } from "@/lib/data";
@@ -66,30 +65,7 @@ export default function MissionControlPage() {
 
   return (
     <div className="relative w-full max-w-[1280px] mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-      {/* Sign out — fixed, top-right */}
-      <button
-        onClick={() => void signOut()}
-        className="sign-out-btn fixed top-4 right-4 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl text-[11px] font-semibold cursor-pointer"
-        style={{
-          backgroundColor: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.10)",
-          color: "rgba(255,255,255,0.45)",
-        }}
-      >
-        <LogOut size={11} />
-        Sign out
-      </button>
-
-      <style>{`
-        .sign-out-btn { transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
-        .sign-out-btn:hover {
-          background-color: rgba(255,255,255,0.08) !important;
-          border-color: rgba(0,129,242,0.32) !important;
-          color: rgba(0,129,242,0.85) !important;
-        }
-      `}</style>
-
-      {/* 1 · Command Header — identity, operator context, four live KPIs */}
+      {/* 1 · Command Header — identity, operator context, four live KPIs, sign out */}
       <CommandHeader
         loading={m.loading}
         activeAutomations={m.activeAutomations}
@@ -100,6 +76,7 @@ export default function MissionControlPage() {
         lastUpdate={m.lastUpdate}
         userName={user?.name ?? null}
         userRole={user?.role ?? null}
+        onSignOut={() => void signOut()}
       />
 
       {/* 2 · Mission Status Rail — permanent governance safety gates */}

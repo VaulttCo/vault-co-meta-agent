@@ -119,7 +119,7 @@ export async function runTier(
 
   // ── Collaboration engine: advance open collaborations into joint
   // recommendations (self-guards to mock mode). Runs every tier so Vega can
-  // respond to Victoria's requests promptly.
+  // respond to Valentina's requests promptly.
   try {
     const collab = await runCollaborationCycle();
     // System Creation Engine V1 runs on the daily tier (and manual ticks).

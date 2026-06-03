@@ -8,6 +8,24 @@ fallback before any SQL is run**; running the SQL switches each surface to live 
 > Vault Core read returns seeded mock data and every write no-ops. Nothing breaks — you just see
 > the seeded Vault Co environment instead of live data.
 
+## Foundation — base application migrations (run first, before production)
+
+Before the Vault Core phase schemas below, a **fresh install** must run the base
+application migrations in `docs/migrations/`, in this exact order:
+
+| Order | File | Creates / Does | Required before production? |
+|---|---|---|---|
+| 001 | `docs/migrations/001_user_profiles.sql` | `user_profiles` (roles backing Supabase Auth) | **Yes** |
+| 002 | `docs/migrations/002_integration_tables.sql` | integration tables | **Yes** |
+| 005 | `docs/migrations/005_rls_hardening.sql` | Row Level Security hardening | **Yes** |
+
+**Canonical order for a fresh install: run `001`, then `002`, then `005` — before
+production use.** `005` (RLS hardening) depends on the tables created by `001` and
+`002`, so it must run after them. Only once these three are applied should you run
+the Vault Core phase schemas below.
+
+## Vault Core phase schemas
+
 | Order | File | Phase | Required? | Creates | If not run |
 |---|---|---|---|---|---|
 | 1 | `docs/vault-core-schema.sql` | 1 | Required for live | `vault_nodes`, `vault_edges`, `vault_activity`, `vault_recommendations`, `vault_agent_runs` (+ indexes) | Knowledge graph, activity, recommendations all serve mock data |

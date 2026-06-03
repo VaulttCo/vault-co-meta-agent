@@ -13,6 +13,7 @@
 //   /api/operator-tasks                          → operator tasks (status/priority)
 //   /api/core/activity                           → activity[], runs[]
 //   /api/core/recommendations?status=pending_review
+//   /api/core/drafts                             → draft counts (status=draft = pending)
 //   /api/core/proposals?status=pending_review
 //   /api/veronica/hermes                         → latest Hermes runs
 //   /api/veronica/hermes/skills?limit=100        → Hermes skills library
@@ -51,9 +52,14 @@ export interface MissionData {
   openTaskCount: number;
   urgentTaskCount: number;
 
-  // Human-review queue (real pending counts)
+  // Human-review queue (real pending counts) — internal review only, nothing sends
   recPending: number;
+  draftPending: number;
   propPending: number;
+
+  // Newest activity message per agent (executive contribution signal). Empty when
+  // no real activity exists for that agent — never fabricated.
+  latestByAgent: Record<string, { message: string; ts: string }>;
 
   // Operations feed
   activity: VaultActivityRow[];
@@ -74,7 +80,9 @@ const EMPTY: MissionData = {
   openTaskCount: 0,
   urgentTaskCount: 0,
   recPending: 0,
+  draftPending: 0,
   propPending: 0,
+  latestByAgent: {},
   activity: [],
   runs: [],
   failedRunCount: 0,
@@ -101,7 +109,7 @@ export function useMissionData(): MissionData {
     let cancelled = false;
 
     (async () => {
-      const [workforceRes, tasksRes, activityRes, recRes, propRes, hermesRes, skillsRes] =
+      const [workforceRes, tasksRes, activityRes, recRes, draftRes, propRes, hermesRes, skillsRes] =
         await Promise.all([
           getJson<{ workforce: WorkforceMember[] }>("/api/core/workforce"),
           getJson<{ tasks: { status: string; priority: string }[] }>("/api/operator-tasks"),
@@ -109,6 +117,7 @@ export function useMissionData(): MissionData {
           getJson<{ counts: { pending_review: number } | null }>(
             "/api/core/recommendations?status=pending_review"
           ),
+          getJson<{ counts: { draft: number } | null }>("/api/core/drafts"),
           getJson<{ counts: { pending_review: number } | null }>(
             "/api/core/proposals?status=pending_review"
           ),
@@ -136,6 +145,17 @@ export function useMissionData(): MissionData {
         ...runs.map((r) => r.started_at),
       ]);
 
+      // Newest real activity message per agent (activity is consumed newest-first
+      // by the feed, but don't assume order here — compare timestamps).
+      const latestByAgent: Record<string, { message: string; ts: string }> = {};
+      for (const a of activity) {
+        if (!a.agent || !a.created_at) continue;
+        const cur = latestByAgent[a.agent];
+        if (!cur || new Date(a.created_at).getTime() > new Date(cur.ts).getTime()) {
+          latestByAgent[a.agent] = { message: a.message, ts: a.created_at };
+        }
+      }
+
       setData({
         loading: false,
         workforce,
@@ -143,7 +163,9 @@ export function useMissionData(): MissionData {
         openTaskCount,
         urgentTaskCount,
         recPending: recRes?.counts?.pending_review ?? 0,
+        draftPending: draftRes?.counts?.draft ?? 0,
         propPending: propRes?.counts?.pending_review ?? 0,
+        latestByAgent,
         activity,
         runs,
         failedRunCount: runs.filter((r) => r.status === "error").length,

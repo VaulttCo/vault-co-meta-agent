@@ -442,3 +442,64 @@ h1, h2, h3, h4, h5, h6 {
 .vc-blue-gradient {
   background: linear-gradient(135deg, #0070d4 0%, #0081f2 100%);
 }
+
+/* ───────────────────────────────────────────────────────────────
+   Mission Control — section entrance (used by src/components/core/mission/*)
+   Previously defined inline on the old Command Hub page; promoted here so the
+   tracked Mission Control components animate on any page that mounts them.
+   ─────────────────────────────────────────────────────────────── */
+@keyframes hubFadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hub-fade-up   { animation: hubFadeUp 0.55s ease both; }
+.hub-fade-up-1 { animation: hubFadeUp 0.55s ease 0.08s both; }
+.hub-fade-up-2 { animation: hubFadeUp 0.55s ease 0.16s both; }
+.hub-fade-up-3 { animation: hubFadeUp 0.55s ease 0.24s both; }
+
+/* ───────────────────────────────────────────────────────────────
+   Living Vault Memory — the brain "feels alive". All purely decorative,
+   GPU-friendly (transform/opacity only), and fully disabled under
+   prefers-reduced-motion below. No layout thrash, no JS per frame.
+   ─────────────────────────────────────────────────────────────── */
+
+/* Core node — slow breathing pulse */
+@keyframes vmBreathe {
+  0%, 100% { transform: scale(1);    opacity: 0.92; }
+  50%      { transform: scale(1.06); opacity: 1; }
+}
+.vm-breathe { animation: vmBreathe 4.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Agent / memory nodes — gentle drift. Staggered via per-node delay. */
+@keyframes vmFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3.5px); }
+}
+.vm-float { animation: vmFloat 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Relationship lines — signal traveling along the pathway (dash march). */
+@keyframes vmSignal {
+  to { stroke-dashoffset: -32; }
+}
+.vm-signal { animation: vmSignal 1.8s linear infinite; }
+
+/* Recently-updated node — brief glow halo */
+@keyframes vmGlow {
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50%      { opacity: 0.7;  transform: scale(1.18); }
+}
+.vm-glow { animation: vmGlow 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* New-memory emergence — node fades + scales in once on mount */
+@keyframes vmEmerge {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.vm-emerge { animation: vmEmerge 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; transform-box: fill-box; transform-origin: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-fade-up, .hub-fade-up-1, .hub-fade-up-2, .hub-fade-up-3,
+  .vm-breathe, .vm-float, .vm-signal, .vm-glow, .vm-emerge {
+    animation: none !important;
+  }
+}

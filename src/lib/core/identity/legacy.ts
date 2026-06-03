@@ -19,7 +19,7 @@ export interface LegacyRecommendationSpec {
   title: string;
   body: string;
   impact: string;
-  agent: "veronica" | "vanessa" | "vega" | "victoria";
+  agent: "veronica" | "vanessa" | "vega" | "valentina";
 }
 
 export interface LegacyAutomationNode {

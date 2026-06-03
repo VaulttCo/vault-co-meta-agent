@@ -1,17 +1,16 @@
 // Vault Core — Workforce roster (Layer 2).
 //
-// Currently ACTIVE (5): Vega, Veronica, Victoria, Valerie, Vanessa.
+// Currently ACTIVE (5): Vega, Veronica, Valentina, Valerie, Vanessa.
 // Metadata-only STUB (not active, not in the tick): Vivian — the UI renders the
 // full workforce; a future phase can flip `active: true` and attach a runnable agent.
 //
-// ROLE-SPLIT NOTE (spec stage — see docs/valentina-marketing-director-spec.md):
-//   The active "victoria" executive below performs the AI MARKETING DIRECTOR role.
-//   Per the corrected naming, that role is being repositioned as "Valentina (AI
-//   Marketing Director)", while the name "Victoria" now denotes the AI SALES COACH
-//   (the live sales-call product: src/lib/victoria/**, /api/victoria/**, /victoria).
-//   Valentina is SPEC-ONLY for now — NOT activated, NOT added to the tick, NO runtime
-//   change. The rename/activation of this executive is deferred to a future phase, so
-//   this entry's id/title/active/tiers are intentionally left unchanged here.
+// NAMING (corrected — see docs/valentina-marketing-director-spec.md):
+//   • Valentina = AI Marketing Director — the active marketing executive below.
+//     It was previously registered as "victoria"; renamed so the marketing role and
+//     the "Victoria" name no longer collide. Same behavior/tiers/safety — identity only.
+//   • Victoria = AI Sales Coach — the live sales-call product (src/lib/victoria/**,
+//     /api/victoria/**, /victoria). It is NOT a Vault Core executive and is NOT in
+//     this roster or the tick. (If it ever becomes a runtime executive, add it then.)
 //
 // This module is PURE metadata — no DB, no AI, no side effects — so it is safe
 // to import from both server runtime and (indirectly) the mock graph.
@@ -46,16 +45,12 @@ export const WORKFORCE: AgentMeta[] = [
     tiers: ["hourly", "daily"],
   },
   {
-    id: "victoria",
-    name: "Victoria",
-    title: "Marketing Director",
+    id: "valentina",
+    name: "Valentina",
+    title: "AI Marketing Director",
     mission: "Understand how attention converts.",
     color: ORANGE,
-    // active — performs the AI Marketing Director role. Per the role-split note above,
-    // this executive is slated to be renamed "Valentina (AI Marketing Director)" in a
-    // future phase; the "Victoria" name is being repositioned as the AI Sales Coach.
-    // Left unchanged here to avoid any runtime change (spec-only stage).
-    active: true,
+    active: true, // active — AI Marketing Director (renamed from "victoria"; same role/behavior)
     tiers: ["hourly", "daily"],
   },
   {

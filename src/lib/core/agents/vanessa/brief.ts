@@ -65,7 +65,7 @@ export function buildExecutiveBrief(input: BriefInputs): ExecutiveBrief {
 
   // Opportunities: marketing + opportunity-flavored titles.
   const topOpportunities = recommendations
-    .filter((r) => r.agent === "victoria" || /opportunit|winning|content|hook|offer|conversion/i.test(r.title))
+    .filter((r) => r.agent === "valentina" || /opportunit|winning|content|hook|offer|conversion/i.test(r.title))
     .slice(0, 3)
     .map((r) => r.title);
 
@@ -79,7 +79,7 @@ export function buildExecutiveBrief(input: BriefInputs): ExecutiveBrief {
       .join(" · ") || "No recent activity.";
 
   const financialSignals = recentByAgent(activity, "valerie");
-  const marketingSignals = recentByAgent(activity, "victoria");
+  const marketingSignals = recentByAgent(activity, "valentina");
   const intelligenceSignals = recentByAgent(activity, "vega");
 
   // Suggested human actions from top priorities.

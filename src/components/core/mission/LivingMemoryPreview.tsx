@@ -22,17 +22,8 @@ import { Brain, ArrowRight } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
 import { VCPanel, VCPanelHeader } from "@/components/ui/VaultUI";
 import { styleFor } from "@/components/core/categoryStyle";
+import { AGENT_ACCENT, CORE_GRADIENT_STOPS, agentColor, isFresh } from "@/components/core/brain/brainViz";
 import type { VaultGraph } from "@/lib/core/types";
-
-// Distinct accents per executive so the brain reads as several minds, not a
-// uniform cloud. Falls back to the category color for anything unmapped.
-const AGENT_ACCENT: Record<string, string> = {
-  vega: "#22d3ee",
-  veronica: "#0081f2",
-  valentina: "#ff8400",
-  valerie: "#c9a84c",
-  vanessa: "#a78bfa",
-};
 
 // Structural fallback brain — the five active executives around the core.
 const FALLBACK_AGENTS = ["vega", "veronica", "valentina", "valerie", "vanessa"];
@@ -62,20 +53,6 @@ interface Link {
   y2: number;
   color: string;
   toCore: boolean; // agent → core contribution pathway (carries a signal dot)
-}
-
-function agentColor(node: { label: string; source_agent: string | null; id: string }): string {
-  const key = (node.source_agent ?? node.label ?? node.id ?? "").toLowerCase();
-  for (const id of Object.keys(AGENT_ACCENT)) {
-    if (key.includes(id)) return AGENT_ACCENT[id];
-  }
-  return styleFor("agent").color;
-}
-
-function isFresh(iso: string | undefined): boolean {
-  if (!iso) return false;
-  const t = new Date(iso).getTime();
-  return Number.isFinite(t) && Date.now() - t < 24 * 60 * 60 * 1000;
 }
 
 function buildScene(graph: VaultGraph | null): { nodes: Placed[]; links: Link[] } {
@@ -264,10 +241,11 @@ export function LivingMemoryPreview() {
           style={{ display: "block" }}
         >
           <defs>
+            {/* Identical core gradient to the full Vault Core brain (shared stops) */}
             <radialGradient id="vm-core-grad" cx="50%" cy="40%" r="60%">
-              <stop offset="0%" stopColor="#0081f2" stopOpacity="0.55" />
-              <stop offset="70%" stopColor="#0D1520" stopOpacity="0.95" />
-              <stop offset="100%" stopColor="#0D1520" stopOpacity="1" />
+              {CORE_GRADIENT_STOPS.map((s) => (
+                <stop key={s.offset} offset={s.offset} stopColor={s.color} stopOpacity={s.opacity} />
+              ))}
             </radialGradient>
           </defs>
 
@@ -330,6 +308,19 @@ export function LivingMemoryPreview() {
             const emergeClass = animate && n.newest ? "vm-emerge" : "";
             return (
               <g key={n.id} className={`${floatClass} ${emergeClass}`.trim()} style={{ animationDelay: `${(i % 7) * 0.5}s` }}>
+                {/* New-memory ripple — the single freshest node, matching the full brain */}
+                {animate && n.newest && (
+                  <circle
+                    className="vm-ripple"
+                    cx={n.x}
+                    cy={n.y}
+                    r={n.r + 4}
+                    fill="none"
+                    stroke={n.color}
+                    strokeWidth={1.2}
+                    strokeOpacity={0.5}
+                  />
+                )}
                 {/* Fresh / recently-updated glow halo */}
                 {animate && (n.fresh || n.kind === "core") && (
                   <circle

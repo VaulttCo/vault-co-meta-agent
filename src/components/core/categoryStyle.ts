@@ -79,6 +79,15 @@ export const CATEGORY_STYLE: Record<VaultNodeCategory, CategoryStyle> = {
   client_experience_signal: { label: "Client Experience", color: "#34d399" },
   retention_risk: { label: "Retention Risk", color: "#ef4444" },
   onboarding_health: { label: "Onboarding Health", color: "#2dd4bf" },
+  // Phase 8.4 — Valentina competitor intelligence (orange — marketing)
+  competitor_profile: { label: "Competitor", color: "#ff8400" },
+  competitor_capture: { label: "Competitor Capture", color: "#fb923c" },
+  hook_pattern: { label: "Hook Pattern", color: "#ff8400" },
+  offer_shift: { label: "Offer Shift", color: "#f59e0b" },
+  creative_pattern: { label: "Creative Pattern", color: "#fbbf24" },
+  landing_page_pattern: { label: "Landing Page Pattern", color: "#fb923c" },
+  pricing_positioning: { label: "Pricing / Positioning", color: "#f59e0b" },
+  market_signal: { label: "Market Signal", color: "#fdba74" },
 };
 
 export function styleFor(category: string): CategoryStyle {

@@ -53,7 +53,8 @@ export interface MissionData {
   urgentTaskCount: number;
 
   // Human-review queue (real pending counts) — internal review only, nothing sends
-  recPending: number;
+  recPending: number; // mission-visible (cleaned by Vera/Vesper)
+  recHidden: number; // pending_review hidden by hygiene (audit context)
   draftPending: number;
   propPending: number;
 
@@ -80,6 +81,7 @@ const EMPTY: MissionData = {
   openTaskCount: 0,
   urgentTaskCount: 0,
   recPending: 0,
+  recHidden: 0,
   draftPending: 0,
   propPending: 0,
   latestByAgent: {},
@@ -165,6 +167,11 @@ export function useMissionData(): MissionData {
         // Prefer the hygiene-aware visible count so Vera/Vesper-suppressed items
         // don't inflate Mission Control (falls back to raw pending_review).
         recPending: recRes?.counts?.mission_visible ?? recRes?.counts?.pending_review ?? 0,
+        recHidden: Math.max(
+          0,
+          (recRes?.counts?.pending_review ?? 0) -
+            (recRes?.counts?.mission_visible ?? recRes?.counts?.pending_review ?? 0)
+        ),
         draftPending: draftRes?.counts?.draft ?? 0,
         propPending: propRes?.counts?.pending_review ?? 0,
         latestByAgent,

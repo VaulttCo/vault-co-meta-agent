@@ -66,6 +66,12 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 ```
 
+## Optional feature flags
+
+| Variable | Default | Effect |
+|---|---|---|
+| `COMPETITOR_AUTOMATION_ENABLED` | `false` (unset) | **Future/disabled.** Reserved flag for automated competitor sources (Meta Ads Library, site/social monitoring, snapshots). No code path acts on it in Phase 8.4 — Competitor Intel is manual-entry only. Setting it `true` does NOT enable scraping/external calls in this phase. |
+
 ## What runs in mock mode by default
 
 | System | Mock when | Notice shown |

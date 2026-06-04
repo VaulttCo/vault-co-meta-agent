@@ -79,6 +79,15 @@ Vault Core safety invariants (flag ANY violation as P0):
   recommendation; flag P0 if a 7th unapproved agent appears. Vera/Vesper are backend QA (pure
   functions), NOT runtime executives, and must not appear in ACTIVE_AGENT_IDS/RUNNABLE_AGENTS. Codex
   must not be a production runtime dependency.
+- Competitor Intelligence (Phase 8.4, `/competitor-intel`, `src/lib/core/competitor/**`,
+  `/api/core/competitor-*`): INTERNAL, MANUAL-sourced only for Valentina. It must NOT scrape, fetch
+  external sites, call the Meta Ads Library live, or run scheduled jobs. `COMPETITOR_AUTOMATION_ENABLED`
+  is future/disabled (default false) and no code path may act on it in this phase. Manual create/update
+  is internal DB only (admin / canConnectIntegrations), inputs validated/sanitized (http(s) URLs only),
+  no credentials/PII/raw payloads stored or returned. Valentina reads this layer READ-ONLY and emits
+  recommend-only candidates through insertRecommendation (Vera/Vesper gate). Flag P0 if any competitor
+  code performs an external fetch/scrape or external mutation; do NOT flag the documented disabled
+  future-automation scaffolding. Valentina = AI Marketing Director (NOT Victoria the Sales Coach product).
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

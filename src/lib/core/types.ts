@@ -82,7 +82,16 @@ export type VaultNodeCategory =
   | "client_success_signal"
   | "client_experience_signal"
   | "retention_risk"
-  | "onboarding_health";
+  | "onboarding_health"
+  // Phase 8.4 — Valentina competitor intelligence (internal, manual-sourced)
+  | "competitor_profile"
+  | "competitor_capture"
+  | "hook_pattern"
+  | "offer_shift"
+  | "creative_pattern"
+  | "landing_page_pattern"
+  | "pricing_positioning"
+  | "market_signal";
 
 export type VaultEdgeRelationship =
   | "connected_to"

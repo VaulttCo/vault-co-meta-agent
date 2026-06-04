@@ -36,6 +36,7 @@ import {
   Wrench,
   Command,
   Fingerprint,
+  Radar,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -57,6 +58,7 @@ const vaultCoreNavItems: NavItem[] = [
   { label: "Recommendations",   href: "/recommendations", icon: Lightbulb,     permission: "canViewApprovals" },
   { label: "Drafts",            href: "/drafts",          icon: MessageSquare, permission: "canViewApprovals" },
   { label: "System Proposals",  href: "/proposals",       icon: Wrench,        permission: "canViewApprovals" },
+  { label: "Competitor Intel",  href: "/competitor-intel", icon: Radar,        permission: "canViewStrategyData" },
   { label: "Runtime Activity",  href: "/runtime",         icon: Activity,      permission: "canViewStrategyData" },
   { label: "Identity Core",     href: "/vault-core/identity", icon: Fingerprint, permission: "canViewStrategyData" },
 ];

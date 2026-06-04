@@ -28,6 +28,7 @@ import {
   insertRecommendation,
 } from "../../memory/db";
 import { createCollaboration, insertAgentMessage, insertAgentTask } from "../../collab/db";
+import { runCompetitorSignals } from "../../competitor/valentina-signals";
 import { getAgentMeta } from "../registry";
 import { isAnthropicAvailable, callAnthropicTool, VICTORIA_MODELS } from "@/lib/victoria/anthropic";
 import type { AgentRunResult } from "../../types";
@@ -256,6 +257,18 @@ async function run(ctx: AgentRunContext): Promise<AgentRunResult> {
         related_node_ids: hookId ? [hookId] : [],
       });
     }
+  }
+
+  // Competitor source layer (READ-ONLY): reads the internal manual competitor
+  // profiles/captures, writes memory nodes, and emits recommend-only candidates
+  // through the Vera/Vesper gate. Fully guarded — a failure never breaks the run.
+  try {
+    const comp = await runCompetitorSignals();
+    nodesCreated += comp.nodesCreated;
+    edgesCreated += comp.edgesCreated;
+    recommendationsCreated += comp.recommendationsCreated;
+  } catch (e) {
+    console.error("[valentina] competitor signals (non-fatal):", (e as Error).message);
   }
 
   const persisted = coreId !== null;

@@ -26,6 +26,7 @@ import { useMissionData } from "@/components/core/mission/useMissionData";
 import { CommandHeader } from "@/components/core/mission/CommandHeader";
 import { MissionStatusRail, SAFETY_GATES } from "@/components/core/mission/MissionStatusRail";
 import { PriorityRail } from "@/components/core/mission/PriorityRail";
+import { ActionCenter } from "@/components/core/mission/ActionCenter";
 import { WorkforceRoster } from "@/components/core/mission/WorkforceRoster";
 import { LivingMemoryPreview } from "@/components/core/mission/LivingMemoryPreview";
 import { ReviewQueue } from "@/components/core/mission/ReviewQueue";
@@ -91,7 +92,20 @@ export default function MissionControlPage() {
         urgentTasks={m.urgentTaskCount}
       />
 
-      {/* 4 · Active Workforce — the five Vault Core executives */}
+      {/* 4 · Action Center — cleaned operator workflow ("what needs my attention today") */}
+      <ActionCenter
+        loading={m.loading}
+        recVisible={m.recPending}
+        recHidden={m.recHidden}
+        plansNeedsReview={plansNeedsReview}
+        draftPending={m.draftPending}
+        propPending={m.propPending}
+        urgentTasks={m.urgentTaskCount}
+        failedRuns={m.failedRunCount}
+        lastUpdate={m.lastUpdate}
+      />
+
+      {/* 5 · Active Workforce — the six Vault Core executives */}
       <WorkforceRoster
         loading={m.loading}
         workforce={m.workforce}

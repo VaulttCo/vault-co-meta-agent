@@ -36,16 +36,25 @@ interface Tile {
 
 export function ActionCenter(props: ActionCenterProps) {
   const { loading, recVisible, recHidden, plansNeedsReview, draftPending, propPending, urgentTasks, failedRuns } = props;
-  const [competitorSignals, setCompetitorSignals] = useState<number | null>(null);
+  const [comp, setComp] = useState<{ captures: number; profiles: number; topHook: string | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/core/competitor-intel")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!cancelled) setCompetitorSignals(d?.overview?.totalCaptures ?? 0); })
-      .catch(() => { if (!cancelled) setCompetitorSignals(0); });
+      .then((d) => {
+        if (cancelled) return;
+        const ov = d?.overview;
+        setComp({
+          captures: ov?.totalCaptures ?? 0,
+          profiles: ov?.totalProfiles ?? 0,
+          topHook: ov?.topHookAngle ?? ov?.topOfferShift ?? null,
+        });
+      })
+      .catch(() => { if (!cancelled) setComp({ captures: 0, profiles: 0, topHook: null }); });
     return () => { cancelled = true; };
   }, []);
+  const competitorSignals = comp?.captures ?? null;
 
   // Today's priority — the single most urgent thing.
   const priority =
@@ -60,7 +69,7 @@ export function ActionCenter(props: ActionCenterProps) {
     { icon: ClipboardCheck, label: "Approvals", sub: "blocking progress", value: plansNeedsReview, href: "/approvals", accent: "#22c55e" },
     { icon: FileText, label: "Drafts", sub: "awaiting review", value: draftPending, href: "/drafts", accent: "#0081f2" },
     { icon: Boxes, label: "System Proposals", sub: "pending", value: propPending, href: "/proposals", accent: "#a78bfa" },
-    { icon: Radar, label: "Competitor Intel", sub: "Valentina signals", value: competitorSignals ?? 0, href: "/competitor-intel", accent: "#fb923c" },
+    { icon: Radar, label: "Competitor Intel", sub: comp ? `${comp.profiles} profile${comp.profiles === 1 ? "" : "s"}` : "Valentina signals", value: competitorSignals ?? 0, href: "/competitor-intel", accent: "#fb923c", note: comp?.topHook ? `top: ${comp.topHook.slice(0, 18)}` : undefined },
   ];
 
   return (

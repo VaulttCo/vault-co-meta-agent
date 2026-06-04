@@ -14,10 +14,11 @@ import type {
   CompetitorProfileInput,
   CompetitorCaptureInput,
   CompetitorIntelOverview,
-  HookLeaderboardRow,
-  OfferShiftEntry,
+  CompetitorProfileDTO,
+  CompetitorCaptureDTO,
   CompetitorSourceStatus,
 } from "./types";
+import { synthesizeStrategy } from "./strategy";
 
 const PROFILES_TABLE = "competitor_profiles";
 const CAPTURES_TABLE = "competitor_intelligence_captures";
@@ -150,61 +151,50 @@ export async function createCapture(input: CompetitorCaptureInput, createdBy: st
   return data as CompetitorCapture;
 }
 
+// ── Safe DTOs returned to the client by the list routes ──
+// Strip raw free-text (notes/ad_copy/pricing notes), internal ids (created_by,
+// client_id), and source/screenshot/landing URLs — those stay server-side.
+export function toProfileDTO(p: CompetitorProfile): CompetitorProfileDTO {
+  return {
+    id: p.id,
+    name: p.name,
+    website: p.website,
+    market_niche: p.market_niche,
+    service_area: p.service_area,
+    offer_notes: p.offer_notes, // already scrubbed on write
+    social_links: p.social_links,
+    meta_ad_library_url: p.meta_ad_library_url,
+    google_business_profile_url: p.google_business_profile_url,
+    status: p.status,
+  };
+}
+
+export function toCaptureDTO(c: CompetitorCapture): CompetitorCaptureDTO {
+  return {
+    id: c.id,
+    competitor_profile_id: c.competitor_profile_id,
+    capture_type: c.capture_type,
+    hook: c.hook,
+    offer: c.offer,
+    angle: c.angle,
+    creative_pattern: c.creative_pattern,
+    confidence: c.confidence,
+    observed_at: c.observed_at,
+    created_at: c.created_at,
+  };
+}
+
 // ── Dashboard aggregate (safe, summarized — no raw payloads / PII) ──
 const PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
 
-function hookText(c: CompetitorCapture): string | null {
-  return c.hook ?? c.angle ?? (c.capture_type === "offer" ? c.offer : null);
-}
-
 export async function getOverview(): Promise<CompetitorIntelOverview> {
   const [profiles, captures] = await Promise.all([getProfiles(), getCaptures()]);
-  const profileById = new Map(profiles.map((p) => [p.id, p]));
   const live = !!db();
   const now = Date.now();
 
-  // Hook leaderboard — frequency of hook/angle text across captures.
-  const hookMap = new Map<string, HookLeaderboardRow>();
-  for (const c of captures) {
-    const h = hookText(c);
-    if (!h) continue;
-    const key = h.toLowerCase();
-    const prof = profileById.get(c.competitor_profile_id);
-    const existing = hookMap.get(key);
-    const seen = c.observed_at ?? c.created_at;
-    if (existing) {
-      existing.frequency += 1;
-      existing.confidence = Math.max(existing.confidence, c.confidence);
-      if (!existing.lastSeen || (seen && seen > existing.lastSeen)) existing.lastSeen = seen;
-    } else {
-      hookMap.set(key, {
-        hook: h,
-        competitorName: prof?.name ?? "—",
-        frequency: 1,
-        confidence: c.confidence,
-        lastSeen: seen,
-        market: prof?.market_niche ?? null,
-      });
-    }
-  }
-  const hookLeaderboard = Array.from(hookMap.values())
-    .sort((a, b) => b.frequency - a.frequency || b.confidence - a.confidence)
-    .slice(0, 12);
-
-  // Offer-shift timeline — offer/positioning captures most-recent first.
-  const offerShiftTimeline: OfferShiftEntry[] = captures
-    .filter((c) => ["offer", "pricing", "positioning", "landing_page", "website_observation"].includes(c.capture_type))
-    .map((c) => {
-      const prof = profileById.get(c.competitor_profile_id);
-      const summary = c.offer ?? c.pricing_positioning_notes ?? c.creative_pattern ?? c.notes ?? c.capture_type;
-      return { date: c.observed_at ?? c.created_at, competitorName: prof?.name ?? "—", captureType: c.capture_type, summary };
-    })
-    .sort((a, b) => (b.date > a.date ? 1 : -1))
-    .slice(0, 20);
-
   const newSignalsThisPeriod = captures.filter((c) => {
-    const t = new Date(c.observed_at ?? c.created_at).getTime();
-    return Number.isFinite(t) && now - t <= PERIOD_MS;
+    const diff = now - new Date(c.observed_at ?? c.created_at).getTime();
+    return Number.isFinite(diff) && diff >= 0 && diff <= PERIOD_MS; // not future, within window
   }).length;
 
   const sources: CompetitorSourceStatus = {
@@ -221,17 +211,19 @@ export async function getOverview(): Promise<CompetitorIntelOverview> {
   const coverageState: CompetitorIntelOverview["coverageState"] =
     captures.length === 0 && profiles.length === 0 ? "none" : "manual";
 
+  // Valentina's internal strategy synthesis (pure, recommend-only).
+  const strategy = synthesizeStrategy(profiles, captures);
+
   return {
     totalProfiles: profiles.length,
     totalCaptures: captures.length,
     newSignalsThisPeriod,
-    topOfferShift: offerShiftTimeline[0]?.summary ?? null,
-    topHookAngle: hookLeaderboard[0]?.hook ?? null,
+    topOfferShift: strategy.offerShifts[0]?.offer ?? null,
+    topHookAngle: strategy.topHooks[0]?.hook ?? null,
     coverageState,
     sources,
-    hookLeaderboard,
-    offerShiftTimeline,
     isDemo: false,
     live,
+    strategy,
   };
 }

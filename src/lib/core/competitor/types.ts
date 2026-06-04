@@ -112,6 +112,36 @@ export interface CompetitorCaptureInput {
   notes?: string | null;
 }
 
+// ── Public DTOs (what the list routes return to the client) ──────
+// Deliberately OMIT raw free-text (notes, ad_copy, pricing notes), internal ids
+// (created_by, client_id), and source/screenshot/landing URLs. Those stay
+// server-side; the dashboard never needs them. Sanitized fields only.
+export interface CompetitorProfileDTO {
+  id: string;
+  name: string;
+  website: string | null;
+  market_niche: string | null;
+  service_area: string | null;
+  offer_notes: string | null; // already secret/PII-scrubbed on write
+  social_links: string[];
+  meta_ad_library_url: string | null;
+  google_business_profile_url: string | null;
+  status: CompetitorStatus;
+}
+
+export interface CompetitorCaptureDTO {
+  id: string;
+  competitor_profile_id: string;
+  capture_type: CaptureType;
+  hook: string | null;
+  offer: string | null;
+  angle: string | null;
+  creative_pattern: string | null;
+  confidence: number;
+  observed_at: string | null;
+  created_at: string;
+}
+
 // ── Dashboard aggregate (safe, summarized; no raw payloads/PII) ──
 export interface HookLeaderboardRow {
   hook: string;
@@ -149,8 +179,8 @@ export interface CompetitorIntelOverview {
   topHookAngle: string | null;
   coverageState: "none" | "manual" | "memory" | "mixed";
   sources: CompetitorSourceStatus;
-  hookLeaderboard: HookLeaderboardRow[];
-  offerShiftTimeline: OfferShiftEntry[];
   isDemo: boolean; // true when only seeded demo data is present
   live: boolean; // true when backed by a real DB
+  // Phase 8.5 — Valentina internal strategy synthesis (recommend-only).
+  strategy: import("./strategy").CompetitorStrategy;
 }

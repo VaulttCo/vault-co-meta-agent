@@ -14,6 +14,7 @@
 
 import { ensureNode, insertNode, insertEdge, insertActivity, insertRecommendation } from "../memory/db";
 import { getProfiles, getCaptures } from "./db";
+import { synthesizeStrategy } from "./strategy";
 import type { CompetitorCapture } from "./types";
 
 export interface ValentinaCompetitorResult {
@@ -66,66 +67,66 @@ export async function runCompetitorSignals(): Promise<ValentinaCompetitorResult>
     if (id) { out.nodesCreated += 1; await link(id); }
   }
 
-  // 2. Hook-pattern analysis — repeated hooks across captures → memory + a rec.
-  const hookFreq = new Map<string, { text: string; count: number; clients: Set<string> }>();
-  for (const c of captures) {
-    const h = hookText(c);
-    if (!h) continue;
-    const k = h.toLowerCase();
-    const e = hookFreq.get(k) ?? { text: h, count: 0, clients: new Set<string>() };
-    e.count += 1;
-    if (c.client_id) e.clients.add(c.client_id);
-    hookFreq.set(k, e);
-  }
-  const repeatedHooks = Array.from(hookFreq.values()).filter((h) => h.count >= 2).sort((a, b) => b.count - a.count);
-  for (const h of repeatedHooks.slice(0, 5)) {
+  // Shared strategy synthesis — same logic the dashboard surfaces, so Valentina's
+  // memory + recommendations stay consistent with /competitor-intel.
+  const strategy = synthesizeStrategy(profiles, captures);
+  const clientsForHook = (hook: string): string[] =>
+    Array.from(new Set(captures.filter((c) => hookText(c)?.toLowerCase() === hook.toLowerCase() && c.client_id).map((c) => c.client_id as string)));
+
+  // 2. Hook-pattern memory nodes (top, idempotent) + one rec for the strongest.
+  for (const h of strategy.topHooks.filter((h) => h.frequency >= 2).slice(0, 5)) {
     const id = await ensureNode({
       category: "hook_pattern",
-      label: `Hook pattern: ${h.text.slice(0, 60)}`,
-      summary: `Observed across ${h.count} competitor captures.`,
+      label: `Hook pattern: ${h.hook.slice(0, 60)}`,
+      summary: `Observed ${h.frequency}× across ${h.competitorCount} competitor(s).`,
       source_agent: "valentina",
-      confidence: Math.min(0.9, 0.5 + h.count * 0.1),
-      metadata: { frequency: h.count },
+      confidence: h.confidence,
+      metadata: { frequency: h.frequency, competitorCount: h.competitorCount },
     });
     if (id) { out.nodesCreated += 1; await link(id); }
   }
-  // One recommend-only candidate for the strongest repeated hook (gate dedupes the rest).
-  const topHook = repeatedHooks[0];
-  if (topHook) {
+  const topHook = strategy.topHooks[0];
+  if (topHook && topHook.frequency >= 2) {
     const recId = await insertRecommendation({
       agent: "valentina",
-      title: `Review competitor hook pattern: "${topHook.text.slice(0, 60)}"`,
-      body: `This hook/angle appears across ${topHook.count} competitor captures. Consider testing this angle manually against current client campaigns and reviewing how it compares to your live messaging.`,
+      title: `Review competitor hook pattern: "${topHook.hook.slice(0, 60)}"`,
+      body: `${topHook.suggestedHumanAction} (seen ${topHook.frequency}× across ${topHook.competitorCount} competitor(s)).`,
       impact: "Competitive creative signal",
-      priority_score: Math.min(0.75, 0.5 + topHook.count * 0.05),
+      priority_score: Math.min(0.75, 0.5 + topHook.frequency * 0.05),
       influence_score: 0.6,
-      related_clients: Array.from(topHook.clients),
+      related_clients: clientsForHook(topHook.hook),
       metadata: { source: "competitor_source_layer", recommendOnly: true, humanApprovalRequired: true, neverAutoExecute: true },
     });
     if (recId) out.recommendationsCreated += 1;
   }
 
-  // 3. Offer-shift analysis — recent offer/pricing/positioning captures → market signal + a rec.
-  const offerCaptures = captures.filter((c) => ["offer", "pricing", "positioning", "landing_page"].includes(c.capture_type));
-  if (offerCaptures.length >= 2) {
+  // 3. Offer-shift → market signal node + one rec when RECENT shifts cluster.
+  // Only captures observed within the recency window count as "recent" so stale
+  // historical captures never create false urgency.
+  const RECENT_MS = 21 * 24 * 60 * 60 * 1000;
+  const recentShifts = strategy.offerShifts.filter((o) => {
+    const diff = Date.now() - new Date(o.date).getTime();
+    return Number.isFinite(diff) && diff >= 0 && diff <= RECENT_MS; // not future, within window
+  });
+  if (recentShifts.length >= 2) {
     const msId = await insertNode({
       category: "market_signal",
-      label: `Market signal: ${offerCaptures.length} recent offer/positioning shifts`,
-      summary: "Multiple competitors changing offers/pricing/positioning — possible market shift.",
+      label: `Market signal: ${recentShifts.length} recent offer/positioning shifts`,
+      summary: "Multiple competitors changing offers/pricing/positioning recently — possible market shift.",
       source_agent: "valentina",
       confidence: 0.62,
-      metadata: { shifts: offerCaptures.length },
+      metadata: { shifts: recentShifts.length },
     });
     if (msId) { out.nodesCreated += 1; await link(msId); }
 
     const recId = await insertRecommendation({
       agent: "valentina",
-      title: "Review competitor offer / positioning shifts",
-      body: `${offerCaptures.length} recent competitor captures show offer, pricing, or positioning changes. Inspect these shifts and consider whether to review our offer positioning or prepare a manual creative/offer test.`,
+      title: "Review recent competitor offer / positioning shifts",
+      body: `${recentShifts.length} competitor captures in the last 21 days show offer, pricing, or positioning changes. Inspect these shifts and consider whether to review our offer positioning or prepare a manual creative/offer test.`,
       impact: "Market positioning signal",
       priority_score: 0.6,
       influence_score: 0.6,
-      related_clients: Array.from(new Set(offerCaptures.map((c) => c.client_id).filter((x): x is string => !!x))),
+      related_clients: Array.from(new Set(captures.filter((c) => ["offer", "pricing", "positioning", "landing_page"].includes(c.capture_type) && c.client_id).map((c) => c.client_id as string))),
       metadata: { source: "competitor_source_layer", recommendOnly: true, humanApprovalRequired: true, neverAutoExecute: true },
     });
     if (recId) out.recommendationsCreated += 1;

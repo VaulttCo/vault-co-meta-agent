@@ -40,6 +40,20 @@ Data layer (mock-safe; in-memory starts EMPTY → honest empty states): `db.ts`.
 Rules: no external calls, no credentials, no raw provider payloads, no client PII;
 inputs validated/sanitized; safe response shapes only.
 
+## Strategy synthesis (Phase 8.5)
+
+`src/lib/core/competitor/strategy.ts` (`synthesizeStrategy(profiles, captures)`) is a
+**pure, read-only** function that turns the manual source layer into internal
+strategy outputs, surfaced on the dashboard and returned by `GET /api/core/competitor-intel`:
+`topHooks` (ranked by frequency · recency · confidence · #competitors), `offerShifts`,
+`creativePatterns`, `competitorOpportunities`, `competitorRisks`,
+`recommendedHumanActions`, `perCompetitor` (strongest pattern / opportunity / risk /
+recommended human action), `confidence`, `coverageState`, and `sourceSummary`. It makes
+no external calls, no mutation, stores no credentials/PII, and uses only human-safe
+language (review / inspect / consider / prepare / test manually / compare / analyze) —
+never launch / send / update campaign / change budget / contact / trigger / execute.
+Valentina's tick uses the **same** synthesis so her recommendations match the dashboard.
+
 ## How Valentina uses it
 `src/lib/core/competitor/valentina-signals.ts` (`runCompetitorSignals()`), called
 from the end of Valentina's tick (guarded, fail-safe, mock-safe). It **reads** the

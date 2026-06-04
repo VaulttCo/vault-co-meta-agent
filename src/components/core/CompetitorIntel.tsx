@@ -22,8 +22,9 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { CAPTURE_TYPES } from "@/lib/core/competitor/types";
 import type {
-  CompetitorProfile, CompetitorCapture, CompetitorIntelOverview, CaptureType,
+  CompetitorProfileDTO, CompetitorCaptureDTO, CompetitorIntelOverview, CaptureType,
 } from "@/lib/core/competitor/types";
+import type { CompetitorSynthesis } from "@/lib/core/competitor/strategy";
 
 const VALENTINA = "#ff8400"; // Valentina = AI Marketing Director accent
 
@@ -45,8 +46,8 @@ export function CompetitorIntel() {
   const canEdit = !!user && user.role === "admin";
 
   const [overview, setOverview] = useState<CompetitorIntelOverview | null>(null);
-  const [profiles, setProfiles] = useState<CompetitorProfile[]>([]);
-  const [captures, setCaptures] = useState<CompetitorCapture[]>([]);
+  const [profiles, setProfiles] = useState<CompetitorProfileDTO[]>([]);
+  const [captures, setCaptures] = useState<CompetitorCaptureDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [drawer, setDrawer] = useState<DrawerState>({ kind: null });
@@ -74,7 +75,7 @@ export function CompetitorIntel() {
   }, [load]);
 
   const capturesByProfile = useMemo(() => {
-    const m = new Map<string, CompetitorCapture[]>();
+    const m = new Map<string, CompetitorCaptureDTO[]>();
     for (const c of captures) {
       const arr = m.get(c.competitor_profile_id) ?? [];
       arr.push(c);
@@ -115,8 +116,8 @@ export function CompetitorIntel() {
         <VCStat icon={Target} iconColor={VALENTINA} accent={VALENTINA} label="Competitor Profiles" value={loading ? null : ov?.totalProfiles ?? 0} />
         <VCStat icon={Layers} iconColor="#a78bfa" accent="#a78bfa" label="Intelligence Captures" value={loading ? null : ov?.totalCaptures ?? 0} />
         <VCStat icon={Sparkles} iconColor="#22c55e" accent="#22c55e" label="New Signals · 14d" value={loading ? null : ov?.newSignalsThisPeriod ?? 0} changeType="up" />
-        <VCStat icon={TrendingUp} iconColor="#0081f2" accent="#0081f2" label="Top Hook Angle" value={loading ? null : (ov?.topHookAngle ? "see board" : "—")} />
-        <VCStat icon={Radar} iconColor="#22d3ee" accent="#22d3ee" label="Coverage" value={loading ? null : (ov?.coverageState ?? "none")} />
+        <VCStat icon={TrendingUp} iconColor="#0081f2" accent="#0081f2" label="Avg Confidence" value={loading ? null : `${Math.round((ov?.strategy.confidence ?? 0) * 100)}%`} />
+        <VCStat icon={Radar} iconColor="#22d3ee" accent="#22d3ee" label="Coverage" value={loading ? null : (ov?.strategy.coverageState ?? "none")} />
       </div>
 
       {/* 2 · Competitor Source Layer Status */}
@@ -157,15 +158,18 @@ export function CompetitorIntel() {
               <VCPanelHeader icon={Clock} label="Positioning over time" title="Offer Shift Timeline" />
               <div className="px-5 py-4 space-y-2.5 max-h-[420px] overflow-y-auto">
                 {loading && <VCSkeleton rows={3} />}
-                {!loading && (ov?.offerShiftTimeline.length ?? 0) === 0 && (
-                  <VCEmptyState icon={Clock} title="No competitor offer shifts detected yet" description="Add competitor profiles or capture manual intelligence (offers, pricing, positioning, landing pages) for Valentina to analyze." />
+                {!loading && (ov?.strategy.offerShifts.length ?? 0) === 0 && (
+                  <VCEmptyState icon={Clock} title="No offer shifts detected yet" description="Add competitor profiles or capture manual intelligence (offers, pricing, positioning, landing pages) for Valentina to analyze." />
                 )}
-                {ov?.offerShiftTimeline.map((e, i) => (
+                {ov?.strategy.offerShifts.map((e, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: VALENTINA }} />
-                    <div className="min-w-0">
-                      <p className="text-[12.5px] leading-snug" style={{ color: "var(--t-text-body)" }}>{e.summary}</p>
-                      <p className="text-[10.5px] mt-0.5" style={{ color: "var(--t-dim)" }}>{e.competitorName} · {e.captureType.replace(/_/g, " ")} · {timeAgo(e.date)}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12.5px] leading-snug" style={{ color: "var(--t-text-body)" }}>{e.offer ?? e.angle ?? e.captureType.replace(/_/g, " ")}</p>
+                      <p className="text-[10.5px] mt-0.5" style={{ color: "var(--t-dim)" }}>
+                        {e.competitorName} · {e.captureType.replace(/_/g, " ")} · {Math.round(e.confidence * 100)}% · {timeAgo(e.date)}
+                      </p>
+                      <p className="text-[10.5px] mt-0.5 italic" style={{ color: "var(--t-muted)" }}>{e.note}</p>
                     </div>
                   </div>
                 ))}
@@ -176,18 +180,22 @@ export function CompetitorIntel() {
               <VCPanelHeader icon={Megaphone} label="Ranked angles" title="Hook Leaderboard" />
               <div className="px-5 py-4 space-y-2 max-h-[420px] overflow-y-auto">
                 {loading && <VCSkeleton rows={3} />}
-                {!loading && (ov?.hookLeaderboard.length ?? 0) === 0 && (
-                  <VCEmptyState icon={Megaphone} title="No hooks captured yet" description="Capture competitor hooks/angles for Valentina to rank by frequency and confidence." />
+                {!loading && (ov?.strategy.topHooks.length ?? 0) === 0 && (
+                  <VCEmptyState icon={Megaphone} title="No hook patterns captured yet" description="Add manual captures for Valentina to analyze. Hooks rank by frequency, recency, confidence, and how many competitors use them." />
                 )}
-                {ov?.hookLeaderboard.map((h, i) => (
-                  <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
-                    <span className="text-[13px] font-bold w-5 flex-shrink-0" style={{ color: VALENTINA, fontFamily: "var(--font-rajdhani), sans-serif" }}>{i + 1}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12.5px] truncate" style={{ color: "var(--t-text-body)" }}>{h.hook}</p>
-                      <p className="text-[10px]" style={{ color: "var(--t-dim)" }}>{h.competitorName}{h.market ? ` · ${h.market}` : ""} · {timeAgo(h.lastSeen)}</p>
+                {ov?.strategy.topHooks.map((h, i) => (
+                  <div key={i} className="px-3 py-2 rounded-lg" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[13px] font-bold w-5 flex-shrink-0" style={{ color: VALENTINA, fontFamily: "var(--font-rajdhani), sans-serif" }}>{i + 1}</span>
+                      <p className="text-[12.5px] truncate flex-1 min-w-0" style={{ color: "var(--t-text-body)" }}>{h.hook}</p>
+                      <VCChip label={`×${h.frequency}`} color={VALENTINA} />
+                      <VCChip label={`${Math.round(h.confidence * 100)}%`} color="#a78bfa" />
+                      {h.competitorCount > 1 && <VCChip label={`${h.competitorCount} competitors`} color="#0081f2" />}
                     </div>
-                    <VCChip label={`×${h.frequency}`} color={VALENTINA} />
-                    <VCChip label={`${Math.round(h.confidence * 100)}%`} color="#a78bfa" />
+                    <p className="text-[10px] mt-1 ml-8" style={{ color: "var(--t-dim)" }}>
+                      {h.competitors.slice(0, 2).join(", ")} · last {timeAgo(h.lastSeen)}
+                    </p>
+                    <p className="text-[10.5px] mt-0.5 ml-8 italic" style={{ color: "var(--t-muted)" }}>{h.suggestedHumanAction}</p>
                   </div>
                 ))}
               </div>
@@ -200,32 +208,63 @@ export function CompetitorIntel() {
             <div className="px-5 py-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
               {loading && <VCSkeleton rows={4} />}
               {profiles.map((p) => (
-                <CompetitorCard key={p.id} profile={p} captures={capturesByProfile.get(p.id) ?? []} canEdit={canEdit} onCapture={() => setDrawer({ kind: "capture", profileId: p.id })} />
+                <CompetitorCard
+                  key={p.id}
+                  profile={p}
+                  captures={capturesByProfile.get(p.id) ?? []}
+                  synthesis={ov?.strategy.perCompetitor.find((s) => s.competitorId === p.id)}
+                  canEdit={canEdit}
+                  onCapture={() => setDrawer({ kind: "capture", profileId: p.id })}
+                />
               ))}
             </div>
           </VCPanel>
 
-          {/* 6 · Strategic Response Panel */}
+          {/* 6 · Strategic Response Panel — generated from internal captures */}
           <VCPanel accent="blue">
-            <VCPanelHeader icon={Lightbulb} label="Human-review safe" title="Strategic Response" />
+            <VCPanelHeader icon={Lightbulb} label="Human-review safe" title="What Valentina thinks Vault Co should review next" />
             <div className="px-5 py-4">
-              <ul className="space-y-1.5 text-[12.5px]" style={{ color: "var(--t-text-body)" }}>
-                {[
-                  "Review the top hooks above against your current client campaigns.",
-                  "Inspect repeated offer/pricing shifts before they become a trend.",
-                  "Consider preparing a creative test manually for the strongest angle.",
-                  "Review competitor landing-page positioning for messaging gaps.",
-                  "Ask Valentina for deeper analysis on a specific competitor or hook.",
-                  "Prepare a campaign draft manually if an angle warrants a test.",
-                ].map((t, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#0081f2" }} />
-                    <span>{t}</span>
-                  </li>
-                ))}
-              </ul>
+              {(() => {
+                const actions = ov?.strategy.recommendedHumanActions ?? [];
+                return actions.length === 0 ? (
+                  <p className="text-[12px]" style={{ color: "var(--t-muted)" }}>
+                    Add competitor captures and Valentina will synthesize what to review next.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 text-[12.5px]" style={{ color: "var(--t-text-body)" }}>
+                    {actions.map((t, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "#0081f2" }} />
+                        <span>{t}</span>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+
+              {((ov?.strategy.competitorOpportunities.length ?? 0) > 0 || (ov?.strategy.competitorRisks.length ?? 0) > 0) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                  {(ov?.strategy.competitorOpportunities.length ?? 0) > 0 && (
+                    <div className="px-3.5 py-2.5 rounded-xl" style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                      <p className="vc-label mb-1" style={{ color: "#22c55e" }}>Opportunities</p>
+                      <ul className="space-y-1 text-[11.5px]" style={{ color: "var(--t-text-body)" }}>
+                        {ov?.strategy.competitorOpportunities.map((o, i) => <li key={i}>· {o}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {(ov?.strategy.competitorRisks.length ?? 0) > 0 && (
+                    <div className="px-3.5 py-2.5 rounded-xl" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                      <p className="vc-label mb-1" style={{ color: "#ef4444" }}>Risks</p>
+                      <ul className="space-y-1 text-[11.5px]" style={{ color: "var(--t-text-body)" }}>
+                        {ov?.strategy.competitorRisks.map((r, i) => <li key={i}>· {r}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <p className="text-[10.5px] mt-3" style={{ color: "var(--t-dim)" }}>
-                Valentina recommends only. Nothing here launches ads, changes budgets, updates campaigns, or contacts anyone — humans approve every action.
+                Valentina recommends only — generated from internal manual captures. Nothing here launches ads, changes budgets, updates campaigns, or contacts anyone — humans approve every action.
               </p>
             </div>
           </VCPanel>
@@ -257,7 +296,7 @@ function SourceTile({ label, value, state }: { label: string; value?: number; st
   );
 }
 
-function CompetitorCard({ profile: p, captures, canEdit, onCapture }: { profile: CompetitorProfile; captures: CompetitorCapture[]; canEdit: boolean; onCapture: () => void }) {
+function CompetitorCard({ profile: p, captures, synthesis, canEdit, onCapture }: { profile: CompetitorProfileDTO; captures: CompetitorCaptureDTO[]; synthesis?: CompetitorSynthesis; canEdit: boolean; onCapture: () => void }) {
   const latestHooks = captures.filter((c) => c.hook || c.angle).slice(0, 3);
   const latestOffers = captures.filter((c) => c.offer).slice(0, 2);
   return (
@@ -293,6 +332,24 @@ function CompetitorCard({ profile: p, captures, canEdit, onCapture }: { profile:
         </div>
       )}
 
+      {/* Valentina synthesis — strongest pattern + opportunity / risk / next action */}
+      {synthesis && (synthesis.strongestPattern || synthesis.opportunity || synthesis.risk) && (
+        <div className="mt-2.5 rounded-lg px-3 py-2" style={{ background: "rgba(0,129,242,0.05)", border: "1px solid rgba(0,129,242,0.16)" }}>
+          {synthesis.strongestPattern && (
+            <p className="text-[11px]" style={{ color: "var(--t-text-body)" }}><span className="font-semibold" style={{ color: "#4da6ff" }}>Strongest pattern:</span> {synthesis.strongestPattern}</p>
+          )}
+          {synthesis.opportunity && (
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--t-text-body)" }}><span className="font-semibold" style={{ color: "#22c55e" }}>Opportunity:</span> {synthesis.opportunity}</p>
+          )}
+          {synthesis.risk && (
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--t-text-body)" }}><span className="font-semibold" style={{ color: "#ef4444" }}>Risk:</span> {synthesis.risk}</p>
+          )}
+          {synthesis.recommendedHumanAction && (
+            <p className="text-[10.5px] mt-1 italic" style={{ color: "var(--t-muted)" }}>→ {synthesis.recommendedHumanAction}</p>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mt-2.5">
         <span className="text-[10.5px]" style={{ color: "var(--t-dim)" }}>{captures.length} capture{captures.length === 1 ? "" : "s"}</span>
         {canEdit && <button onClick={onCapture} className="text-[11px] font-semibold inline-flex items-center gap-1" style={{ color: VALENTINA }}><Plus size={11} /> Add capture</button>}
@@ -324,7 +381,7 @@ const inputStyle: React.CSSProperties = { background: "var(--t-input-bg)", borde
 
 function CaptureDrawer({ kind, profiles, presetProfileId, onClose, onSaved }: {
   kind: "profile" | "capture";
-  profiles: CompetitorProfile[];
+  profiles: CompetitorProfileDTO[];
   presetProfileId?: string;
   onClose: () => void;
   onSaved: () => void;

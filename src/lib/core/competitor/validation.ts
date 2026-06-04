@@ -51,13 +51,33 @@ function cleanClientId(v: unknown): string | null {
   return t && /^[a-zA-Z0-9_-]{1,120}$/.test(t) ? t : null;
 }
 
-/** Accept only http(s) URLs, capped in length. Returns null for anything else. */
+/** Observed date — must be a real date and NOT in the future (1d clock-skew
+ *  allowance), so future-dated captures can't fake "recent" signals. */
+function cleanObservedAt(v: unknown): string | null {
+  const t = cleanText(v, 40);
+  if (!t) return null;
+  const ms = new Date(t).getTime();
+  if (!Number.isFinite(ms)) return null;
+  if (ms > Date.now()) return null; // reject any future date
+  return t;
+}
+
+// Query-param keys that look like secrets/tokens — stripped from stored URLs.
+const SECRET_PARAM = /(token|secret|password|passwd|api[_-]?key|access[_-]?key|auth|bearer|sig|signature|session|credential)/i;
+
+/** Accept only http(s) URLs, capped in length, with NO embedded credentials or
+ *  secret-looking query params / fragments. Returns null for anything else. */
 export function safeUrl(v: unknown): string | null {
   const s = cleanText(v, MAX_URL);
   if (!s) return null;
   try {
     const u = new URL(s);
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (u.username || u.password) return null; // never store credentials in a URL
+    u.hash = ""; // drop fragments (can carry tokens)
+    for (const k of Array.from(u.searchParams.keys())) {
+      if (SECRET_PARAM.test(k)) u.searchParams.delete(k); // strip secret-looking params
+    }
     return u.toString().slice(0, MAX_URL);
   } catch {
     return null;
@@ -147,7 +167,7 @@ export function validateCaptureInput(body: unknown): ValidationResult<Competitor
       creative_pattern: cleanFreeText(b.creative_pattern, MAX_SHORT),
       source_url: safeUrl(b.source_url),
       source_platform: cleanFreeText(b.source_platform, 80),
-      observed_at: cleanText(b.observed_at, 40),
+      observed_at: cleanObservedAt(b.observed_at),
       confidence: clampConfidence(b.confidence),
       notes: cleanFreeText(b.notes),
     },

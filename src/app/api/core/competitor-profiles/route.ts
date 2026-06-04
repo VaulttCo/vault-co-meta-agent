@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
-import { getProfiles, createProfile } from "@/lib/core/competitor/db";
+import { getProfiles, createProfile, toProfileDTO } from "@/lib/core/competitor/db";
 import { validateProfileInput } from "@/lib/core/competitor/validation";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
-    return NextResponse.json({ profiles: await getProfiles() });
+    return NextResponse.json({ profiles: (await getProfiles()).map(toProfileDTO) });
   } catch (e) {
     console.error("[GET /api/core/competitor-profiles]", (e as Error).message);
     return NextResponse.json({ profiles: [] });
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error ?? "Invalid input" }, { status: 400 });
     }
     const profile = await createProfile(result.value, auth.userId ?? null);
-    return NextResponse.json({ profile }, { status: 201 });
+    return NextResponse.json({ profile: toProfileDTO(profile) }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/core/competitor-profiles]", (e as Error).message);
     return NextResponse.json({ error: "Failed to create profile" }, { status: 500 });

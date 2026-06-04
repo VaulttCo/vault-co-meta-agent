@@ -86,12 +86,77 @@ function ScorePill({ label, value, color }: { label: string; value: number; colo
   );
 }
 
+// ── Vera/Vesper hygiene metadata (read-only; written by the quality gate + the
+// end-of-tick hygiene pass). The page only DISPLAYS it — it never mutates it.
+interface HygieneMeta { classification?: string; visibility?: string; qualityScore?: number; reviewedBy?: string[] }
+interface QualityGateMeta { qualityScore?: number; duplicateScore?: number; finalDecision?: string; reviewedBy?: string[] }
+
+function hygieneOf(r: VaultRecommendationRow): HygieneMeta | undefined {
+  return (r.metadata as { hygiene?: HygieneMeta } | undefined)?.hygiene;
+}
+function qualityGateOf(r: VaultRecommendationRow): QualityGateMeta | undefined {
+  return (r.metadata as { quality_gate?: QualityGateMeta } | undefined)?.quality_gate;
+}
+// Hidden from the cleaned Mission-Visible queue (soft + reversible). The row is
+// never deleted — the Full Audit Queue still shows it for transparency.
+function isHidden(r: VaultRecommendationRow): boolean {
+  return hygieneOf(r)?.visibility === "hidden";
+}
+
+const HYGIENE_LABEL: Record<string, { label: string; color: string }> = {
+  // End-of-tick hygiene classifications
+  keep_visible: { label: "Kept", color: "#22c55e" },
+  merge_into_existing: { label: "Merged", color: "#a78bfa" },
+  suppress_from_mission_control: { label: "Suppressed", color: "#6b7a99" },
+  downgrade_priority: { label: "Downgraded", color: "#f59e0b" },
+  needs_human_review: { label: "Needs review", color: "#ff8400" },
+  stale_archive_candidate: { label: "Stale", color: "#6b7a99" },
+  // Insert-time quality-gate decisions (quality_gate.finalDecision)
+  keep: { label: "Kept", color: "#22c55e" },
+  merge: { label: "Merged", color: "#a78bfa" },
+  suppress: { label: "Suppressed", color: "#6b7a99" },
+  downgrade: { label: "Downgraded", color: "#f59e0b" },
+};
+
+function reviewersOf(r: VaultRecommendationRow): string {
+  const hy = hygieneOf(r);
+  const qg = qualityGateOf(r);
+  const list = hy?.reviewedBy ?? qg?.reviewedBy ?? ["vera", "vesper"];
+  return list.join(" / ");
+}
+
+// Vera/Vesper chips for a card / drawer. Renders nothing if no hygiene metadata.
+// Read-only — surfaces classification, quality + duplicate scores, and reviewers.
+function HygieneChips({ r }: { r: VaultRecommendationRow }) {
+  const hy = hygieneOf(r);
+  const qg = qualityGateOf(r);
+  if (!hy && !qg) return null;
+  // hygiene classification first; fall back to the insert-time quality-gate decision.
+  const clsKey = hy?.classification ?? qg?.finalDecision ?? "";
+  const cls = HYGIENE_LABEL[clsKey];
+  const quality = qg?.qualityScore ?? hy?.qualityScore;
+  return (
+    <>
+      {cls && <VCChip label={cls.label} color={cls.color} />}
+      {typeof quality === "number" && <ScorePill label="quality" value={quality} color="#22d3ee" />}
+      {typeof qg?.duplicateScore === "number" && <ScorePill label="dup" value={qg.duplicateScore} color="#a78bfa" />}
+      {hy?.visibility && (
+        <VCChip label={hy.visibility === "hidden" ? "hidden" : "visible"} color={hy.visibility === "hidden" ? "#6b7a99" : "#22c55e"} />
+      )}
+      <VCChip label={reviewersOf(r)} color="#6b7a99" />
+    </>
+  );
+}
+
 export function VaultCoreRecommendations() {
   const { user } = useAuth();
   const canReview = !!user && (user.role === "admin" || user.role === "media_buyer");
 
   const [recs, setRecs] = useState<VaultRecommendationRow[]>([]);
   const [counts, setCounts] = useState<RecommendationCounts | null>(null);
+  // Default to the cleaned Vera/Vesper "Mission Visible" queue; the Full Audit
+  // Queue shows everything (including hidden/merged/suppressed) for transparency.
+  const [view, setView] = useState<"clean" | "audit">("clean");
   const [filter, setFilter] = useState<RecommendationStatus | "all">("pending_review");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -189,13 +254,26 @@ export function VaultCoreRecommendations() {
         (r) =>
           (filter === "all" || r.status === filter) &&
           (agentFilter === "all" || r.agent === agentFilter) &&
-          (priorityFilter === "all" || r.vanessa_priority === priorityFilter)
+          (priorityFilter === "all" || r.vanessa_priority === priorityFilter) &&
+          // Clean view hides Vera/Vesper-suppressed/merged/stale items; audit shows all.
+          (view === "audit" || !isHidden(r))
       ),
-    [recs, filter, agentFilter, priorityFilter]
+    [recs, filter, agentFilter, priorityFilter, view]
   );
 
-  const countFor = (key: RecommendationStatus | "all") =>
-    key === "all" ? counts?.total ?? recs.length : counts?.[key] ?? 0;
+  // Mission-visible pending = the cleaned, high-signal count (prefer the server's
+  // hygiene-aware count; fall back to a client computation over loaded rows).
+  const pendingVisible =
+    counts?.mission_visible ?? recs.filter((r) => r.status === "pending_review" && !isHidden(r)).length;
+  const pendingRaw = counts?.pending_review ?? recs.filter((r) => r.status === "pending_review").length;
+  const hiddenPending = recs.filter((r) => r.status === "pending_review" && isHidden(r)).length;
+
+  const countFor = (key: RecommendationStatus | "all") => {
+    if (key === "all") return counts?.total ?? recs.length;
+    // The "Pending" pill follows the active view (cleaned vs raw).
+    if (key === "pending_review") return view === "clean" ? pendingVisible : pendingRaw;
+    return counts?.[key] ?? 0;
+  };
 
   return (
     <VCPageWrapper className="!max-w-none">
@@ -203,7 +281,13 @@ export function VaultCoreRecommendations() {
         sectionLabel="Vault Core · Command Hub"
         title="Vault Core Recommendations"
         description="Agent-generated intelligence awaiting human review. Read · analyze · recommend — nothing executes without you."
-        badge={<VCStatusBadge label={`${countFor("pending_review")} pending`} variant="blue" dot />}
+        badge={
+          <VCStatusBadge
+            label={view === "clean" ? `${pendingVisible} mission-visible` : `${pendingRaw} pending · audit`}
+            variant="blue"
+            dot
+          />
+        }
       />
 
       {error ? (
@@ -212,6 +296,37 @@ export function VaultCoreRecommendations() {
         </VCPanel>
       ) : (
         <>
+          {/* Mission Visible (cleaned) vs Full Audit Queue */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="vc-label mr-1 flex items-center gap-1.5"><ShieldCheck size={12} /> Queue</span>
+            {([
+              { key: "clean", label: "Mission Visible", hint: `${pendingVisible} clean` },
+              { key: "audit", label: "Full Audit Queue", hint: hiddenPending > 0 ? `+${hiddenPending} hidden` : "all items" },
+            ] as const).map((v) => {
+              const active = view === v.key;
+              return (
+                <button
+                  key={v.key}
+                  onClick={() => setView(v.key)}
+                  className="px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all"
+                  style={
+                    active
+                      ? { background: "rgba(34,211,238,0.14)", border: "1px solid rgba(34,211,238,0.34)", color: "#e2faff" }
+                      : { background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }
+                  }
+                >
+                  {v.label}
+                  <span className="ml-1.5 opacity-70">{v.hint}</span>
+                </button>
+              );
+            })}
+            <span className="text-[10.5px]" style={{ color: "var(--t-dim)" }}>
+              {view === "clean"
+                ? "Cleaned by Vera/Vesper — suppressed / merged / stale items hidden (still in audit)."
+                : "All recommendations, including Vera/Vesper-hidden. Read-only hygiene — nothing auto-actioned."}
+            </span>
+          </div>
+
           {/* Filter pills */}
           <div className="flex flex-wrap gap-2">
             {FILTERS.map((f) => {
@@ -299,6 +414,8 @@ export function VaultCoreRecommendations() {
                     style={{
                       background: selectedId === r.id ? "rgba(0,129,242,0.06)" : "var(--t-surface-2)",
                       border: `1px solid ${selectedId === r.id ? "rgba(0,129,242,0.3)" : "var(--t-border-subtle)"}`,
+                      // Vera/Vesper-hidden items (only ever shown in the audit view) are dimmed.
+                      opacity: isHidden(r) ? 0.6 : 1,
                     }}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -323,6 +440,7 @@ export function VaultCoreRecommendations() {
                       <ScorePill label="prio" value={r.priority_score} color="#ff8400" />
                       {r.impact && <VCChip label={r.impact} color="#22c55e" />}
                       {r.revenue_impact && <VCChip label={r.revenue_impact} color="#c9a84c" />}
+                      <HygieneChips r={r} />
                       <span className="text-[10.5px] ml-auto" style={{ color: "var(--t-dim)" }}>{timeAgo(r.created_at)}</span>
                     </div>
                   </button>
@@ -416,7 +534,37 @@ function RecommendationDetail({
           <ScorePill label="confidence" value={confidenceOf(r)} color="#a78bfa" />
           <ScorePill label="influence" value={r.influence_score} color="#0081f2" />
           <ScorePill label="priority" value={r.priority_score} color="#ff8400" />
+          <HygieneChips r={r} />
         </div>
+
+        {/* Vera/Vesper recommendation hygiene (read-only — humans approve) */}
+        {(() => {
+          const hy = hygieneOf(r);
+          const qg = qualityGateOf(r);
+          if (!hy && !qg) return null;
+          const clsKey = hy?.classification ?? qg?.finalDecision ?? "";
+          const clsLabel = HYGIENE_LABEL[clsKey]?.label ?? clsKey ?? "scored";
+          const quality = qg?.qualityScore ?? hy?.qualityScore;
+          return (
+            <div className="px-3.5 py-2.5 rounded-xl" style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.2)" }}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <p className="vc-label" style={{ color: "#22d3ee" }}>Recommendation hygiene · {reviewersOf(r)}</p>
+                {clsLabel && <VCChip label={clsLabel} color={HYGIENE_LABEL[clsKey]?.color ?? "#6b7a99"} />}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {typeof quality === "number" && <ScorePill label="quality" value={quality} color="#22d3ee" />}
+                {typeof qg?.duplicateScore === "number" && <ScorePill label="duplicate" value={qg.duplicateScore} color="#a78bfa" />}
+                {hy?.visibility && <VCChip label={`visibility: ${hy.visibility}`} color={hy.visibility === "hidden" ? "#6b7a99" : "#22c55e"} />}
+              </div>
+              <p className="text-[11px]" style={{ color: "var(--t-text-body)" }}>
+                Backend QA classified this as “{clsLabel}”. Soft, reversible visibility only — never deleted.
+              </p>
+              <p className="text-[10.5px] mt-1.5" style={{ color: "var(--t-dim)" }}>
+                Human approval required. Vera/Vesper do not approve, reject, archive, or implement anything.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Vanessa executive priority + reason */}
         {r.vanessa_priority && (

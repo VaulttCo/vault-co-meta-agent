@@ -10,6 +10,7 @@ import { insertAgentRun } from "../memory/db";
 import { runCollaborationCycle, runSystemCreationCycle } from "../collab/orchestrator";
 import { runIdentityAndLearningCycle } from "../identity/ingest";
 import { runRecommendationHygiene, type HygieneSummary } from "../recommendations/hygiene";
+import { generateAllAgentActions, type ActionGenerationSummary } from "../actions/agent-action-generator";
 import { setLastRun } from "./kv";
 import type { AgentTier } from "../types";
 
@@ -39,6 +40,7 @@ export interface TierRunSummary {
     recommendations: number;
   };
   hygiene?: HygieneSummary;
+  actions?: ActionGenerationSummary;
 }
 
 /** Active + runnable agents scheduled for this tier. */
@@ -155,6 +157,20 @@ export async function runTier(
     summary.hygiene = await runRecommendationHygiene();
   } catch (e) {
     console.error(`[VaultCore:dispatcher] recommendation hygiene failed (non-fatal):`, (e as Error).message);
+  }
+
+  // ── Phase 9.1 — Agent Action Generation (ALWAYS-ON, runs LAST, after hygiene
+  // has cleaned the recommendation queue). Each ran agent may auto-create up to
+  // 1–2 approval-ready INTERNAL Vault Actions from its pending recommendations.
+  // FAIL-OPEN: action generation must NEVER fail the tick — any error is logged
+  // and the tick still succeeds. It creates internal actions only and never
+  // approves, executes, or touches any external system.
+  if (ids.length > 0) {
+    try {
+      summary.actions = await generateAllAgentActions(ids, { tier, trigger });
+    } catch (e) {
+      console.error(`[VaultCore:dispatcher] action generation failed (non-fatal):`, (e as Error).message);
+    }
   }
 
   await setLastRun(tier);

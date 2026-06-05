@@ -83,9 +83,46 @@ send/publish/launch/mutate — backend QA only.
 
 All agent-prepared actions are `pending_review`, quality-gated, and human-approved.
 Agents use `createAction()` (limited per tick, quality over volume) — they do not
-execute automatically and never bypass approval. (Live agent wiring is the
-documented next integration; the engine, manual creation, approval, and internal
-execution are fully functional now.)
+execute automatically and never bypass approval.
+
+## Phase 9.1 — Agent Action Generation (live)
+Agents now AUTOMATICALLY create a small number of approval-ready **internal** Vault
+Actions from their existing pending recommendations, so `/actions` fills itself with
+useful, low-noise work. This runs at the **end of every tick, after Vera/Vesper
+hygiene**, and is **fail-open** — action generation can never fail the tick (errors
+are logged as internal activity). Tick cadence is unchanged; no new active agents.
+
+- **Files:** `actions/generation-policy.ts` (caps, quality floor, allowed types/
+  targets per agent, internal-only gate, `shouldCreateAction`), `actions/dedupe.ts`
+  (`findDuplicateAction` — source-signal + title-similarity), `actions/agent-action-
+  generator.ts` (`generateActionsForAgent` / `generateAllAgentActions`), wired in
+  `runtime/dispatcher.ts`. Policy version: `9.1.0`.
+- **Caps & quality:** ≤ 2 actions per agent per tick (`MAX_ACTIONS_PER_AGENT`),
+  Vera quality floor (`MIN_QUALITY_SCORE`), required reason + evidence + safe_preview,
+  `safety_status !== "unsafe"`. No useful signal → **zero** actions (no placeholder spam).
+- **Dedupe:** a candidate sharing the same source signal (`source_type`/`source_id`),
+  or a similar title in the same action lane, against any LIVE (pending/approved/
+  needs_revision) action within `DEDUPE_WINDOW_HOURS` is **skipped** — so the same
+  recommendation never re-spawns an action every tick.
+- **Internal-only:** auto-generation produces **internal/content/report** target
+  actions only. `shouldCreateAction` rejects any external target — external actions
+  are never auto-generated and, if created via another path, always land
+  `adapter_disabled`. **External execution remains disabled.**
+- **Vera/Vesper metadata** on every generated action (`metadata.quality_gate` +
+  `metadata.generation`): `quality_score`, `duplicate_score`, `safety_status`,
+  `needs_human_review`, `never_auto_execute: true`, `reviewed_by: ["vera","vesper"]`,
+  `generation_source`, `generation_reason`, `evidence_count`, `policy_version`.
+  Vera/Vesper supply metadata only — they never approve/reject/execute.
+- **Per-agent generation:** Vanessa → executive-priority internal review tasks;
+  Vivian → internal client-success plans (never contacts clients); Valentina →
+  competitor/strategy prep (no scraping/live fetch); Veronica → campaign/lead/report
+  prep review tasks; Valerie → finance/closeout review tasks (no Stripe/invoice
+  send); Vega → tracking/budget/analytics review prep. All internal, all
+  approval-gated.
+- **Tick summary** includes `actions: { reviewedSignals, created, skippedDuplicates,
+  skippedLowQuality, byAgent }`.
+- **Dev seed:** `scripts/seed-vault-actions.mjs --yes` (dev/manual only; never runs
+  in production; inserts 2–3 safe internal `pending_review` actions).
 
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that

@@ -99,6 +99,21 @@ Vault Core safety invariants (flag ANY violation as P0):
   bypasses approval; executes without `canExecute`; returns raw `payload`/credentials/PII (routes return
   DTOs with `safe_preview` only); or weakens auth/RLS. `payload` JSONB must be sanitized before insert.
   Vera/Vesper still never approve/reject/execute. No new active agents; active set remains the 6.
+- Agent Action Generation (Phase 9.1, `src/lib/core/actions/generation-policy.ts`, `dedupe.ts`,
+  `agent-action-generator.ts`, wired into `runtime/dispatcher.ts` after hygiene): agents AUTO-CREATE a
+  SMALL number of approval-ready INTERNAL Vault Actions from their existing pending recommendations.
+  **Agent-created internal actions are EXPECTED and allowed** — do NOT flag normal `createAction()`
+  usage by the generator as a problem. The generator is INTERNAL-ONLY (`shouldCreateAction` rejects any
+  non-internal target), capped (≤2 per agent per tick via `MAX_ACTIONS_PER_AGENT`/per-agent `maxPerTick`),
+  deduped (`findDuplicateAction` — same source signal or similar title in the same lane is skipped), and
+  quality-gated (Vera score floor + evidence + reason + safe_preview). Tick integration is FAIL-OPEN —
+  action generation must never fail the tick; errors are logged as internal activity. It does NOT change
+  tick cadence and adds NO new active agents. Vera/Vesper supply quality/generation metadata only and
+  still never approve/reject/execute. **Flag P0** if the generator (or any new code) performs a real
+  external mutation (SMS/email/GHL/Meta/Stripe/workflow/ad/budget/invoice), enables an external adapter,
+  auto-approves or auto-executes an action, bypasses approval, weakens auth/RLS, calls Codex from the
+  production runtime, scrapes/live-fetches competitors, or adds a 7th active agent. **Flag P1/P2** if
+  generation is uncapped, not deduped (per-tick spam), or can throw and break the tick.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

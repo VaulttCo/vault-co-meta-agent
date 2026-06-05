@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -376,7 +376,14 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
   onReview: (a: string) => void; onExecute: (confirm: boolean) => void; onClose: () => void;
 }) {
-  const qg = (a.metadata as { quality_gate?: { qualityScore?: number; safety_status?: string } } | undefined)?.quality_gate;
+  const meta = (a.metadata ?? {}) as {
+    quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
+    generation?: { generation_source?: string; generation_reason?: string; evidence_count?: number; policy_version?: string };
+  };
+  const qg = meta.quality_gate;
+  const gen = meta.generation;
+  const dupScore = typeof qg?.duplicate_score === "number" ? qg.duplicate_score : null;
+  const evidenceCount = typeof gen?.evidence_count === "number" ? gen.evidence_count : a.evidence.length;
   const executable = a.approval_status === "approved" && a.adapter_enabled && a.execution_status !== "executed";
   // L4 admin-critical actions require a REAL explicit confirmation: the operator must
   // type the exact phrase before we ever send confirm:true. A normal Execute click can
@@ -410,6 +417,20 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
             <p className="vc-label mb-1" style={{ color: "#4da6ff" }}>What this does (safe preview)</p>
             <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{a.safe_preview}</p>
           </div>
+
+          {/* Why this was generated (Phase 9.1 provenance) */}
+          {gen?.generation_reason && (
+            <div className="px-3.5 py-3 rounded-xl" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+              <p className="vc-label mb-1 flex items-center gap-1.5"><Sparkles size={12} style={{ color: "#22d3ee" }} /> Why this was generated</p>
+              <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--t-text-body)" }}>{gen.generation_reason}</p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <VCChip label={`source: ${gen.generation_source ?? "agent"}`} color="#22d3ee" />
+                <VCChip label={`evidence: ${evidenceCount}`} color="#a78bfa" />
+                {dupScore !== null && <VCChip label={`dup score: ${Math.round(dupScore * 100)}%`} color={dupScore >= 0.7 ? "#f59e0b" : "#6b7a99"} />}
+                {typeof qg?.qualityScore === "number" && <VCChip label={`quality: ${Math.round(qg.qualityScore * 100)}`} color="#22c55e" />}
+              </div>
+            </div>
+          )}
 
           {a.reason && (<div><p className="vc-label mb-1">Why</p><p className="text-[12.5px]" style={{ color: "var(--t-text-body)" }}>{a.reason}</p></div>)}
 

@@ -37,6 +37,7 @@ the Vault Core phase schemas below.
 | — | *(none)* | 6.5 | n/a | **Design pass — no SQL.** | n/a |
 | — | *(none)* | 6.6 | n/a | **Deployment prep — no SQL.** | n/a |
 | 6 | `docs/vault-actions-schema.sql` | 9.0 | Required for live | `vault_actions` (approved internal execution queue) + enum CHECK constraints (+ indexes, RLS on, no policies) | Actions queue serves mock; prepared/approved/executed actions don't persist |
+| 7 | `docs/vault-actions-phase9-1-schema.sql` | 9.1 | **Required for live** | partial UNIQUE index on `vault_actions (agent_id, source_type, source_id)` — concurrency backstop for agent action-generation dedupe (prevents overlapping ticks inserting duplicate actions for the same source signal) | Snapshot dedupe still works single-threaded, but overlapping cron/manual ticks could insert duplicates |
 
 ## Notes
 - **Phase 4 expects pre-existing revenue tables.** `client_monthly_revenue_snapshots` and

@@ -9,7 +9,7 @@
 import { insertActivity } from "../memory/db";
 import { scoreRecommendation } from "../recommendations/scoring";
 import { ACTIVE_AGENT_IDS } from "../agents/registry";
-import { validateActionInput } from "./validation";
+import { validateActionInput, scrubText } from "./validation";
 import { insertAction, getActions } from "./db";
 import { isAdapterEnabled } from "./policies";
 import type { VaultAction, VaultActionInput, AuditEntry } from "./types";
@@ -20,6 +20,24 @@ export interface CreateActionResult {
   reason?: string;
 }
 
+/** Vera/Vesper + generation provenance metadata attached to an auto-generated
+ *  action (Phase 9.1). All values are advisory metadata — they NEVER approve,
+ *  execute, or relax any gate. */
+export interface GenerationMeta {
+  /** e.g. "recommendation" | "memory" | "competitor_intel". */
+  generationSource: string;
+  /** Short human-readable reason this action was generated. */
+  generationReason: string;
+  /** 0..1 duplicate similarity from the dedupe pass. */
+  duplicateScore?: number;
+  /** number of evidence items cited. */
+  evidenceCount?: number;
+  /** generation policy version. */
+  policyVersion?: string;
+  /** whether this action should headline Mission Control. */
+  missionVisible?: boolean;
+}
+
 /** Who/what is creating this action. AGENT-originated actions must name an active
  *  workforce agent (audit actor = the agent). MANUAL actions are created by a human
  *  operator (audit actor + created_by = that human's user id) and are NOT attributed
@@ -28,6 +46,8 @@ export interface CreateActionOptions {
   origin?: "agent" | "manual";
   /** Required for manual origin: the human user id that created the action. */
   actor?: string;
+  /** Provenance + quality metadata for Phase 9.1 auto-generated actions. */
+  generation?: GenerationMeta;
 }
 
 export async function createAction(input: VaultActionInput, opts: CreateActionOptions = {}): Promise<CreateActionResult> {
@@ -70,6 +90,8 @@ export async function createAction(input: VaultActionInput, opts: CreateActionOp
   }
 
   const now = new Date().toISOString();
+  const qScore = Number(q.qualityScore.toFixed(3));
+  const gen = opts.generation;
   // Audit actor is the TRUE author: the human for manual actions, the agent otherwise.
   const createdBy = isManual ? opts.actor! : null;
   const audit: AuditEntry[] = [{
@@ -115,10 +137,31 @@ export async function createAction(input: VaultActionInput, opts: CreateActionOp
     metadata: {
       ...val.metadata,
       quality_gate: {
-        qualityScore: Number(q.qualityScore.toFixed(3)),
+        // Phase 9.0 fields (kept for the execution policy + existing readers).
+        qualityScore: qScore,
         safety_status: q.safetyStatus,
         reviewed_by: ["vera", "vesper"],
+        // Phase 9.1 additions — advisory only, never relax any gate.
+        quality_score: qScore,
+        duplicate_score: gen ? Number((gen.duplicateScore ?? 0).toFixed(3)) : 0,
+        needs_human_review: true,
+        never_auto_execute: true,
       },
+      // Generation provenance (only present for auto-generated actions). These
+      // strings can derive from untrusted signal text (e.g. a recommendation title),
+      // so they are scrubbed (emails/phones/tokens redacted) + length-capped before
+      // they are persisted or returned via the DTO — same hygiene as visible fields.
+      ...(gen
+        ? {
+            generation: {
+              generation_source: scrubText(String(gen.generationSource)).slice(0, 80),
+              generation_reason: scrubText(String(gen.generationReason)).slice(0, 400),
+              evidence_count: gen.evidenceCount ?? val.evidence.length,
+              policy_version: scrubText(String(gen.policyVersion ?? "9.1.0")).slice(0, 40),
+              mission_visible: gen.missionVisible ?? true,
+            },
+          }
+        : {}),
       never_auto_execute: true,
       requires_human_review: true,
     },

@@ -7,6 +7,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isAdapterEnabled } from "./policies";
+import { scrubText } from "./validation";
 import type { VaultAction, VaultActionDTO, ActionCounts, AuditEntry } from "./types";
 
 const TABLE = "vault_actions";
@@ -47,11 +48,31 @@ export async function getAction(id: string): Promise<VaultAction | null> {
   }
 }
 
+// Thrown when an insert collides with the (agent_id, source_type, source_id) unique
+// index — i.e. another (possibly concurrent) run already generated this exact action.
+// createAction() catches this and reports a duplicate skip rather than a hard error.
+export const DUPLICATE_ACTION_MESSAGE = "duplicate of an existing generated action (same source signal)";
+
+function isGeneratedSignal(row: VaultAction): boolean {
+  return !!row.source_type && !!row.source_id;
+}
+
 // ── Insert (called by createAction after validation) ──
 export async function insertAction(row: VaultAction): Promise<VaultAction> {
   const client = db();
-  if (!client) { mock.unshift(row); return row; }
+  if (!client) {
+    // Mock parity with the DB unique index: one action per (agent, source signal).
+    if (isGeneratedSignal(row) && mock.some((a) => a.agent_id === row.agent_id && a.source_type === row.source_type && a.source_id === row.source_id)) {
+      throw new Error(DUPLICATE_ACTION_MESSAGE);
+    }
+    mock.unshift(row);
+    return row;
+  }
   const { data, error } = await client.from(TABLE).insert(row).select("*").single();
+  // 23505 = unique_violation on the generated-signal partial index → treat as duplicate.
+  if (error && (error.code === "23505" || /duplicate key value/i.test(error.message ?? ""))) {
+    throw new Error(DUPLICATE_ACTION_MESSAGE);
+  }
   if (error || !data) throw new Error(error?.message ?? "insert failed");
   return data as VaultAction;
 }
@@ -222,9 +243,27 @@ function stripMetadata(m: Record<string, unknown>): Record<string, unknown> {
     const g = qg as Record<string, unknown>;
     const safe: Record<string, unknown> = {};
     if (typeof g.qualityScore === "number") safe.qualityScore = g.qualityScore;
+    if (typeof g.quality_score === "number") safe.quality_score = g.quality_score;
+    if (typeof g.duplicate_score === "number") safe.duplicate_score = g.duplicate_score;
     if (typeof g.safety_status === "string") safe.safety_status = g.safety_status;
+    if (typeof g.needs_human_review === "boolean") safe.needs_human_review = g.needs_human_review;
+    if (typeof g.never_auto_execute === "boolean") safe.never_auto_execute = g.never_auto_execute;
     if (Array.isArray(g.reviewed_by)) safe.reviewed_by = g.reviewed_by.filter((x) => typeof x === "string");
     out.quality_gate = safe;
+  }
+  // Phase 9.1 generation provenance (whitelisted scalar fields only).
+  const gen = m.generation;
+  if (gen && typeof gen === "object" && !Array.isArray(gen)) {
+    const g = gen as Record<string, unknown>;
+    const safe: Record<string, unknown> = {};
+    // Defense in depth: scrub + cap the free-text provenance fields again at the DTO
+    // boundary, so even a backfilled/tampered row can't leak PII/secrets to the UI.
+    if (typeof g.generation_source === "string") safe.generation_source = scrubText(g.generation_source).slice(0, 80);
+    if (typeof g.generation_reason === "string") safe.generation_reason = scrubText(g.generation_reason).slice(0, 400);
+    if (typeof g.evidence_count === "number") safe.evidence_count = g.evidence_count;
+    if (typeof g.policy_version === "string") safe.policy_version = scrubText(g.policy_version).slice(0, 40);
+    if (typeof g.mission_visible === "boolean") safe.mission_visible = g.mission_visible;
+    out.generation = safe;
   }
   if (typeof m.never_auto_execute === "boolean") out.never_auto_execute = m.never_auto_execute;
   if (typeof m.requires_human_review === "boolean") out.requires_human_review = m.requires_human_review;

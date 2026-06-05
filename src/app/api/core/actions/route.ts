@@ -38,8 +38,10 @@ export async function POST(req: NextRequest) {
     // Manual creation: attribute authorship to the human, never spoof an agent. The
     // action is filed under the dedicated `manual` lane regardless of any submitted
     // agent_id, so we inject it here — a manual create needs no throwaway agent id.
+    // `source_id` is cleared so manual rows never fall under the generated-signal
+    // unique index — humans may create multiple manual actions freely.
     const result = await createAction(
-      { ...body, agent_id: "manual", source_type: "manual" },
+      { ...body, agent_id: "manual", source_type: "manual", source_id: null },
       { origin: "manual", actor: auth.userId },
     );
     if (!result.created || !result.action) {

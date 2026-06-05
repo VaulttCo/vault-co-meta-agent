@@ -44,6 +44,16 @@ See [`vera-vesper-recommendation-quality-gate.md`](./vera-vesper-recommendation-
 | Hermes | **QA / dev-ops coordinator only** (can audit the quality gate). Not a business operator, not a runtime executive. |
 | Codex | **Manual, read-only second-opinion audit tool.** Never called from production runtime. |
 
+## Phase 9.1 — Agent Action Generation (live)
+
+The 6 active agents now auto-create a small number of approval-ready **internal**
+Vault Actions from their existing pending recommendations, at the end of each tick
+(after Vera/Vesper hygiene), **fail-open**. Capped (≤2/agent/tick), deduped, and
+quality-gated. External execution stays disabled; all actions are approval-gated; no
+new active agents; tick cadence unchanged. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.1) for
+the policy, dedupe, Vera/Vesper metadata, and per-agent responsibilities.
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

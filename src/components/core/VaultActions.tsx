@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/VaultUI";
 import { useAuth } from "@/components/AuthProvider";
 import { can } from "@/lib/auth/permissions";
-import type { VaultActionDTO, ActionCounts, ApprovalStatus, RiskLevel } from "@/lib/core/actions/types";
+import type {
+  VaultActionDTO, ActionCounts, ApprovalStatus, RiskLevel,
+  ActionType, TargetSystem, ExecutionStatus, AuditEntry,
+} from "@/lib/core/actions/types";
 
 // Exact phrase an operator must type to confirm an L4 admin-critical execution.
 const L4_CONFIRM_PHRASE = "EXECUTE L4";
@@ -48,14 +51,118 @@ const FILTERS: Array<{ key: ApprovalStatus | "all"; label: string }> = [
   { key: "archived", label: "Archived" },
 ];
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return "—";
-  const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso || typeof iso !== "string") return "Unknown";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "Unknown";
+  const m = Math.floor((Date.now() - t) / 60000);
+  if (m < 0) return "just now";
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+// ── Defensive normalization ──────────────────────────────────────────────────
+// The API returns safe DTOs, but the page must NEVER crash regardless of the wire
+// shape: an empty table, a mock/fallback payload, a bare array, or a row with null /
+// out-of-vocabulary fields. We coerce every action into a known-safe DTO here so the
+// render can rely on valid enums, real arrays, and string fields throughout.
+const APPROVAL_KEYS = new Set(Object.keys(APPROVAL_META));
+const RISK_KEYS = new Set(Object.keys(RISK_META));
+const FALLBACK_APPROVAL: ApprovalStatus = "pending_review";
+const FALLBACK_RISK: RiskLevel = "level_1_internal_action";
+
+function asStr(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+function asNullableStr(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+function asStrArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
+function asObject(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+function asAuditLog(v: unknown): AuditEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+    .map((e) => ({
+      at: asStr(e.at),
+      actor: asStr(e.actor, "system"),
+      event: asStr(e.event, "event"),
+      detail: typeof e.detail === "string" ? e.detail : undefined,
+    }));
+}
+
+function normalizeAction(raw: unknown, idx: number): VaultActionDTO {
+  const r = asObject(raw);
+  const approval_status = (APPROVAL_KEYS.has(asStr(r.approval_status)) ? r.approval_status : FALLBACK_APPROVAL) as ApprovalStatus;
+  const risk_level = (RISK_KEYS.has(asStr(r.risk_level)) ? r.risk_level : FALLBACK_RISK) as RiskLevel;
+  return {
+    id: asStr(r.id, `action-${idx}`),
+    agent_id: asStr(r.agent_id, "—"),
+    created_by: asNullableStr(r.created_by),
+    client_id: asNullableStr(r.client_id),
+    title: asStr(r.title, "Untitled action"),
+    summary: asStr(r.summary),
+    action_type: asStr(r.action_type, "action") as ActionType,
+    target_system: asStr(r.target_system, "internal") as TargetSystem,
+    risk_level,
+    approval_status,
+    execution_status: asStr(r.execution_status, "not_ready") as ExecutionStatus,
+    safe_preview: asStr(r.safe_preview),
+    reason: asNullableStr(r.reason),
+    evidence: asStrArray(r.evidence),
+    constraints: asStrArray(r.constraints),
+    requires_approval: r.requires_approval === true,
+    source_type: asNullableStr(r.source_type),
+    source_id: asNullableStr(r.source_id),
+    approved_by: asNullableStr(r.approved_by),
+    approved_at: asNullableStr(r.approved_at),
+    rejected_by: asNullableStr(r.rejected_by),
+    rejected_at: asNullableStr(r.rejected_at),
+    rejection_reason: asNullableStr(r.rejection_reason),
+    executed_by_agent: asNullableStr(r.executed_by_agent),
+    executed_at: asNullableStr(r.executed_at),
+    execution_error: asNullableStr(r.execution_error),
+    rollback_notes: asNullableStr(r.rollback_notes),
+    audit_log: asAuditLog(r.audit_log),
+    adapter_enabled: r.adapter_enabled === true,
+    metadata: asObject(r.metadata),
+    created_at: asStr(r.created_at),
+    updated_at: asStr(r.updated_at),
+  };
+}
+
+// Accept either { actions, counts } or a bare array; always return a safe array.
+function normalizeActions(payload: unknown): VaultActionDTO[] {
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { actions?: unknown })?.actions)
+      ? (payload as { actions: unknown[] }).actions
+      : [];
+  return list.map((row, i) => normalizeAction(row, i));
+}
+
+// Approval / risk display lookups that can never throw on an unexpected value.
+function approvalMeta(s: ApprovalStatus) { return APPROVAL_META[s] ?? APPROVAL_META[FALLBACK_APPROVAL]; }
+function riskMeta(r: RiskLevel) { return RISK_META[r] ?? RISK_META[FALLBACK_RISK]; }
+
+// Coerce counts to all-number, tolerating null / partial / non-number fields.
+function normalizeCounts(raw: unknown): ActionCounts | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    pending_review: n(r.pending_review), approved: n(r.approved), rejected: n(r.rejected),
+    needs_revision: n(r.needs_revision), archived: n(r.archived), executed: n(r.executed),
+    failed: n(r.failed), adapter_disabled: n(r.adapter_disabled),
+    high_risk_pending: n(r.high_risk_pending), total: n(r.total),
+  };
 }
 
 export function VaultActions() {
@@ -69,25 +176,50 @@ export function VaultActions() {
   const [filter, setFilter] = useState<ApprovalStatus | "all">("pending_review");
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/core/actions");
-      if (!res.ok) { if (res.status === 403 || res.status === 401) setForbidden(true); return; }
-      const d = await res.json();
-      setActions(d.actions ?? []);
-      setCounts(d.counts ?? null);
-    } finally {
+    const res = await fetch("/api/core/actions").catch(() => null);
+    if (!res) { setError(true); setLoading(false); return; }
+    if (!res.ok) {
+      if (res.status === 403 || res.status === 401) setForbidden(true);
+      else setError(true);
       setLoading(false);
+      return;
     }
+    // Tolerate non-JSON / unexpected bodies without throwing into render.
+    const d = await res.json().catch(() => null);
+    setActions(normalizeActions(d));
+    setCounts(normalizeCounts((d as { counts?: unknown } | null)?.counts));
+    setError(false);
+    setLoading(false);
   }, []);
 
+  // Initial load uses the promise/.then pattern (setState lands in async callbacks,
+  // not synchronously in the effect). `load` itself is reused for refetches from the
+  // review/execute event handlers below.
   useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    fetch("/api/core/actions")
+      .then((res) => (res.ok ? res.json().catch(() => null) : Promise.reject(res.status)))
+      .then((d) => {
+        if (cancelled) return;
+        setActions(normalizeActions(d));
+        setCounts(normalizeCounts((d as { counts?: unknown } | null)?.counts));
+        setError(false);
+        setLoading(false);
+      })
+      .catch((status) => {
+        if (cancelled) return;
+        if (status === 401 || status === 403) setForbidden(true);
+        else setError(true);
+        setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const visible = useMemo(
     () => actions.filter((a) => filter === "all" || a.approval_status === filter),
@@ -127,6 +259,24 @@ export function VaultActions() {
       <VCPageWrapper>
         <PageHeader sectionLabel="Vault Core" title="Actions" />
         <VCPanel><VCEmptyState icon={Lock} title="Access restricted" description="You don't have access to the execution engine." /></VCPanel>
+      </VCPageWrapper>
+    );
+  }
+
+  if (error && actions.length === 0) {
+    return (
+      <VCPageWrapper>
+        <PageHeader sectionLabel="Vault Core · Approved Execution Engine" title="Actions" />
+        <VCPanel>
+          <VCEmptyState
+            icon={ShieldAlert}
+            title="Couldn't load the execution queue"
+            description="The actions service is unavailable right now. No external system was contacted. Try again in a moment."
+          />
+          <div className="px-4 pb-4">
+            <VCButton onClick={() => { setLoading(true); setError(false); load(); }}>Retry</VCButton>
+          </div>
+        </VCPanel>
       </VCPageWrapper>
     );
   }
@@ -183,9 +333,9 @@ export function VaultActions() {
                   <p className="text-[12px] mt-0.5 leading-snug line-clamp-2" style={{ color: "var(--t-text-body)" }}>{a.safe_preview}</p>
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                  <VCStatusBadge label={APPROVAL_META[a.approval_status].label} variant={APPROVAL_META[a.approval_status].variant} />
-                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ color: RISK_META[a.risk_level].color, background: `${RISK_META[a.risk_level].color}18`, border: `1px solid ${RISK_META[a.risk_level].color}38` }}>
-                    {RISK_META[a.risk_level].label}
+                  <VCStatusBadge label={approvalMeta(a.approval_status).label} variant={approvalMeta(a.approval_status).variant} />
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ color: riskMeta(a.risk_level).color, background: `${riskMeta(a.risk_level).color}18`, border: `1px solid ${riskMeta(a.risk_level).color}38` }}>
+                    {riskMeta(a.risk_level).label}
                   </span>
                 </div>
               </div>
@@ -249,8 +399,8 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
 
         <div className="px-6 py-5 space-y-5">
           <div className="flex flex-wrap items-center gap-2">
-            <VCStatusBadge label={APPROVAL_META[a.approval_status].label} variant={APPROVAL_META[a.approval_status].variant} dot />
-            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ color: RISK_META[a.risk_level].color, background: `${RISK_META[a.risk_level].color}18`, border: `1px solid ${RISK_META[a.risk_level].color}38` }}>{RISK_META[a.risk_level].label}</span>
+            <VCStatusBadge label={approvalMeta(a.approval_status).label} variant={approvalMeta(a.approval_status).variant} dot />
+            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ color: riskMeta(a.risk_level).color, background: `${riskMeta(a.risk_level).color}18`, border: `1px solid ${riskMeta(a.risk_level).color}38` }}>{riskMeta(a.risk_level).label}</span>
             <VCChip label={`→ ${a.target_system}`} color={a.adapter_enabled ? "#22c55e" : "#6b7a99"} />
             {qg?.qualityScore !== undefined && <span className="inline-flex items-center gap-1"><Gauge size={11} style={{ color: "#22d3ee" }} /><span className="text-[11px] font-semibold" style={{ color: "#22d3ee" }}>{Math.round((qg.qualityScore ?? 0) * 100)}</span></span>}
           </div>

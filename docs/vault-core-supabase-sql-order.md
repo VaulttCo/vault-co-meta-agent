@@ -36,6 +36,7 @@ the Vault Core phase schemas below.
 | 5 | `docs/vault-core-phase6-schema.sql` | 6 | Required for live | `vault_message_drafts` (draft approval queue) | Draft queue serves mock drafts; approvals don't persist |
 | — | *(none)* | 6.5 | n/a | **Design pass — no SQL.** | n/a |
 | — | *(none)* | 6.6 | n/a | **Deployment prep — no SQL.** | n/a |
+| 6 | `docs/vault-actions-schema.sql` | 9.0 | Required for live | `vault_actions` (approved internal execution queue) + enum CHECK constraints (+ indexes, RLS on, no policies) | Actions queue serves mock; prepared/approved/executed actions don't persist |
 
 ## Notes
 - **Phase 4 expects pre-existing revenue tables.** `client_monthly_revenue_snapshots` and

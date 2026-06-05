@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Crosshair, Lightbulb, ClipboardCheck, FileText, Boxes, Radar, ArrowRight, type LucideIcon } from "lucide-react";
+import { Crosshair, Lightbulb, ClipboardCheck, FileText, Boxes, Radar, Play, ArrowRight, type LucideIcon } from "lucide-react";
 import { VCPanel, VCPanelHeader, VCChip } from "@/components/ui/VaultUI";
 
 interface ActionCenterProps {
@@ -37,6 +37,7 @@ interface Tile {
 export function ActionCenter(props: ActionCenterProps) {
   const { loading, recVisible, recHidden, plansNeedsReview, draftPending, propPending, urgentTasks, failedRuns } = props;
   const [comp, setComp] = useState<{ captures: number; profiles: number; topHook: string | null } | null>(null);
+  const [acts, setActs] = useState<{ pending: number; approved: number; disabled: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,15 +53,29 @@ export function ActionCenter(props: ActionCenterProps) {
         });
       })
       .catch(() => { if (!cancelled) setComp({ captures: 0, profiles: 0, topHook: null }); });
+    fetch("/api/core/actions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        const c = d?.counts;
+        setActs({ pending: c?.pending_review ?? 0, approved: c?.approved ?? 0, disabled: c?.adapter_disabled ?? 0 });
+      })
+      .catch(() => { if (!cancelled) setActs({ pending: 0, approved: 0, disabled: 0 }); });
     return () => { cancelled = true; };
   }, []);
   const competitorSignals = comp?.captures ?? null;
 
-  // Today's priority — the single most urgent thing.
+  // Today's priority — the single most urgent thing. Vault Actions (agents
+  // prepared → human approves → internal execute) sit ahead of generic
+  // recommendations: pending actions need review, approved ones are ready to run.
+  const actsPending = acts?.pending ?? 0;
+  const actsApproved = acts?.approved ?? 0;
   const priority =
     failedRuns > 0 ? `${failedRuns} failed runtime signal${failedRuns === 1 ? "" : "s"} — inspect Vault Core.`
     : urgentTasks > 0 ? `${urgentTasks} urgent task${urgentTasks === 1 ? "" : "s"} need attention.`
     : plansNeedsReview > 0 ? `${plansNeedsReview} approval${plansNeedsReview === 1 ? "" : "s"} blocking progress.`
+    : actsPending > 0 ? `${actsPending} prepared action${actsPending === 1 ? "" : "s"} to review in Actions.`
+    : actsApproved > 0 ? `${actsApproved} approved internal action${actsApproved === 1 ? "" : "s"} ready to execute.`
     : recVisible > 0 ? `${recVisible} mission-visible recommendation${recVisible === 1 ? "" : "s"} to review.`
     : "All clear — nothing needs human action right now.";
 
@@ -69,6 +84,7 @@ export function ActionCenter(props: ActionCenterProps) {
     { icon: ClipboardCheck, label: "Approvals", sub: "blocking progress", value: plansNeedsReview, href: "/approvals", accent: "#22c55e" },
     { icon: FileText, label: "Drafts", sub: "awaiting review", value: draftPending, href: "/drafts", accent: "#0081f2" },
     { icon: Boxes, label: "System Proposals", sub: "pending", value: propPending, href: "/proposals", accent: "#a78bfa" },
+    { icon: Play, label: "Actions", sub: "agents prepared", value: acts?.pending ?? 0, href: "/actions", accent: "#22d3ee", note: acts && acts.approved > 0 ? `${acts.approved} approved` : (acts && acts.disabled > 0 ? `${acts.disabled} adapter-off` : undefined) },
     { icon: Radar, label: "Competitor Intel", sub: comp ? `${comp.profiles} profile${comp.profiles === 1 ? "" : "s"}` : "Valentina signals", value: competitorSignals ?? 0, href: "/competitor-intel", accent: "#fb923c", note: comp?.topHook ? `top: ${comp.topHook.slice(0, 18)}` : undefined },
   ];
 
@@ -95,7 +111,7 @@ export function ActionCenter(props: ActionCenterProps) {
       </div>
 
       {/* Action tiles */}
-      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {tiles.map((t) => {
           const Icon = t.icon;
           const has = t.value > 0;

@@ -88,6 +88,17 @@ Vault Core safety invariants (flag ANY violation as P0):
   recommend-only candidates through insertRecommendation (Vera/Vesper gate). Flag P0 if any competitor
   code performs an external fetch/scrape or external mutation; do NOT flag the documented disabled
   future-automation scaffolding. Valentina = AI Marketing Director (NOT Victoria the Sales Coach product).
+- Approved Execution Engine (Phase 9.0, `/actions`, `src/lib/core/actions/**`, `/api/core/actions*`,
+  `vault_actions`): agents PREPARE actions → Vera/Vesper quality-check → humans approve → only the
+  INTERNAL adapter may execute APPROVED internal actions. EVERY external adapter (GHL/Meta/Stripe/SMS/
+  email/calendar/Slack/ClickUp/website) is DISABLED and returns adapter_disabled. The `execute` route
+  MUST call `canExecute()` (execution-policy.ts) first and only invoke the resolved adapter; the
+  internal adapter writes ONLY internal Vault Memory/activity/audit. Internal approved execution +
+  internal status changes + audit logging are EXPECTED and allowed. **Flag P0** if any code: enables an
+  external adapter; performs a real SMS/email/GHL/Meta/Stripe/workflow/ad/budget/invoice external action;
+  bypasses approval; executes without `canExecute`; returns raw `payload`/credentials/PII (routes return
+  DTOs with `safe_preview` only); or weakens auth/RLS. `payload` JSONB must be sanitized before insert.
+  Vera/Vesper still never approve/reject/execute. No new active agents; active set remains the 6.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

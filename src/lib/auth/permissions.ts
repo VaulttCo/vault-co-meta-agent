@@ -20,6 +20,8 @@ export interface Permissions {
   canApproveCreatives: boolean;   // Admin only
   canManageSettings: boolean;     // Admin only
   canConnectIntegrations: boolean;// Admin only
+  canApproveVaultActions: boolean;// Admin only — grant final approval on Vault actions
+  canExecuteVaultActions: boolean;// Admin only — execute approved internal Vault actions
   canAnalyzeCreatives: boolean;   // Admin + Media Buyer
   // Data visibility
   canViewInternalNotes: boolean;
@@ -49,6 +51,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: true,
     canManageSettings: true,
     canConnectIntegrations: true,
+    canApproveVaultActions: true,
+    canExecuteVaultActions: true,
     canAnalyzeCreatives: true,
     canViewInternalNotes: true,
     canViewStrategyData: true,
@@ -74,6 +78,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canApproveVaultActions: false,
+    canExecuteVaultActions: false,
     canAnalyzeCreatives: true,
     canViewInternalNotes: true,
     canViewStrategyData: true,
@@ -99,6 +105,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canApproveVaultActions: false,
+    canExecuteVaultActions: false,
     canAnalyzeCreatives: false,
     canViewInternalNotes: false,
     canViewStrategyData: false,
@@ -124,6 +132,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permissions> = {
     canApproveCreatives: false,
     canManageSettings: false,
     canConnectIntegrations: false,
+    canApproveVaultActions: false,
+    canExecuteVaultActions: false,
     canAnalyzeCreatives: false,
     canViewInternalNotes: false,
     canViewStrategyData: false,

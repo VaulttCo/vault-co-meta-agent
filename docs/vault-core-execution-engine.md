@@ -1,0 +1,105 @@
+# Vault Core — Approved Execution Engine (Phase 9.0)
+
+The foundation that lets agents **prepare** real work, humans **approve** it, and
+approved **internal** work **execute** with a full audit trail. External execution
+is **adapter-gated and disabled** in this phase — nothing is sent, launched,
+charged, or mutated on any external system.
+
+## Flow
+1. An agent identifies work and calls `createAction()`.
+2. Vera/Vesper quality metadata is attached (score + safety status; recommend-only).
+3. The action is stored `pending_review` and appears in Mission Control → Action Center → `/actions`.
+4. A human **approves / rejects / requests revision / archives** it.
+5. If approved **and** the target adapter is **enabled** (internal only), a human can **execute** it.
+6. The execution policy gate runs; the internal adapter records the result into Vault Memory + the audit log.
+
+## Core rule — nothing executes unless ALL hold
+`approval_status = approved` · `approved_by` exists · Vera/Vesper safety passes ·
+target **adapter is enabled** · action_type is allowed · risk level permits ·
+execution policy allows it. The single gate is `canExecute()` in
+`src/lib/core/actions/execution-policy.ts` and it **fails closed**.
+
+## Data model — `vault_actions`
+Types in `src/lib/core/actions/types.ts`; schema in `docs/vault-actions-schema.sql`
+(rerun-safe, RLS on, no permissive policies, service-role only, indexed on
+approval_status / execution_status / agent_id / client_id / action_type /
+target_system / risk_level / created_at). `payload` is JSONB, **sanitized in the
+app** before insert (control-stripped, secret-redacted, size-capped) and **never**
+returned to the client — the API returns `VaultActionDTO` with a `safe_preview`.
+
+**Action types →** internal preparation/drafts (`create_internal_task`,
+`prepare_*`, `draft_*`, `draft_report`/`draft_invoice`) and external actions
+(`send_sms`, `send_email`, `create_ghl_workflow`, `update_ghl_contact`,
+`launch_meta_campaign`, `update_meta_budget`, `create_stripe_invoice`,
+`publish_report`). The `action_type` **authoritatively** sets `target_system` and
+`risk_level` via `ACTION_META` (`policies.ts`) — never trusted from client input.
+
+**Risk levels →** `level_0_internal_note` · `level_1_internal_action` ·
+`level_2_client_facing_message` (requires approval) · `level_3_money_ads_workflow`
+(requires **admin** approval) · `level_4_admin_critical` (admin + explicit confirm).
+
+## Adapters
+`src/lib/core/actions/adapters/`. `getAdapter(target)` returns the **internal**
+adapter for internal targets (`internal`/`content`/`report`) and the **disabled**
+adapter for every external target.
+
+- **Internal adapter (ENABLED):** marks the action executed, writes a Vault Memory
+  node + activity, and returns safe result metadata. It NEVER sends SMS/email,
+  updates GHL/CRM, launches Meta, changes budgets, touches Stripe, publishes
+  externally, triggers workflows, or creates external tasks.
+- **Disabled adapters (GHL/Meta/Stripe/SMS/email/calendar/Slack/ClickUp/website):**
+  return `adapter_disabled` and do nothing. Enabling any of these is a separate,
+  explicitly-approved future phase.
+
+## APIs (auth-guarded, internal-only)
+- `GET /api/core/actions` — list (DTOs) + counts (`canViewApprovals`).
+- `POST /api/core/actions` — create (admin / `canConnectIntegrations`), validated.
+- `GET /api/core/actions/[id]` · `PATCH` (rollback_notes only, admin/internal).
+- `POST /api/core/actions/[id]/review` — approve/reject/request_revision/archive
+  (`canViewApprovals` to triage; granting **approve** requires `canApproveVaultActions`,
+  admin-only today; level 3+ approval also requires admin). Never executes. Withdrawal
+  verbs (reject/request_revision/archive) may also be applied to an already-approved,
+  not-yet-executed action and clear its approval stamp.
+- `POST /api/core/actions/[id]/execute` — **runs `canExecute()` first**, then the
+  resolved adapter. Gated by `canExecuteVaultActions` (admin-only today; a dedicated
+  permission so authority can't silently widen). External → `adapter_disabled`.
+
+No external calls, no credentials, no raw payloads/PII in any response.
+
+## Vera/Vesper integration
+`createAction()` attaches `metadata.quality_gate` (`qualityScore`, `safety_status`,
+`reviewed_by: ["vera","vesper"]`) and `never_auto_execute: true` /
+`requires_human_review: true`. Vera/Vesper score clarity/safety and the gate can
+deny execution on `safety_status: unsafe`. They **never** approve/reject/execute/
+send/publish/launch/mutate — backend QA only.
+
+## Agent responsibilities (how each agent will use it)
+- **Vega** — tracking fix / analytics diagnosis / performance review actions.
+- **Veronica** — lead reply / campaign preparation / report·message / GHL follow-up prep actions.
+- **Valentina** — competitor response / creative test / offer positioning / campaign angle actions.
+- **Valerie** — invoice review / revenue closeout / unpaid-client follow-up / commission-split review actions.
+- **Vanessa** — executive priority / daily approval agenda / cross-agent coordination actions.
+- **Vivian** — client follow-up / onboarding-blocker / retention-risk / client-success-plan actions (recommend-only; never contacts clients).
+
+All agent-prepared actions are `pending_review`, quality-gated, and human-approved.
+Agents use `createAction()` (limited per tick, quality over volume) — they do not
+execute automatically and never bypass approval. (Live agent wiring is the
+documented next integration; the engine, manual creation, approval, and internal
+execution are fully functional now.)
+
+## Future adapter path
+External adapters stay disabled until a dedicated, explicitly-approved phase that
+(per adapter) defines scope, rate limits, compliance, idempotency, rollback, and
+keeps human approval mandatory. Flipping `isAdapterEnabled()` for an external
+target is the single, reviewed switch — there is no other path to external
+execution.
+
+## Audit / rollback
+Every create/review/execute appends to `audit_log` (actor, event, timestamp,
+detail). `rollback_notes` is a human field. Nothing is hard-deleted; archive/reject
+are soft status changes. Internal execution is fully auditable in Vault Memory.
+
+## Hermes / Codex
+Hermes (QA/dev-ops) can audit the engine; Codex is a manual read-only second
+opinion — neither is a production runtime dependency. Any real external execution
+(SMS/email/GHL/Meta/Stripe) before an approved adapter phase is a **P0**.

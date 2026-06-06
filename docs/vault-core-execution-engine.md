@@ -167,6 +167,49 @@ execution stays disabled; humans approve; only the internal adapter executes.
   `canExecute()` first and L4 still needs the typed confirmation. No raw
   payload/execution_result in any DTO.
 
+## Phase 9.3 — GHL Workflow Builder, Draft Mode (live)
+Agents can DESIGN GHL follow-up workflow **drafts** for human review. This phase is
+**draft-only**: there is NO live GHL adapter. Nothing is published, created, updated,
+or triggered in GHL; no contact/opportunity is mutated; no SMS/email is sent; no GHL
+credentials are used; no raw GHL payloads or live IDs are stored or returned.
+
+- **Files:** `src/lib/core/workflows/` — `types.ts` (`GHLWorkflowDraft`, statuses,
+  workflow types, step types), `validation.ts` (sanitize + reject live-execution
+  language + http(s)-only URLs + no PII/secrets), `templates.ts` (10 starter
+  workflows), `db.ts` (mock-safe CRUD + DTO + counts), `ghl-workflow-draft.ts`
+  (create helper), `adapters/ghl-disabled.ts` (explicit disabled boundary — performs
+  NO I/O, imports no GHL client, uses no credentials). Table:
+  `docs/ghl-workflow-drafts-schema.sql` (`ghl_workflow_drafts`, RLS on, no policies).
+- **Lifecycle:** `draft` → `pending_review` → { `future_adapter_required` (approved) |
+  `needs_revision` | `rejected` | `archived` }. **`approve_internal` maps to
+  `future_adapter_required`** — that is the sole approved-internal terminal state for
+  Phase 9.3 (honest that a future approved GHL adapter would be needed to publish; the
+  UI labels it "Approved (internal)"). The `approved_internal` enum value is reserved/
+  unused in this phase. Review transitions are a true compare-and-set with explicit
+  allowed prior states + an `updated_at` guard + an append-only audit trail. Reject/
+  revision require a reason; approving internally requires an admin.
+- **Steps are draft-only:** `draft_sms`/`draft_email` hold copy that is never sent;
+  tag/task/pipeline/assign steps are marked draft-only; `webhook_placeholder` is
+  explicitly disabled/future-adapter-required. Every step carries `draft_only: true`.
+- **APIs** (`/api/core/ghl-workflow-drafts*`, all `canViewApprovals`-guarded): list,
+  create (from `template_key` or custom), `[id]` GET/PATCH (notes only), `[id]/review`
+  (`approve_internal`/`request_revision`/`reject`/`archive`), and `from-action` (links
+  an approved `draft_ghl_workflow` action to a new draft; never publishes, never
+  changes the action's adapter state). **No publish route, no execute route, no GHL
+  call anywhere.** DTOs return sanitized steps + safe_preview only.
+- **UI:** `/ghl-workflows` — exec summary, future-adapter-disabled banner, template
+  library, draft queue, and a detail drawer (trigger, step timeline, guardrails,
+  required assets, missing inputs, safe preview, review). No "Publish/Send/Activate/
+  Update Contact" controls exist. The `/actions` drawer offers "Create workflow draft"
+  / "View workflow drafts" for an approved `draft_ghl_workflow` action. The Action
+  Center shows a GHL Workflows tile.
+- **Agents** may propose `draft_ghl_workflow` actions (which always land
+  `adapter_disabled`) and own workflow templates by domain (Veronica → lead/campaign
+  follow-up, Vivian → onboarding/access (never contacts clients), Vega →
+  tracking/lead-quality, Vanessa → prioritization, Valentina → strategy gaps, Valerie
+  → proposal/closeout). Auto-generation remains internal-only and capped/deduped;
+  `draft_ghl_workflow` actions are human-approved and never execute externally.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

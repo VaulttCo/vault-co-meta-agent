@@ -65,6 +65,17 @@ Vault Memory activity/audit trail. No schema change, no new active agents, no ex
 execution. See [`vault-core-execution-engine.md`](./vault-core-execution-engine.md)
 (Phase 9.2).
 
+## Phase 9.3 — GHL Workflow Builder, Draft Mode (live)
+
+Agents design GHL follow-up workflow **drafts** for human review at `/ghl-workflows`;
+humans approve them **internally only**. **Draft-only** — there is no live GHL adapter:
+nothing is published, no GHL workflow/contact/opportunity is mutated, no SMS/email is
+sent, no GHL credentials are used. New `ghl_workflow_drafts` table (RLS on, no policies),
+`src/lib/core/workflows/**`, `/api/core/ghl-workflow-drafts*`, 10 starter templates, and
+an explicit disabled adapter boundary. Approving internally → `future_adapter_required`.
+No new active agents; no external execution. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.3).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

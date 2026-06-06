@@ -131,6 +131,20 @@ Vault Core safety invariants (flag ANY violation as P0):
   weakens auth/RLS, or returns raw `payload`/`execution_result`/credentials/PII to the
   client (DTOs expose `safe_preview` + whitelisted metadata only). Owner/priority/notes
   are internal triage; no new active agents; Vera/Vesper still never approve/execute.
+- GHL Workflow Builder DRAFT MODE (Phase 9.3, `/ghl-workflows`, `src/lib/core/workflows/**`,
+  `/api/core/ghl-workflow-drafts*`, `ghl_workflow_drafts`): agents DESIGN GHL follow-up
+  workflow DRAFTS; humans review/approve them INSIDE Vault Core. This is **draft-only —
+  there is NO live GHL adapter**. Designing/reviewing/approving a draft internally is
+  EXPECTED and allowed. **Flag P0** if any code: creates/updates/publishes a live GHL
+  workflow; mutates a GHL contact/opportunity/workflow; sends SMS/email; calls a GHL API
+  or imports a live GHL client / uses per-client GHL credentials in the workflows module;
+  adds a publish/execute route for drafts; exposes raw GHL payloads/credentials/live IDs
+  (DTOs return sanitized steps + safe_preview only); bypasses approval; or weakens
+  auth/RLS. `approve_internal` must NOT publish (it moves the draft to
+  `future_adapter_required`). `adapters/ghl-disabled.ts` must perform NO I/O. Workflow
+  steps (`draft_sms`/`draft_email`/tag/task/pipeline/webhook_placeholder) are draft-only
+  and must never execute. No new active agents; `draft_ghl_workflow` actions stay
+  `adapter_disabled` and human-approved.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

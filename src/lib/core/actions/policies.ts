@@ -24,9 +24,13 @@ export const ACTION_META: Record<ActionType, ActionMeta> = {
   // Client-facing DRAFTS (internal artifacts) — require approval (level 2).
   draft_client_message:        { target: "content",  risk: "level_2_client_facing_message" },
   draft_lead_reply:            { target: "content",  risk: "level_2_client_facing_message" },
-  draft_ghl_workflow:          { target: "content",  risk: "level_2_client_facing_message" },
   draft_meta_campaign:         { target: "content",  risk: "level_2_client_facing_message" },
   draft_invoice:               { target: "report",   risk: "level_2_client_facing_message" },
+  // GHL workflow draft action (Phase 9.3) — its target is the DISABLED `ghl` adapter,
+  // NOT the internal `content` lane. This keeps it `adapter_disabled` from birth and
+  // after approval (it can NEVER execute via the internal adapter); it only seeds an
+  // internal GHL workflow DRAFT review artifact via /api/core/ghl-workflow-drafts.
+  draft_ghl_workflow:          { target: "ghl",      risk: "level_3_money_ads_workflow" },
   // EXTERNAL actions — DISABLED adapters. Money / ads / workflows / sends.
   send_sms:              { target: "sms",     risk: "level_3_money_ads_workflow" },
   send_email:            { target: "email",   risk: "level_3_money_ads_workflow" },

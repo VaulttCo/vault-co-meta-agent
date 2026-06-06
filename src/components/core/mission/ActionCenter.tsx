@@ -37,7 +37,7 @@ interface Tile {
 export function ActionCenter(props: ActionCenterProps) {
   const { loading, recVisible, recHidden, plansNeedsReview, draftPending, propPending, urgentTasks, failedRuns } = props;
   const [comp, setComp] = useState<{ captures: number; profiles: number; topHook: string | null } | null>(null);
-  const [acts, setActs] = useState<{ pending: number; approved: number; disabled: number } | null>(null);
+  const [acts, setActs] = useState<{ pending: number; ready: number; readyUrgentHigh: number; needsRevision: number; highRiskPending: number; failed: number; disabled: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,33 +58,56 @@ export function ActionCenter(props: ActionCenterProps) {
       .then((d) => {
         if (cancelled) return;
         const c = d?.counts;
-        setActs({ pending: c?.pending_review ?? 0, approved: c?.approved ?? 0, disabled: c?.adapter_disabled ?? 0 });
+        setActs({
+          pending: c?.pending_review ?? 0, ready: c?.ready ?? 0, readyUrgentHigh: c?.ready_urgent_high ?? 0,
+          needsRevision: c?.needs_revision ?? 0, highRiskPending: c?.high_risk_pending ?? 0,
+          failed: c?.failed ?? 0, disabled: c?.adapter_disabled ?? 0,
+        });
       })
-      .catch(() => { if (!cancelled) setActs({ pending: 0, approved: 0, disabled: 0 }); });
+      .catch(() => { if (!cancelled) setActs({ pending: 0, ready: 0, readyUrgentHigh: 0, needsRevision: 0, highRiskPending: 0, failed: 0, disabled: 0 }); });
     return () => { cancelled = true; };
   }, []);
   const competitorSignals = comp?.captures ?? null;
 
-  // Today's priority — the single most urgent thing. Vault Actions (agents
-  // prepared → human approves → internal execute) sit ahead of generic
-  // recommendations: pending actions need review, approved ones are ready to run.
-  const actsPending = acts?.pending ?? 0;
-  const actsApproved = acts?.approved ?? 0;
+  // Today's priority — the single most urgent thing. Phase 9.2 lifecycle order:
+  // failed internal actions → urgent/high ready-to-execute → high-risk pending
+  // approval → actions needing revision → ready internal actions → pending review →
+  // generic recommendations → all clear.
+  const aPending = acts?.pending ?? 0, aReady = acts?.ready ?? 0, aReadyUH = acts?.readyUrgentHigh ?? 0;
+  const aRevision = acts?.needsRevision ?? 0, aHighRisk = acts?.highRiskPending ?? 0, aFailed = acts?.failed ?? 0;
+  const plural = (n: number) => (n === 1 ? "" : "s");
   const priority =
-    failedRuns > 0 ? `${failedRuns} failed runtime signal${failedRuns === 1 ? "" : "s"} — inspect Vault Core.`
-    : urgentTasks > 0 ? `${urgentTasks} urgent task${urgentTasks === 1 ? "" : "s"} need attention.`
-    : plansNeedsReview > 0 ? `${plansNeedsReview} approval${plansNeedsReview === 1 ? "" : "s"} blocking progress.`
-    : actsPending > 0 ? `${actsPending} prepared action${actsPending === 1 ? "" : "s"} to review in Actions.`
-    : actsApproved > 0 ? `${actsApproved} approved internal action${actsApproved === 1 ? "" : "s"} ready to execute.`
-    : recVisible > 0 ? `${recVisible} mission-visible recommendation${recVisible === 1 ? "" : "s"} to review.`
+    failedRuns > 0 ? `${failedRuns} failed runtime signal${plural(failedRuns)} — inspect Vault Core.`
+    : aFailed > 0 ? `${aFailed} internal action${plural(aFailed)} failed to execute — inspect Actions.`
+    : aReadyUH > 0 ? `${aReadyUH} urgent/high internal action${plural(aReadyUH)} ready to execute.`
+    : aHighRisk > 0 ? `${aHighRisk} high-risk action${plural(aHighRisk)} awaiting your approval.`
+    : aRevision > 0 ? `${aRevision} action${plural(aRevision)} need revision before they can proceed.`
+    : urgentTasks > 0 ? `${urgentTasks} urgent task${plural(urgentTasks)} need attention.`
+    : aReady > 0 ? `${aReady} approved internal action${plural(aReady)} ready to execute.`
+    : aPending > 0 ? `${aPending} prepared action${plural(aPending)} to review in Actions.`
+    : plansNeedsReview > 0 ? `${plansNeedsReview} approval${plural(plansNeedsReview)} blocking progress.`
+    : recVisible > 0 ? `${recVisible} mission-visible recommendation${plural(recVisible)} to review.`
     : "All clear — nothing needs human action right now.";
+
+  // Actions tile — value + sub describe the SAME (highest-priority) metric so the
+  // number never contradicts the label; a secondary count is shown as the note.
+  // Order mirrors Today's Priority above (failed → ready → pending → revision → clear)
+  // so the tile's headline number never disagrees with the priority message.
+  const actionsTile: Tile = (() => {
+    const base = { icon: Play, label: "Actions", href: "/actions", accent: "#22d3ee" } as const;
+    if (aFailed > 0) return { ...base, sub: "failed to execute", value: aFailed, accent: "#ef4444", note: aReady > 0 ? `${aReady} ready` : undefined };
+    if (aReady > 0) return { ...base, sub: "ready to execute", value: aReady, accent: "#22c55e", note: aPending > 0 ? `${aPending} pending` : undefined };
+    if (aPending > 0) return { ...base, sub: "pending review", value: aPending, note: aRevision > 0 ? `${aRevision} revision` : undefined };
+    if (aRevision > 0) return { ...base, sub: "need revision", value: aRevision, accent: "#f59e0b" };
+    return { ...base, sub: "all clear", value: 0, note: (acts?.disabled ?? 0) > 0 ? `${acts?.disabled} adapter-off` : undefined };
+  })();
 
   const tiles: Tile[] = [
     { icon: Lightbulb, label: "Recommendations", sub: "mission-visible", value: recVisible, href: "/recommendations", accent: "#ff8400", note: recHidden > 0 ? `${recHidden} hidden` : undefined },
     { icon: ClipboardCheck, label: "Approvals", sub: "blocking progress", value: plansNeedsReview, href: "/approvals", accent: "#22c55e" },
     { icon: FileText, label: "Drafts", sub: "awaiting review", value: draftPending, href: "/drafts", accent: "#0081f2" },
     { icon: Boxes, label: "System Proposals", sub: "pending", value: propPending, href: "/proposals", accent: "#a78bfa" },
-    { icon: Play, label: "Actions", sub: "agents prepared", value: acts?.pending ?? 0, href: "/actions", accent: "#22d3ee", note: acts && acts.approved > 0 ? `${acts.approved} approved` : (acts && acts.disabled > 0 ? `${acts.disabled} adapter-off` : undefined) },
+    actionsTile,
     { icon: Radar, label: "Competitor Intel", sub: comp ? `${comp.profiles} profile${comp.profiles === 1 ? "" : "s"}` : "Valentina signals", value: competitorSignals ?? 0, href: "/competitor-intel", accent: "#fb923c", note: comp?.topHook ? `top: ${comp.topHook.slice(0, 18)}` : undefined },
   ];
 

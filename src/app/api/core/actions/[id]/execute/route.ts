@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
-import { getAction, finalizeExecution, toActionDTO, appendAudit, claimForExecution } from "@/lib/core/actions/db";
+import { getAction, finalizeExecution, toActionDTO, claimForExecution } from "@/lib/core/actions/db";
 import { canExecute } from "@/lib/core/actions/execution-policy";
 import { getAdapter } from "@/lib/core/actions/adapters";
 import type { VaultAction } from "@/lib/core/actions/types";
@@ -70,8 +70,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const reverted = await finalizeExecution(id, {
       execution_status: recheck.blockedStatus ?? "blocked",
       execution_error: recheck.reason,
-      audit_log: appendAudit(claimed, { at: now, actor: auth.userId, event: "execute:denied-postclaim", detail: recheck.reason }),
-    });
+    }, [{ at: now, actor: auth.userId, event: "execute:denied-postclaim", message: "Execution blocked after claim", previous_status: "executing", next_status: recheck.blockedStatus ?? "blocked", detail: recheck.reason }]);
     if (!reverted) {
       return NextResponse.json(
         { executed: false, reason: "Action changed during execution; nothing applied.", action: toActionDTO(claimed) },
@@ -85,23 +84,30 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const adapter = getAdapter(claimed.target_system);
   const result = await adapter.execute(claimed);
 
+  // Lifecycle timeline (Phase 9.2): record the start + terminal internal-execution
+  // events with previous/next status. Internal-only — no external side effects.
+  const terminalEvent = result.executionStatus === "executed" ? "internal_execution_completed" : "internal_execution_failed";
+  const auditEntries = [
+    { at: now, actor: auth.userId, event: "internal_execution_started",
+      message: "Internal execution started", previous_status: "ready_after_approval", next_status: "executing" },
+    { at: now, actor: auth.userId, event: terminalEvent,
+      message: result.executionStatus === "executed" ? "Internal action executed via internal adapter" : "Internal execution failed",
+      previous_status: "executing", next_status: result.executionStatus,
+      detail: `adapter=${adapter.name}${result.error ? ` · ${result.error}` : ""}`,
+      metadata: { external_side_effects: false } },
+  ];
+
   const patch: Partial<VaultAction> = {
     execution_status: result.executionStatus,
     executed_by_agent: claimed.agent_id,
     executed_at: result.executionStatus === "executed" ? now : claimed.executed_at,
     execution_result: result.result ?? null,
     execution_error: result.error ?? null,
-    audit_log: appendAudit(claimed, {
-      at: now,
-      actor: auth.userId,
-      event: `execute:${result.executionStatus}`,
-      detail: `adapter=${adapter.name}${result.error ? ` · ${result.error}` : ""}`,
-    }),
   };
-  // Finalize ONLY while still in our `executing` claim (compare-and-set). If the
-  // row moved out from under us, do NOT apply the result outside the guard —
-  // report a conflict instead of writing a terminal state over someone else's.
-  const updated = await finalizeExecution(id, patch);
+  // Finalize ONLY while still in our `executing` claim (compare-and-set). It rebuilds
+  // audit_log from the freshest row (so a note added during execution isn't lost). If
+  // the claim was lost, report a conflict instead of writing over someone else's state.
+  const updated = await finalizeExecution(id, patch, auditEntries);
   if (!updated) {
     return NextResponse.json(
       { executed: false, reason: "Execution claim was lost before finalize; result not applied.", action: toActionDTO(claimed) },

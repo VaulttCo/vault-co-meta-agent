@@ -114,6 +114,23 @@ Vault Core safety invariants (flag ANY violation as P0):
   auto-approves or auto-executes an action, bypasses approval, weakens auth/RLS, calls Codex from the
   production runtime, scrapes/live-fetches competitors, or adds a 7th active agent. **Flag P1/P2** if
   generation is uncapped, not deduped (per-tick spam), or can throw and break the tick.
+- Approval-to-Execution Workflow (Phase 9.2, `/actions`, `actions/db.ts`, new routes
+  `/api/core/actions/[id]/note` + `/assign`, review/execute routes): adds lifecycle
+  timeline (rich `audit_log` entries), human notes, owner/priority/due/labels, and a
+  ready-to-execute queue — all metadata-first (no schema change). **Internal-only and
+  audit-only**: notes/owner/priority live in `metadata` and are sanitized; appending a
+  lifecycle/audit event NEVER changes status or bypasses approval; the governed
+  transitions still happen only via the review/execute routes. Approved INTERNAL
+  actions become `ready_after_approval` and execute only through the internal adapter;
+  approved EXTERNAL actions stay `adapter_disabled` and are never executable. The
+  `note` and `assign` routes are `canViewApprovals`-guarded and change no status; the
+  `execute` route still calls `canExecute()` first and L4 still needs explicit typed
+  confirmation. **Flag P0** if any code performs a real SMS/email/GHL/Meta/Stripe/
+  workflow/ad/budget/invoice external mutation, enables an external adapter, lets a
+  note/assign/lifecycle event bypass approval or execute, auto-approves/auto-executes,
+  weakens auth/RLS, or returns raw `payload`/`execution_result`/credentials/PII to the
+  client (DTOs expose `safe_preview` + whitelisted metadata only). Owner/priority/notes
+  are internal triage; no new active agents; Vera/Vesper still never approve/execute.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

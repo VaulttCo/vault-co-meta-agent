@@ -54,6 +54,17 @@ new active agents; tick cadence unchanged. See
 [`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.1) for
 the policy, dedupe, Vera/Vesper metadata, and per-agent responsibilities.
 
+## Phase 9.2 — Approval-to-Execution Workflow (live)
+
+Approved actions are now operational and controlled: a metadata-first lifecycle
+timeline (rich `audit_log` events), human notes, owner/priority/due/labels, and a
+ready-to-execute queue. `request_revision`/`reject` require a reason; approving an
+internal action makes it `ready_after_approval` and executable only via the internal
+adapter; external approvals stay `adapter_disabled`. Internal execution feeds a safe
+Vault Memory activity/audit trail. No schema change, no new active agents, no external
+execution. See [`vault-core-execution-engine.md`](./vault-core-execution-engine.md)
+(Phase 9.2).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

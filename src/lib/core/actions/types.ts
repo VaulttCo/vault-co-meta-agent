@@ -57,11 +57,33 @@ export type ExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
 export type ReviewAction = "approve" | "reject" | "request_revision" | "archive";
 
+// Human-assignable priority (Phase 9.2). Stored in metadata, surfaced on the DTO.
+export const ACTION_PRIORITIES = ["low", "medium", "high", "urgent"] as const;
+export type ActionPriority = (typeof ACTION_PRIORITIES)[number];
+
+// Lifecycle events recorded in audit_log (Phase 9.2). Audit-only — appending one
+// NEVER bypasses approval or executes anything; the governed status transitions
+// still happen only through the review/execute routes.
+export const LIFECYCLE_EVENTS = [
+  "created", "generated", "reviewed_by_vera_vesper",
+  "approved", "rejected", "revision_requested", "archived",
+  "assigned", "priority_changed", "note_added",
+  "execution_ready", "internal_execution_started", "internal_execution_completed",
+  "internal_execution_failed", "adapter_disabled",
+] as const;
+export type LifecycleEvent = (typeof LIFECYCLE_EVENTS)[number];
+
 export interface AuditEntry {
   at: string;
   actor: string; // user id or agent id or "system"
   event: string;
   detail?: string;
+  // Phase 9.2 lifecycle-timeline fields (all optional; older entries omit them).
+  message?: string;            // human-readable description of the event
+  previous_status?: string;    // approval/execution status before this event
+  next_status?: string;        // approval/execution status after this event
+  note?: string;               // sanitized human note text (event = "note_added")
+  metadata?: Record<string, unknown>;
 }
 
 export interface VaultAction {
@@ -153,6 +175,13 @@ export interface VaultActionDTO {
   rollback_notes: string | null;
   audit_log: AuditEntry[];
   adapter_enabled: boolean; // is the target adapter enabled (internal) or disabled (external)?
+  // Phase 9.2 human triage fields (stored in metadata, surfaced here for the UI).
+  owner: string | null;
+  priority: ActionPriority | null;
+  due_at: string | null;
+  labels: string[];
+  /** True when approved + ready_after_approval + internal adapter — i.e. executable now. */
+  ready_to_execute: boolean;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -168,5 +197,8 @@ export interface ActionCounts {
   failed: number;
   adapter_disabled: number;
   high_risk_pending: number; // level_3+ awaiting review
+  ready: number;             // approved + ready_after_approval + internal (executable now)
+  ready_urgent_high: number; // ready AND priority urgent|high
+  urgent_high_open: number;  // open (pending/approved/needs_revision) with priority urgent|high
   total: number;
 }

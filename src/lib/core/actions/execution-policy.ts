@@ -92,5 +92,13 @@ export function canExecute(action: VaultAction, ctx: ExecutionContext): Executio
     return { allowed: false, reason: "Action was cancelled.", blockedStatus: "blocked" };
   }
 
+  // 6. Must be in the READY state. Only `ready_after_approval` may start execution;
+  // `executing` is also accepted so the belt-and-suspenders post-claim recheck passes.
+  // This blocks re-executing a `failed`/`blocked`/`not_ready` action — a failed action
+  // is NOT auto-retryable; it must be re-approved (which resets it to ready) first.
+  if (action.execution_status !== "ready_after_approval" && action.execution_status !== "executing") {
+    return { allowed: false, reason: `Not in a ready-to-execute state (${action.execution_status.replace(/_/g, " ")}).`, blockedStatus: "blocked" };
+  }
+
   return { allowed: true, reason: "Approved internal action — execution permitted by policy." };
 }

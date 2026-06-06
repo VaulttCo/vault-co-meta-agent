@@ -124,6 +124,49 @@ are logged as internal activity). Tick cadence is unchanged; no new active agent
 - **Dev seed:** `scripts/seed-vault-actions.mjs --yes` (dev/manual only; never runs
   in production; inserts 2–3 safe internal `pending_review` actions).
 
+## Phase 9.2 — Approval-to-Execution Workflow (live)
+Makes approved actions operational and controlled. Lifecycle, notes, owner/priority,
+and a ready-to-execute queue — all **metadata-first** (no schema change). External
+execution stays disabled; humans approve; only the internal adapter executes.
+
+- **Lifecycle timeline** — every governance step appends a rich `audit_log` entry
+  (`event`, `actor`, `at`, `message`, `previous_status`, `next_status`, `note`).
+  Events: `created`, `generated`, `reviewed_by_vera_vesper`, `approved`, `rejected`,
+  `revision_requested`, `archived`, `assigned`, `priority_changed`, `note_added`,
+  `execution_ready`, `internal_execution_started`, `internal_execution_completed`,
+  `internal_execution_failed`, `adapter_disabled`. Audit-only — appending an entry
+  NEVER bypasses approval or executes anything.
+- **Human notes** — `POST /api/core/actions/[id]/note` appends a **sanitized**
+  `note_added` entry. Internal-only, audit-only — changes no status. Notes are
+  scrubbed (emails/phones/tokens redacted); no secrets/PII reach the DTO.
+- **Owner / priority / due / labels** — `POST /api/core/actions/[id]/assign` stores
+  these in `metadata.assignment` (sanitized) and appends `assigned` /
+  `priority_changed`. Priority ∈ `low|medium|high|urgent`. Surfaced on the DTO as
+  `owner`, `priority`, `due_at`, `labels`. Internal triage only — never affects
+  approval/execution. (No full user-management system.)
+- **Ready-to-execute queue** — `ready_to_execute` on the DTO = `approved` +
+  `ready_after_approval` + internal adapter. Exposed as a **Ready** filter/tab in
+  `/actions`, a "Ready to execute" stat, and the Action Center. Approving an internal
+  action moves `execution_status` → `ready_after_approval`; external approvals stay
+  `adapter_disabled` (shown as "Future Adapter Required", never executable).
+- **Revision loop** — `request_revision` (and `reject`) now **require a reason**;
+  `request_revision` sets `execution_status = blocked` and keeps the action in the
+  Needs-Revision queue. Same-source dedupe (Phase 9.1) suppresses regeneration so the
+  agent doesn't recreate it each tick.
+- **Internal execution feedback** — on execute, status → `executed`/`failed`,
+  `executed_at`/`executed_by_agent` set, `internal_execution_started` +
+  `internal_execution_completed`/`_failed` audit entries (with prev/next status), and
+  the internal adapter writes a Vault Memory node + activity (action id/title/agent/
+  result, `external_side_effects: false`). Failures store a **sanitized**
+  `execution_error` — raw `execution_result` is never returned to the client.
+- **Action Center / Today's Priority** order: failed internal actions → urgent/high
+  ready → high-risk pending approval → needs revision → ready → pending review →
+  recommendations → all clear.
+- **APIs:** new `POST …/note` and `POST …/assign` (both `canViewApprovals`,
+  internal-only); `review` requires reason for reject/revision; `execute` still calls
+  `canExecute()` first and L4 still needs the typed confirmation. No raw
+  payload/execution_result in any DTO.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

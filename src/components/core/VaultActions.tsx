@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -20,8 +20,16 @@ import { useAuth } from "@/components/AuthProvider";
 import { can } from "@/lib/auth/permissions";
 import type {
   VaultActionDTO, ActionCounts, ApprovalStatus, RiskLevel,
-  ActionType, TargetSystem, ExecutionStatus, AuditEntry,
+  ActionType, TargetSystem, ExecutionStatus, AuditEntry, ActionPriority,
 } from "@/lib/core/actions/types";
+
+const PRIORITY_KEYS = new Set(["low", "medium", "high", "urgent"]);
+const PRIORITY_META: Record<ActionPriority, { label: string; color: string }> = {
+  low: { label: "Low", color: "#6b7a99" },
+  medium: { label: "Medium", color: "#0081f2" },
+  high: { label: "High", color: "#f59e0b" },
+  urgent: { label: "Urgent", color: "#ef4444" },
+};
 
 // Exact phrase an operator must type to confirm an L4 admin-critical execution.
 const L4_CONFIRM_PHRASE = "EXECUTE L4";
@@ -42,9 +50,11 @@ const APPROVAL_META: Record<ApprovalStatus, { label: string; variant: "success" 
   archived: { label: "Archived", variant: "neutral" },
 };
 
-const FILTERS: Array<{ key: ApprovalStatus | "all"; label: string }> = [
+type FilterKey = ApprovalStatus | "all" | "ready";
+const FILTERS: Array<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All" },
   { key: "pending_review", label: "Pending" },
+  { key: "ready", label: "Ready" },
   { key: "approved", label: "Approved" },
   { key: "needs_revision", label: "Revision" },
   { key: "rejected", label: "Rejected" },
@@ -88,13 +98,19 @@ function asObject(v: unknown): Record<string, unknown> {
 }
 function asAuditLog(v: unknown): AuditEntry[] {
   if (!Array.isArray(v)) return [];
+  const optStr = (x: unknown) => (typeof x === "string" ? x.slice(0, 400) : undefined);
   return v
     .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
     .map((e) => ({
       at: asStr(e.at),
       actor: asStr(e.actor, "system"),
       event: asStr(e.event, "event"),
-      detail: typeof e.detail === "string" ? e.detail : undefined,
+      detail: optStr(e.detail),
+      // Preserve the Phase 9.2 lifecycle fields so the timeline renders fully.
+      message: optStr(e.message),
+      previous_status: optStr(e.previous_status),
+      next_status: optStr(e.next_status),
+      note: optStr(e.note),
     }));
 }
 
@@ -132,6 +148,11 @@ function normalizeAction(raw: unknown, idx: number): VaultActionDTO {
     rollback_notes: asNullableStr(r.rollback_notes),
     audit_log: asAuditLog(r.audit_log),
     adapter_enabled: r.adapter_enabled === true,
+    owner: asNullableStr(r.owner),
+    priority: (PRIORITY_KEYS.has(asStr(r.priority)) ? r.priority : null) as ActionPriority | null,
+    due_at: asNullableStr(r.due_at),
+    labels: asStrArray(r.labels),
+    ready_to_execute: r.ready_to_execute === true,
     metadata: asObject(r.metadata),
     created_at: asStr(r.created_at),
     updated_at: asStr(r.updated_at),
@@ -161,7 +182,8 @@ function normalizeCounts(raw: unknown): ActionCounts | null {
     pending_review: n(r.pending_review), approved: n(r.approved), rejected: n(r.rejected),
     needs_revision: n(r.needs_revision), archived: n(r.archived), executed: n(r.executed),
     failed: n(r.failed), adapter_disabled: n(r.adapter_disabled),
-    high_risk_pending: n(r.high_risk_pending), total: n(r.total),
+    high_risk_pending: n(r.high_risk_pending), ready: n(r.ready), ready_urgent_high: n(r.ready_urgent_high),
+    urgent_high_open: n(r.urgent_high_open), total: n(r.total),
   };
 }
 
@@ -173,7 +195,8 @@ export function VaultActions() {
 
   const [actions, setActions] = useState<VaultActionDTO[]>([]);
   const [counts, setCounts] = useState<ActionCounts | null>(null);
-  const [filter, setFilter] = useState<ApprovalStatus | "all">("pending_review");
+  const [filter, setFilter] = useState<FilterKey>("pending_review");
+  const [priorityFilter, setPriorityFilter] = useState<ActionPriority | "all">("all");
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState(false);
@@ -221,20 +244,47 @@ export function VaultActions() {
     return () => { cancelled = true; };
   }, []);
 
-  const visible = useMemo(
-    () => actions.filter((a) => filter === "all" || a.approval_status === filter),
-    [actions, filter]
-  );
+  const visible = useMemo(() => {
+    let list = actions;
+    if (filter === "ready") list = list.filter((a) => a.ready_to_execute);
+    else if (filter !== "all") list = list.filter((a) => a.approval_status === filter);
+    if (priorityFilter !== "all") list = list.filter((a) => a.priority === priorityFilter);
+    return list;
+  }, [actions, filter, priorityFilter]);
   const selected = selectedId ? actions.find((a) => a.id === selectedId) ?? null : null;
 
-  const review = useCallback(async (id: string, action: string) => {
+  const review = useCallback(async (id: string, action: string, notes?: string) => {
     setActing(true); setNotice(null);
     try {
       const res = await fetch(`/api/core/actions/${id}/review`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, notes }),
       });
       const d = await res.json();
       if (!res.ok) { setNotice(d.error ?? "Review failed"); return; }
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
+  const addNote = useCallback(async (id: string, note: string) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/actions/${id}/note`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not add note"); return; }
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
+  const assign = useCallback(async (id: string, patch: Record<string, unknown>) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/actions/${id}/assign`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not update"); return; }
       await load();
     } finally { setActing(false); }
   }, [load]);
@@ -293,15 +343,15 @@ export function VaultActions() {
       {/* Summary stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
         <MiniStat label="Pending" value={counts?.pending_review ?? 0} color="#0081f2" />
-        <MiniStat label="Approved" value={counts?.approved ?? 0} color="#22c55e" />
+        <MiniStat label="Ready to execute" value={counts?.ready ?? 0} color="#22c55e" />
+        <MiniStat label="Needs revision" value={counts?.needs_revision ?? 0} color="#f59e0b" />
         <MiniStat label="Executed" value={counts?.executed ?? 0} color="#a78bfa" />
         <MiniStat label="Adapter disabled" value={counts?.adapter_disabled ?? 0} color="#6b7a99" />
-        <MiniStat label="High-risk pending" value={counts?.high_risk_pending ?? 0} color="#ef4444" />
-        <MiniStat label="Failed" value={counts?.failed ?? 0} color="#f59e0b" />
+        <MiniStat label="Failed" value={counts?.failed ?? 0} color="#ef4444" />
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {FILTERS.map((f) => {
           const active = filter === f.key;
           return (
@@ -311,6 +361,20 @@ export function VaultActions() {
                 ? { background: "rgba(0,129,242,0.14)", border: "1px solid rgba(0,129,242,0.3)", color: "#f8f8f7" }
                 : { background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }}>
               {f.label}
+            </button>
+          );
+        })}
+        <span className="mx-1 h-4 w-px" style={{ background: "var(--t-border-subtle)" }} />
+        {(["all", "urgent", "high", "medium", "low"] as const).map((p) => {
+          const active = priorityFilter === p;
+          const tone = p === "all" ? "#7b82a0" : PRIORITY_META[p].color;
+          return (
+            <button key={p} onClick={() => setPriorityFilter(p)}
+              className="px-2.5 py-1.5 rounded-full text-[11px] font-semibold transition-all"
+              style={active
+                ? { background: `${tone}22`, border: `1px solid ${tone}55`, color: "#f8f8f7" }
+                : { background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }}>
+              {p === "all" ? "Any priority" : PRIORITY_META[p].label}
             </button>
           );
         })}
@@ -341,10 +405,13 @@ export function VaultActions() {
               </div>
               <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                 <VCChip label={a.agent_id} color="#22d3ee" />
-                <VCChip label={a.action_type.replace(/_/g, " ")} color="#a78bfa" />
+                {a.priority && <VCChip label={PRIORITY_META[a.priority].label} color={PRIORITY_META[a.priority].color} />}
+                {a.owner && <VCChip label={`@ ${a.owner}`} color="#0081f2" />}
                 <VCChip label={`→ ${a.target_system}`} color={a.adapter_enabled ? "#22c55e" : "#6b7a99"} />
+                {a.ready_to_execute && <VCChip label="ready" color="#22c55e" />}
                 {!a.adapter_enabled && <VCChip label="adapter disabled" color="#6b7a99" />}
                 {a.execution_status === "executed" && <VCChip label="executed" color="#22c55e" />}
+                {a.execution_status === "failed" && <VCChip label="failed" color="#ef4444" />}
                 <span className="text-[10.5px] ml-auto" style={{ color: "var(--t-dim)" }}>{timeAgo(a.created_at)}</span>
               </div>
             </button>
@@ -354,8 +421,10 @@ export function VaultActions() {
 
       {selected && (
         <ActionDetail
+          key={`${selected.id}:${selected.updated_at}`}
           action={selected} canReview={canReview} canApprove={canApprove} canExecute={canExecute} acting={acting} notice={notice}
-          onReview={(act) => review(selected.id, act)} onExecute={(confirm) => execute(selected.id, confirm)}
+          onReview={(act, notes) => review(selected.id, act, notes)} onExecute={(confirm) => execute(selected.id, confirm)}
+          onNote={(note) => addNote(selected.id, note)} onAssign={(patch) => assign(selected.id, patch)}
           onClose={() => { setSelectedId(null); setNotice(null); }}
         />
       )}
@@ -372,9 +441,10 @@ function MiniStat({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onClose }: {
+function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onClose }: {
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
-  onReview: (a: string) => void; onExecute: (confirm: boolean) => void; onClose: () => void;
+  onReview: (a: string, notes?: string) => void; onExecute: (confirm: boolean) => void;
+  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onClose: () => void;
 }) {
   const meta = (a.metadata ?? {}) as {
     quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
@@ -384,13 +454,18 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
   const gen = meta.generation;
   const dupScore = typeof qg?.duplicate_score === "number" ? qg.duplicate_score : null;
   const evidenceCount = typeof gen?.evidence_count === "number" ? gen.evidence_count : a.evidence.length;
-  const executable = a.approval_status === "approved" && a.adapter_enabled && a.execution_status !== "executed";
+  const executable = a.ready_to_execute;
   // L4 admin-critical actions require a REAL explicit confirmation: the operator must
   // type the exact phrase before we ever send confirm:true. A normal Execute click can
   // never auto-confirm an admin-critical action.
   const needsConfirm = a.risk_level === "level_4_admin_critical";
   const [l4Phrase, setL4Phrase] = useState("");
   const l4Confirmed = l4Phrase.trim() === L4_CONFIRM_PHRASE;
+  // Phase 9.2 triage controls.
+  const [reviewMode, setReviewMode] = useState<null | "reject" | "request_revision">(null);
+  const [reason, setReason] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [ownerText, setOwnerText] = useState(a.owner ?? "");
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
@@ -409,6 +484,9 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
             <VCStatusBadge label={approvalMeta(a.approval_status).label} variant={approvalMeta(a.approval_status).variant} dot />
             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-full" style={{ color: riskMeta(a.risk_level).color, background: `${riskMeta(a.risk_level).color}18`, border: `1px solid ${riskMeta(a.risk_level).color}38` }}>{riskMeta(a.risk_level).label}</span>
             <VCChip label={`→ ${a.target_system}`} color={a.adapter_enabled ? "#22c55e" : "#6b7a99"} />
+            {a.priority && <VCChip label={`${PRIORITY_META[a.priority].label} priority`} color={PRIORITY_META[a.priority].color} />}
+            {a.owner && <VCChip label={`owner: ${a.owner}`} color="#0081f2" />}
+            {a.ready_to_execute && <VCChip label="ready to execute" color="#22c55e" />}
             {qg?.qualityScore !== undefined && <span className="inline-flex items-center gap-1"><Gauge size={11} style={{ color: "#22d3ee" }} /><span className="text-[11px] font-semibold" style={{ color: "#22d3ee" }}>{Math.round((qg.qualityScore ?? 0) * 100)}</span></span>}
           </div>
 
@@ -452,18 +530,54 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
             <p className="text-[11px] mt-1" style={{ color: "var(--t-dim)" }}>Execution status: {a.execution_status.replace(/_/g, " ")}{a.execution_error ? ` · ${a.execution_error}` : ""}</p>
           </div>
 
-          {/* Audit log */}
+          {/* Lifecycle timeline */}
           {a.audit_log.length > 0 && (
             <div>
-              <p className="vc-label mb-2 flex items-center gap-1.5"><History size={12} /> Audit log</p>
+              <p className="vc-label mb-2 flex items-center gap-1.5"><History size={12} /> Lifecycle timeline</p>
               <div className="space-y-1.5">
-                {a.audit_log.slice().reverse().map((e, i) => (
-                  <div key={i} className="px-3 py-1.5 rounded-lg text-[11.5px]" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
-                    <span className="font-semibold" style={{ color: "var(--t-text)" }}>{e.event}</span>
-                    <span style={{ color: "var(--t-dim)" }}> · {e.actor} · {timeAgo(e.at)}</span>
-                    {e.detail && <span style={{ color: "var(--t-muted)" }}> — {e.detail}</span>}
-                  </div>
+                {a.audit_log.slice().reverse().map((e, i) => {
+                  const transition = e.previous_status && e.next_status && e.previous_status !== e.next_status
+                    ? `${String(e.previous_status).replace(/_/g, " ")} → ${String(e.next_status).replace(/_/g, " ")}` : null;
+                  const body = e.note ?? e.message ?? e.detail;
+                  return (
+                    <div key={i} className="px-3 py-1.5 rounded-lg text-[11.5px]" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                      <span className="font-semibold" style={{ color: "var(--t-text)" }}>{String(e.event).replace(/_/g, " ")}</span>
+                      <span style={{ color: "var(--t-dim)" }}> · {e.actor} · {timeAgo(e.at)}</span>
+                      {transition && <span style={{ color: "#4da6ff" }}> · {transition}</span>}
+                      {body && <span style={{ color: "var(--t-muted)" }}> — {body}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Triage — owner / priority / note (internal only) */}
+          {canReview && (
+            <div className="px-3.5 py-3 rounded-xl space-y-3" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+              <p className="vc-label flex items-center gap-1.5"><UserCog size={12} /> Triage (internal)</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px]" style={{ color: "var(--t-dim)" }}>Priority:</span>
+                {(["low", "medium", "high", "urgent"] as const).map((p) => (
+                  <button key={p} onClick={() => onAssign({ priority: p })} disabled={acting}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all disabled:opacity-50"
+                    style={a.priority === p
+                      ? { background: `${PRIORITY_META[p].color}22`, border: `1px solid ${PRIORITY_META[p].color}66`, color: PRIORITY_META[p].color }
+                      : { background: "var(--t-bg)", border: "1px solid var(--t-border-subtle)", color: "var(--t-muted)" }}>
+                    {PRIORITY_META[p].label}
+                  </button>
                 ))}
+                {a.priority && <button onClick={() => onAssign({ priority: null })} disabled={acting} className="text-[11px] disabled:opacity-50" style={{ color: "var(--t-dim)" }}>clear</button>}
+              </div>
+              <div className="flex items-center gap-2">
+                <input value={ownerText} onChange={(e) => setOwnerText(e.target.value)} placeholder="Assign owner (name or @handle)"
+                  className="flex-1 px-3 py-2 rounded-lg text-[12px] outline-none" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)", color: "var(--t-text)" }} />
+                <ActBtn icon={UserCog} label="Assign" tone="#0081f2" disabled={acting || ownerText.trim() === (a.owner ?? "")} onClick={() => onAssign({ owner: ownerText.trim() || null })} />
+              </div>
+              <div className="flex items-start gap-2">
+                <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add an internal note…" rows={2}
+                  className="flex-1 px-3 py-2 rounded-lg text-[12px] outline-none resize-none" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)", color: "var(--t-text)" }} />
+                <ActBtn icon={StickyNote} label="Note" tone="#a78bfa" disabled={acting || !noteText.trim()} onClick={() => { onNote(noteText.trim()); setNoteText(""); }} />
               </div>
             </div>
           )}
@@ -471,12 +585,18 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
           {/* Human controls */}
           <div className="pt-2" style={{ borderTop: "1px solid var(--t-border-subtle)" }}>
             {canReview && (a.approval_status === "pending_review" || a.approval_status === "needs_revision") && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {canApprove && <ActBtn icon={CheckCircle2} label="Approve" tone="#22c55e" disabled={acting} onClick={() => onReview("approve")} />}
-                <ActBtn icon={RotateCcw} label="Request revision" tone="#f59e0b" disabled={acting} onClick={() => onReview("request_revision")} />
-                <ActBtn icon={XCircle} label="Reject" tone="#ef4444" disabled={acting} onClick={() => onReview("reject")} />
-                <ActBtn icon={Archive} label="Archive" tone="#6b7a99" disabled={acting} onClick={() => onReview("archive")} />
-              </div>
+              reviewMode ? (
+                <ReasonPanel mode={reviewMode} reason={reason} setReason={setReason} acting={acting}
+                  onConfirm={() => { onReview(reviewMode, reason); setReviewMode(null); setReason(""); }}
+                  onCancel={() => { setReviewMode(null); setReason(""); }} />
+              ) : (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {canApprove && <ActBtn icon={CheckCircle2} label="Approve" tone="#22c55e" disabled={acting} onClick={() => onReview("approve")} />}
+                  <ActBtn icon={RotateCcw} label="Request revision" tone="#f59e0b" disabled={acting} onClick={() => setReviewMode("request_revision")} />
+                  <ActBtn icon={XCircle} label="Reject" tone="#ef4444" disabled={acting} onClick={() => setReviewMode("reject")} />
+                  <ActBtn icon={Archive} label="Archive" tone="#6b7a99" disabled={acting} onClick={() => onReview("archive")} />
+                </div>
+              )
             )}
 
             {a.approval_status === "approved" && (
@@ -514,11 +634,17 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
                 )}
                 {/* Withdrawal — governance can always pull back an approval before execution. */}
                 {canReview && a.execution_status !== "executed" && a.execution_status !== "executing" && (
-                  <div className="flex flex-wrap gap-2">
-                    <ActBtn icon={RotateCcw} label="Send back to revision" tone="#f59e0b" disabled={acting} onClick={() => onReview("request_revision")} />
-                    <ActBtn icon={XCircle} label="Reject" tone="#ef4444" disabled={acting} onClick={() => onReview("reject")} />
-                    <ActBtn icon={Archive} label="Archive" tone="#6b7a99" disabled={acting} onClick={() => onReview("archive")} />
-                  </div>
+                  reviewMode ? (
+                    <ReasonPanel mode={reviewMode} reason={reason} setReason={setReason} acting={acting}
+                      onConfirm={() => { onReview(reviewMode, reason); setReviewMode(null); setReason(""); }}
+                      onCancel={() => { setReviewMode(null); setReason(""); }} />
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <ActBtn icon={RotateCcw} label="Send back to revision" tone="#f59e0b" disabled={acting} onClick={() => setReviewMode("request_revision")} />
+                      <ActBtn icon={XCircle} label="Reject" tone="#ef4444" disabled={acting} onClick={() => setReviewMode("reject")} />
+                      <ActBtn icon={Archive} label="Archive" tone="#6b7a99" disabled={acting} onClick={() => onReview("archive")} />
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -530,6 +656,31 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ReasonPanel({ mode, reason, setReason, acting, onConfirm, onCancel }: {
+  mode: "reject" | "request_revision"; reason: string; setReason: (s: string) => void;
+  acting: boolean; onConfirm: () => void; onCancel: () => void;
+}) {
+  const isReject = mode === "reject";
+  const tone = isReject ? "#ef4444" : "#f59e0b";
+  return (
+    <div className="mt-3 space-y-2.5 px-3 py-3 rounded-xl" style={{ background: `${tone}10`, border: `1px solid ${tone}3a` }}>
+      <p className="text-[12px] font-semibold" style={{ color: tone }}>
+        {isReject ? "Reject this action" : "Request a revision"} — a reason is required
+      </p>
+      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+        placeholder={isReject ? "Why is this being rejected?" : "What should the agent change before this can be approved?"}
+        className="w-full px-3 py-2 rounded-lg text-[12.5px] outline-none resize-none"
+        style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border)", color: "var(--t-text)" }} />
+      <div className="flex gap-2">
+        <VCButton onClick={onConfirm} disabled={acting || !reason.trim()}>
+          {isReject ? <XCircle size={13} /> : <RotateCcw size={13} />} Confirm {isReject ? "reject" : "revision"}
+        </VCButton>
+        <button onClick={onCancel} disabled={acting} className="px-3 py-2 rounded-lg text-[12.5px] font-semibold disabled:opacity-50" style={{ color: "var(--t-muted)" }}>Cancel</button>
       </div>
     </div>
   );

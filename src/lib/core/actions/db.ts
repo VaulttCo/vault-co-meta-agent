@@ -7,8 +7,9 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isAdapterEnabled } from "./policies";
+import { canExecute } from "./execution-policy";
 import { scrubText } from "./validation";
-import type { VaultAction, VaultActionDTO, ActionCounts, AuditEntry } from "./types";
+import type { VaultAction, VaultActionDTO, ActionCounts, AuditEntry, ActionPriority } from "./types";
 
 const TABLE = "vault_actions";
 
@@ -93,6 +94,26 @@ export async function updateAction(id: string, patch: Partial<VaultAction>): Pro
 }
 
 /**
+ * Compare-and-set update: applies `patch` ONLY if the row's `updated_at` still equals
+ * `expectedUpdatedAt`. Returns null if it lost the race (someone else wrote first).
+ * Used by the metadata/audit helpers so concurrent lifecycle entries are never lost
+ * (caller refetches + retries on null).
+ */
+async function updateActionGuarded(id: string, expectedUpdatedAt: string, patch: Partial<VaultAction>): Promise<VaultAction | null> {
+  const next = { ...patch, updated_at: new Date().toISOString() };
+  const client = db();
+  if (!client) {
+    const idx = mock.findIndex((a) => a.id === id);
+    if (idx < 0 || mock[idx].updated_at !== expectedUpdatedAt) return null;
+    mock[idx] = { ...mock[idx], ...next } as VaultAction;
+    return mock[idx];
+  }
+  const { data, error } = await client.from(TABLE).update(next).eq("id", id).eq("updated_at", expectedUpdatedAt).select("*").maybeSingle();
+  if (error || !data) return null;
+  return data as VaultAction;
+}
+
+/**
  * Apply a REVIEW transition (approve/reject/request_revision/archive) ONLY when
  * the row is currently in one of `fromStates` AND not mid-execution/executed.
  * Conditional compare-and-set so a review can never race a claimed/executing
@@ -103,91 +124,157 @@ export async function updateAction(id: string, patch: Partial<VaultAction>): Pro
  */
 export async function reviewTransition(
   id: string,
-  patch: Partial<VaultAction>,
+  statusPatch: Partial<VaultAction>,
   fromStates: string[],
+  auditEntry: AuditEntry | AuditEntry[],
 ): Promise<VaultAction | null> {
-  const next = { ...patch, updated_at: new Date().toISOString() };
-  const client = db();
-  if (!client) {
-    const idx = mock.findIndex((a) => a.id === id);
-    if (idx < 0) return null;
-    // Single-winner: only an allowed prior state on a non-executing/executed row.
-    if (!fromStates.includes(mock[idx].approval_status)) return null;
-    if (mock[idx].execution_status === "executing" || mock[idx].execution_status === "executed") return null;
-    mock[idx] = { ...mock[idx], ...next } as VaultAction;
-    return mock[idx];
+  const entries = Array.isArray(auditEntry) ? auditEntry : [auditEntry];
+  // Compare-and-retry: rebuild audit_log from the FRESHEST row (so a concurrent
+  // note/assign that landed first isn't dropped), guarded by both the status
+  // invariants AND updated_at. A wrong prior state returns null immediately.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const fresh = await getAction(id);
+    if (!fresh) return null;
+    if (!fromStates.includes(fresh.approval_status)) return null;
+    if (fresh.execution_status === "executing" || fresh.execution_status === "executed") return null;
+    let log = fresh.audit_log ?? [];
+    for (const e of entries) log = appendAudit({ ...fresh, audit_log: log }, e);
+    const next = { ...statusPatch, audit_log: log, updated_at: new Date().toISOString() };
+    const client = db();
+    if (!client) {
+      const idx = mock.findIndex((a) => a.id === id);
+      if (idx < 0) return null;
+      mock[idx] = { ...mock[idx], ...next } as VaultAction;
+      return mock[idx];
+    }
+    const { data, error } = await client
+      .from(TABLE)
+      .update(next)
+      .eq("id", id)
+      .eq("updated_at", fresh.updated_at)
+      .in("approval_status", fromStates)
+      .neq("execution_status", "executing")
+      .neq("execution_status", "executed")
+      .select("*")
+      .maybeSingle();
+    if (error) return null;
+    if (data) return data as VaultAction;
+    // null → lost the updated_at race; re-read and retry (or bail if guards now fail).
   }
-  const { data, error } = await client
-    .from(TABLE)
-    .update(next)
-    .eq("id", id)
-    .in("approval_status", fromStates)
-    .neq("execution_status", "executing")
-    .neq("execution_status", "executed")
-    .select("*")
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as VaultAction;
+  return null;
 }
 
 /**
  * Finalize a claimed execution — apply the result ONLY while the row is still in
- * our `executing` claim. If something else changed it, do nothing (returns null).
+ * our `executing` claim. Rebuilds audit_log from the freshest row (preserving a
+ * note added DURING execution) and appends the given lifecycle entries. Guarded by
+ * execution_status === "executing" + updated_at. Returns null if the claim was lost.
  */
-export async function finalizeExecution(id: string, patch: Partial<VaultAction>): Promise<VaultAction | null> {
-  const next = { ...patch, updated_at: new Date().toISOString() };
-  const client = db();
-  if (!client) {
-    const idx = mock.findIndex((a) => a.id === id);
-    if (idx < 0 || mock[idx].execution_status !== "executing") return null;
-    mock[idx] = { ...mock[idx], ...next } as VaultAction;
-    return mock[idx];
+export async function finalizeExecution(id: string, patch: Partial<VaultAction>, auditEntries: AuditEntry[]): Promise<VaultAction | null> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const fresh = await getAction(id);
+    if (!fresh || fresh.execution_status !== "executing") return null;
+    let log = fresh.audit_log ?? [];
+    for (const e of auditEntries) log = appendAudit({ ...fresh, audit_log: log }, e);
+    const next = { ...patch, audit_log: log, updated_at: new Date().toISOString() };
+    const client = db();
+    if (!client) {
+      const idx = mock.findIndex((a) => a.id === id);
+      if (idx < 0 || mock[idx].execution_status !== "executing") return null;
+      mock[idx] = { ...mock[idx], ...next } as VaultAction;
+      return mock[idx];
+    }
+    const { data, error } = await client
+      .from(TABLE)
+      .update(next)
+      .eq("id", id)
+      .eq("execution_status", "executing")
+      .eq("updated_at", fresh.updated_at)
+      .select("*")
+      .maybeSingle();
+    if (error) return null;
+    if (data) return data as VaultAction;
+    // null → a concurrent note bumped updated_at; re-read and retry.
   }
-  const { data, error } = await client
-    .from(TABLE)
-    .update(next)
-    .eq("id", id)
-    .eq("execution_status", "executing")
-    .select("*")
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as VaultAction;
+  return null;
 }
 
 export function appendAudit(action: VaultAction, entry: AuditEntry): AuditEntry[] {
   return [...(action.audit_log ?? []), entry].slice(-50);
 }
 
+export interface TriagePatch {
+  owner?: string | null;
+  priority?: ActionPriority | null;
+  due_at?: string | null;
+  labels?: string[];
+}
+
 /**
- * Atomically CLAIM an action for execution — compare-and-set to `executing` only
- * when it is not already executing/executed/cancelled. Prevents concurrent
- * double-execution (the internal adapter writing memory/activity twice). Returns
- * the claimed action, or null if another request already claimed it.
+ * Apply an owner/priority/due/labels patch (Phase 9.2) into `metadata.assignment`,
+ * merged with any existing assignment, plus an audit entry. This NEVER changes
+ * approval/execution status and never touches generation metadata or human notes —
+ * it is pure internal triage. Mock-safe via updateAction.
  */
-const UNCLAIMABLE = ["executing", "executed", "cancelled"];
+export async function applyTriagePatch(action: VaultAction, patch: TriagePatch, entry: AuditEntry): Promise<VaultAction | null> {
+  // Compare-and-retry: always append the audit entry onto the freshest row's
+  // audit_log, guarded by updated_at, so a concurrent note/assign/review can never
+  // silently drop a lifecycle entry.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const fresh = attempt === 0 ? action : await getAction(action.id);
+    if (!fresh) return null;
+    const assignment: Record<string, unknown> = { ...triage(fresh.metadata) };
+    if ("owner" in patch) assignment.owner = patch.owner;
+    if ("priority" in patch) assignment.priority = patch.priority;
+    if ("due_at" in patch) assignment.due_at = patch.due_at;
+    if ("labels" in patch) assignment.labels = patch.labels;
+    const metadata = { ...(fresh.metadata ?? {}), assignment };
+    const updated = await updateActionGuarded(fresh.id, fresh.updated_at, { metadata, audit_log: appendAudit(fresh, entry) });
+    if (updated) return updated;
+  }
+  return null;
+}
+
+/** Append a sanitized human note as an audit entry only (no status/metadata change).
+ *  Compare-and-retry so a concurrent write can never lose the note from the log. */
+export async function addActionNote(action: VaultAction, entry: AuditEntry): Promise<VaultAction | null> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const fresh = attempt === 0 ? action : await getAction(action.id);
+    if (!fresh) return null;
+    const updated = await updateActionGuarded(fresh.id, fresh.updated_at, { audit_log: appendAudit(fresh, entry) });
+    if (updated) return updated;
+  }
+  return null;
+}
+
+/**
+ * Atomically CLAIM an action for execution — compare-and-set to `executing` ONLY
+ * from the `ready_after_approval` state on an approved row. Requiring that exact
+ * starting state (not merely "not terminal") means a `failed`/`blocked`/`not_ready`
+ * action can never be (re-)executed, and prevents concurrent double-execution.
+ * Returns the claimed action, or null if it wasn't claimable.
+ */
 export async function claimForExecution(id: string): Promise<VaultAction | null> {
   const now = new Date().toISOString();
   const client = db();
   if (!client) {
     const a = mock.find((x) => x.id === id);
-    if (!a || UNCLAIMABLE.includes(a.execution_status)) return null;
+    if (!a || a.execution_status !== "ready_after_approval") return null;
     // Claim ONLY a still-approved action — closes the TOCTOU vs request_revision.
     if (a.approval_status !== "approved" || !a.approved_by) return null;
     a.execution_status = "executing";
     a.updated_at = now;
     return a;
   }
-  // Compare-and-set includes the approval invariants atomically: a concurrent
-  // review can't leave the row claimable once it's no longer approved.
+  // Compare-and-set includes the approval + ready invariants atomically: a concurrent
+  // review can't leave the row claimable once it's no longer approved-and-ready.
   const { data, error } = await client
     .from(TABLE)
     .update({ execution_status: "executing", updated_at: now })
     .eq("id", id)
     .eq("approval_status", "approved")
     .not("approved_by", "is", null)
-    .neq("execution_status", "executing")
-    .neq("execution_status", "executed")
-    .neq("execution_status", "cancelled")
+    .eq("execution_status", "ready_after_approval")
     .select("*")
     .maybeSingle();
   if (error || !data) return null;
@@ -224,12 +311,77 @@ export function toActionDTO(a: VaultAction): VaultActionDTO {
     executed_at: a.executed_at,
     execution_error: a.execution_error,
     rollback_notes: a.rollback_notes,
-    audit_log: a.audit_log ?? [],
+    audit_log: sanitizeAuditLog(a.audit_log),
     adapter_enabled: isAdapterEnabled(a.target_system),
+    owner: readOwner(a.metadata),
+    priority: readPriority(a.metadata),
+    due_at: readDueAt(a.metadata),
+    labels: readLabels(a.metadata),
+    ready_to_execute: isReadyToExecute(a),
     metadata: stripMetadata(a.metadata ?? {}),
     created_at: a.created_at,
     updated_at: a.updated_at,
   };
+}
+
+// ── Phase 9.2 triage-field readers (sanitized; metadata-stored) ──
+const PRIORITIES = new Set<ActionPriority>(["low", "medium", "high", "urgent"]);
+function triage(m: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const t = (m ?? {}).assignment;
+  return t && typeof t === "object" && !Array.isArray(t) ? (t as Record<string, unknown>) : {};
+}
+function readOwner(m: Record<string, unknown> | null | undefined): string | null {
+  const v = triage(m).owner;
+  return typeof v === "string" && v.trim() ? scrubText(v).slice(0, 120) : null;
+}
+function readPriority(m: Record<string, unknown> | null | undefined): ActionPriority | null {
+  const v = triage(m).priority;
+  return typeof v === "string" && PRIORITIES.has(v as ActionPriority) ? (v as ActionPriority) : null;
+}
+function readDueAt(m: Record<string, unknown> | null | undefined): string | null {
+  const v = triage(m).due_at;
+  if (typeof v !== "string") return null;
+  const t = new Date(v).getTime();
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+function readLabels(m: Record<string, unknown> | null | undefined): string[] {
+  const v = triage(m).labels;
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map((x) => scrubText(x).slice(0, 40)).slice(0, 10) : [];
+}
+
+// Sanitize audit_log for the DTO: whitelist known fields, scrub + cap free text, and
+// DROP the arbitrary `metadata` blob entirely — so a backfilled/service-role/future
+// audit entry can never leak raw metadata/PII/secrets to canViewApprovals clients.
+function sanitizeAuditLog(log: AuditEntry[] | null | undefined): AuditEntry[] {
+  if (!Array.isArray(log)) return [];
+  const cap = (v: unknown, n: number) => (typeof v === "string" ? scrubText(v).slice(0, n) : undefined);
+  return log.slice(-50).map((e) => {
+    const out: AuditEntry = {
+      at: typeof e.at === "string" ? e.at : "",
+      actor: cap(e.actor, 120) ?? "system",
+      event: cap(e.event, 60) ?? "event",
+    };
+    const detail = cap(e.detail, 400); if (detail) out.detail = detail;
+    const message = cap(e.message, 400); if (message) out.message = message;
+    const prev = cap(e.previous_status, 60); if (prev) out.previous_status = prev;
+    const next = cap(e.next_status, 60); if (next) out.next_status = next;
+    const note = cap(e.note, 400); if (note) out.note = note;
+    // `metadata` is intentionally NOT surfaced.
+    return out;
+  });
+}
+
+/**
+ * Executable-now. Delegates to the SAME `canExecute()` policy used by the execute
+ * route (so the Ready queue / DTO flag can never disagree with the actual gate). We
+ * pass role=admin + confirm=true to neutralize the viewer-role and L4-confirm checks
+ * — those are about WHO/HOW, not whether the action itself is ready — leaving the
+ * full ROW-level invariants (action_type authority, target/risk match, approved_by,
+ * Vera/Vesper safety, enabled adapter, `ready_after_approval`). A malformed/backfilled
+ * row that would fail policy therefore never appears ready or enables the execute UI.
+ */
+export function isReadyToExecute(a: VaultAction): boolean {
+  return canExecute(a, { role: "admin", confirm: true }).allowed;
 }
 
 // Only expose safe metadata keys (quality gate scores + flags) — never arbitrary
@@ -274,8 +426,10 @@ export async function getActionCounts(): Promise<ActionCounts> {
   const all = await getActions(1000);
   const counts: ActionCounts = {
     pending_review: 0, approved: 0, rejected: 0, needs_revision: 0, archived: 0,
-    executed: 0, failed: 0, adapter_disabled: 0, high_risk_pending: 0, total: all.length,
+    executed: 0, failed: 0, adapter_disabled: 0, high_risk_pending: 0,
+    ready: 0, ready_urgent_high: 0, urgent_high_open: 0, total: all.length,
   };
+  const OPEN = new Set(["pending_review", "approved", "needs_revision"]);
   for (const a of all) {
     if (a.approval_status in counts) (counts as unknown as Record<string, number>)[a.approval_status] += 1;
     if (a.execution_status === "executed") counts.executed += 1;
@@ -284,6 +438,10 @@ export async function getActionCounts(): Promise<ActionCounts> {
     if (a.approval_status === "pending_review" && (a.risk_level === "level_3_money_ads_workflow" || a.risk_level === "level_4_admin_critical")) {
       counts.high_risk_pending += 1;
     }
+    const pr = readPriority(a.metadata);
+    const urgentHigh = pr === "urgent" || pr === "high";
+    if (isReadyToExecute(a)) { counts.ready += 1; if (urgentHigh) counts.ready_urgent_high += 1; }
+    if (OPEN.has(a.approval_status) && urgentHigh) counts.urgent_high_open += 1;
   }
   return counts;
 }

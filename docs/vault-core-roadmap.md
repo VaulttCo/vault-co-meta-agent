@@ -88,6 +88,25 @@ send-adapter boundary. `draft_lead_reply`/`draft_client_message` actions are rec
 to the disabled send lane. No new active agents; no external execution. See
 [`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.4).
 
+## Phase 9.5 — Meta Campaign Action Builder, Draft Mode (live)
+
+Agents design structured Meta campaign **plans** (strategy, objective, offer angle,
+audience, ad-set structure, creative direction, ad copy, lead-form draft, budget
+recommendation, launch checklist, missing inputs, compliance notes) for human review at
+`/meta-campaign-drafts`; humans approve them **internally only**. **Draft-only** — there
+is no live Meta adapter: no campaign is launched, no budget is changed, no ad set/ad is
+created, no lead form is published, no Meta API is called, and no Meta credentials/tokens
+are used. New `meta_campaign_drafts` table (RLS on, no policies), `src/lib/core/campaign-
+drafts/**`, `/api/core/meta-campaign-drafts*` (incl. `from-action` and
+`from-competitor-intel`), 10 starter templates, and an explicit disabled Meta-adapter
+boundary. The `draft_meta_campaign` action is reclassified from the internal `content`
+lane to the disabled `meta` lane (L2 → L3, admin approval) so it is `adapter_disabled`
+from birth and only ever seeds an internal campaign DRAFT. Valentina can propose response
+angles from **internal** competitor intel (no scraping, no live Meta Ads Library call).
+Approving internally → `future_adapter_required`. No new active agents; no external
+execution. See [`vault-core-execution-engine.md`](./vault-core-execution-engine.md)
+(Phase 9.5).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

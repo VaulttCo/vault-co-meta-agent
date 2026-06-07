@@ -39,6 +39,7 @@ import {
   Radar,
   Play,
   Workflow,
+  Target,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -61,6 +62,7 @@ const vaultCoreNavItems: NavItem[] = [
   { label: "Actions",           href: "/actions",         icon: Play,          permission: "canViewApprovals" },
   { label: "GHL Workflows",     href: "/ghl-workflows",   icon: Workflow,      permission: "canViewApprovals" },
   { label: "Message Drafts",    href: "/message-drafts",  icon: MessageSquare, permission: "canViewApprovals" },
+  { label: "Meta Campaign Drafts", href: "/meta-campaign-drafts", icon: Target, permission: "canViewApprovals" },
   { label: "Drafts",            href: "/drafts",          icon: MessageSquare, permission: "canViewApprovals" },
   { label: "System Proposals",  href: "/proposals",       icon: Wrench,        permission: "canViewApprovals" },
   { label: "Competitor Intel",  href: "/competitor-intel", icon: Radar,        permission: "canViewStrategyData" },
@@ -165,7 +167,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   // ── Determine portal context ─────────────────────────────────────────────
   const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
   const isVictoria = pathname.startsWith("/victoria");
-  const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime", "/actions", "/ghl-workflows", "/message-drafts"];
+  const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime", "/actions", "/ghl-workflows", "/message-drafts", "/meta-campaign-drafts"];
   const isVaultCore = VAULT_CORE_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   const portalLabel = isRevenueDashboard

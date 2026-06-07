@@ -22,8 +22,13 @@ export const ACTION_META: Record<ActionType, ActionMeta> = {
   prepare_budget_recommendation: { target: "internal", risk: "level_1_internal_action" },
   draft_report:                { target: "report",   risk: "level_1_internal_action" },
   // Client-facing DRAFTS (internal artifacts) — require approval (level 2).
-  draft_meta_campaign:         { target: "content",  risk: "level_2_client_facing_message" },
   draft_invoice:               { target: "report",   risk: "level_2_client_facing_message" },
+  // Meta campaign draft action (Phase 9.5) — its target is the DISABLED `meta` adapter,
+  // NOT the internal `content` lane. This keeps it `adapter_disabled` from birth and
+  // after approval (it can NEVER execute/launch via any adapter); it only seeds an
+  // internal Meta campaign DRAFT planning artifact via /api/core/meta-campaign-drafts.
+  // Money/ads tier (L3) → requires an ADMIN approver, matching the GHL workflow draft.
+  draft_meta_campaign:         { target: "meta",     risk: "level_3_money_ads_workflow" },
   // Message draft actions (Phase 9.4) — their target is the DISABLED send lane (sms/
   // email), NOT the internal `content` lane. This keeps them `adapter_disabled` from
   // birth and after approval (they can NEVER execute/send via any adapter); they only

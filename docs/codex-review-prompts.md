@@ -161,6 +161,27 @@ Vault Core safety invariants (flag ANY violation as P0):
   email) and stay `adapter_disabled`. The table is `vault_core_message_drafts` (distinct
   from the Phase 6 `vault_message_drafts`). No new active agents.
 
+- Meta Campaign Action Builder DRAFT MODE (Phase 9.5, `/meta-campaign-drafts`,
+  `src/lib/core/campaign-drafts/**`, `/api/core/meta-campaign-drafts*`,
+  `meta_campaign_drafts`): agents DESIGN structured Meta campaign PLANS; humans review/
+  approve them INSIDE Vault Core. This is **draft-only — there is NO live Meta adapter**.
+  Designing/reviewing/approving a campaign draft internally is EXPECTED and allowed.
+  **Flag P0** if any code: creates/updates/launches/activates a live Meta campaign, ad
+  set, ad, or lead form; performs any Meta budget mutation (or treats `budget_recommendation`
+  as a live numeric value sent to a Meta API); uses or imports Meta credentials/access
+  tokens or a Facebook/Meta SDK/HTTP client in the campaign-drafts module; calls the Meta
+  Graph/Marketing API or the Meta Ads Library; scrapes or live-fetches competitor data
+  (the `from-competitor-intel` route must read ONLY internal Vault Core profiles/captures);
+  adds a launch/publish/execute route for campaign drafts; exposes raw provider payloads/
+  credentials or live campaign/ad-account IDs (DTOs return safe_preview + sanitized fields
+  only); bypasses approval; or weakens auth/RLS. `approve_internal` must NOT launch (it
+  moves the draft to `future_adapter_required`) and requires an admin. `campaign-drafts/
+  adapters/meta-disabled.ts` must perform NO I/O. `ACTION_META.draft_meta_campaign` must
+  map to the DISABLED `meta` lane (never an internal/executable target). The UI must have
+  NO "Launch/Publish/Push Live/Update Budget/Create Ad Set/Create Ad/Activate" controls.
+  No new active agents; tick cadence unchanged; Codex must not be a production runtime
+  dependency.
+
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.
 - Secret exposure: hardcoded keys, NEXT_PUBLIC_ secrets, secrets logged or returned from an API,

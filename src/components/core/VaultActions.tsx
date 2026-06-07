@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare, Target,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -323,6 +323,23 @@ export function VaultActions() {
     } finally { setActing(false); }
   }, [load]);
 
+  // Create a Meta campaign DRAFT from an approved draft_meta_campaign action. Draft-only
+  // — it never launches, never changes a budget, and never changes the action's adapter state.
+  const createCampaignDraft = useCallback(async (id: string) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/meta-campaign-drafts/from-action`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_id: id }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not create campaign draft"); return; }
+      setNotice(d.existing
+        ? "A Meta campaign draft already exists for this action — open Meta Campaign Drafts to review it."
+        : "Meta campaign draft created (draft-only) — open Meta Campaign Drafts to review it.");
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
   const execute = useCallback(async (id: string, confirm: boolean) => {
     setActing(true); setNotice(null);
     try {
@@ -461,6 +478,7 @@ export function VaultActions() {
           onNote={(note) => addNote(selected.id, note)} onAssign={(patch) => assign(selected.id, patch)}
           onCreateWorkflowDraft={() => createWorkflowDraft(selected.id)}
           onCreateMessageDraft={() => createMessageDraft(selected.id)}
+          onCreateCampaignDraft={() => createCampaignDraft(selected.id)}
           onClose={() => { setSelectedId(null); setNotice(null); }}
         />
       )}
@@ -477,10 +495,10 @@ function MiniStat({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onClose }: {
+function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onCreateCampaignDraft, onClose }: {
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
   onReview: (a: string, notes?: string) => void; onExecute: (confirm: boolean) => void;
-  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onClose: () => void;
+  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onCreateCampaignDraft: () => void; onClose: () => void;
 }) {
   const meta = (a.metadata ?? {}) as {
     quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
@@ -682,6 +700,16 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
                       <ActBtn icon={MessageSquare} label="Create message draft" tone="#c9a84c" disabled={acting} onClick={onCreateMessageDraft} />
                       <a href="/message-drafts" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
                         <MessageSquare size={13} /> View message drafts
+                      </a>
+                    </div>
+                  </div>
+                ) : a.action_type === "draft_meta_campaign" && a.target_system === "meta" ? (
+                  <div className="space-y-2 px-3 py-3 rounded-xl" style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.26)" }}>
+                    <p className="text-[11.5px] flex items-center gap-1.5" style={{ color: "#e8c97a" }}><ShieldAlert size={12} /> Approved internally · Meta adapter disabled — a future approved adapter is required to launch. No campaign is launched, no budget is changed.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <ActBtn icon={Target} label="Create Meta campaign draft" tone="#c9a84c" disabled={acting} onClick={onCreateCampaignDraft} />
+                      <a href="/meta-campaign-drafts" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
+                        <Target size={13} /> View Meta campaign drafts
                       </a>
                     </div>
                   </div>

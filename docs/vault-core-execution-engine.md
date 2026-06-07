@@ -260,6 +260,53 @@ or raw contact PII (only a sanitized `contact_ref`) are stored or returned.
   `adapter_disabled`); auto-generation stays internal-only/capped/deduped; all
   client/lead-facing messages are human-approved and never sent.
 
+## Phase 9.5 — Meta Campaign Action Builder, Draft Mode
+- **What it is:** agents design structured Meta campaign **plans** for human review at
+  `/meta-campaign-drafts`. **Draft-only** — there is NO live Meta adapter. Nothing is
+  launched, no budget is changed, no ad set/ad is created, no lead form is published, no
+  Meta Graph/Marketing API is called, and no Meta credentials/access tokens are used.
+- **Model** (`src/lib/core/campaign-drafts/**`): a `VaultMetaCampaignDraft` carries
+  campaign_type, objective, offer_angle, audience, ad_sets[], creative_direction[],
+  ad_copy{primary_texts,headlines,descriptions}, lead_form{intro,questions,privacy_note},
+  budget_recommendation (human-readable advisory text ONLY — never a numeric value bound
+  for a Meta API, never an ad-account id), launch_checklist, missing_inputs,
+  compliance_notes, safe_preview, evidence, audit_log. `target_system` is pinned to
+  `meta`; `risk_level` defaults to `level_3_money_ads_workflow`.
+- **Statuses:** { `draft` | `pending_review` | `approved_internal` | `needs_revision` |
+  `rejected` | `archived` | `future_adapter_required` }. `approve_internal` maps to
+  `future_adapter_required` (UI labels it "Approved (internal)"). Review is a true
+  compare-and-set (allowed prior states + `updated_at` guard + append-only audit). Reject/
+  revision require a reason; **approving requires an admin** (money/ads tier, L3).
+- **Validation/compliance:** title + objective required; campaign_type allowed; target
+  pinned to `meta`; ad_sets/ad_copy/lead_form sanitized JSON; Meta-aware scrubbing strips
+  ad-account ids (`act_…`), long Meta-id-like numeric runs, secrets/tokens, and non-http
+  links; **rejects launch/publish/go-live/"update budget"/"create ad set" language**;
+  lead-gen / financing / storm verticals auto-attach compliance reminders. Meta adapter
+  (`adapters/meta-disabled.ts`) is always off and performs no I/O.
+- **APIs** (`/api/core/meta-campaign-drafts*`, `canViewApprovals`-guarded): list, create
+  (template or custom — **custom restricted to admin/integration managers**), `[id]`
+  GET/PATCH (notes only), `[id]/review`, `from-action` (links an approved
+  `draft_meta_campaign` action on the DISABLED `meta` lane), and `from-competitor-intel`
+  (Valentina builds a response-angle draft from **internal** competitor profiles/captures
+  — no scraping, no external fetch, no Meta Ads Library call). **No launch route, no
+  execute route, no Meta API call.** DTOs return safe_preview + sanitized fields only.
+- **Action integration:** `ACTION_META.draft_meta_campaign` is reclassified to
+  `{ target: meta, risk: level_3 }` (was `{ content, level_2 }`) — so the action is born
+  `adapter_disabled` and can never execute/launch. The `/actions` drawer offers "Create
+  Meta campaign draft" / "View Meta campaign drafts" for an approved one. (Like the GHL/
+  message draft actions, it is therefore never auto-generated to an external lane.)
+- **UI:** `/meta-campaign-drafts` — exec summary, Meta-adapter-disabled banner, template
+  library (10 starters), campaign draft queue, detail drawer (objective, offer angle,
+  audience, ad-set structure, creative direction, ad copy, lead-form draft, budget
+  recommendation, launch checklist, missing inputs, compliance notes, evidence, source
+  links, human review status, review). **No "Launch/Publish/Push Live/Update Budget/Create
+  Ad Set/Activate" controls.** Action Center shows a Meta Campaign Drafts tile.
+- **Agents:** Veronica (lead-gen structure, ad copy, lead-form), Valentina (competitor
+  response angles, offer positioning), Vega (tracking/budget review notes), Vanessa
+  (priority/approval agenda), Vivian (client readiness/missing assets — never contacts
+  clients), Valerie (budget/revenue context) contribute to plans. All drafts are
+  human-approved; `execution_status` stays `adapter_disabled` / `future_adapter_required`.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

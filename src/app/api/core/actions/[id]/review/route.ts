@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import { getAction, reviewTransition, toActionDTO } from "@/lib/core/actions/db";
-import { requiresAdminApproval, isAdapterEnabled } from "@/lib/core/actions/policies";
+import { requiresAdminApproval, isAdapterEnabled, ACTION_META } from "@/lib/core/actions/policies";
 import { scrubText } from "@/lib/core/actions/validation";
 import type { ReviewAction, VaultAction, AuditEntry } from "@/lib/core/actions/types";
 
@@ -63,10 +63,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   // fresh/revised action forward; the withdrawal-style transitions may also be
   // applied to an already-approved (but not-yet-executed) action so governance can
   // always pull back an approval — clearing the approval stamp when they do.
-  // Adapter enablement is the SOURCE OF TRUTH for whether an approved action is
-  // executable — never the prior execution_status (which a legacy/malformed row could
-  // carry). Internal → ready_after_approval; every external target → adapter_disabled.
-  const internalTarget = isAdapterEnabled(action.target_system);
+  // action_type is AUTHORITATIVE for the target — derive adapter enablement from
+  // ACTION_META, never the persisted row (a legacy/malformed/pre-reclassification row
+  // could carry a stale target). Internal → ready_after_approval; external → disabled.
+  const canonicalTarget = ACTION_META[action.action_type]?.target ?? action.target_system;
+  const internalTarget = isAdapterEnabled(canonicalTarget);
   let fromStates: string[];
   if (review === "approve") {
     fromStates = ["pending_review", "needs_revision"];

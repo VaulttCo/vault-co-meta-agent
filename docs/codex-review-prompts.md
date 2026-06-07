@@ -145,6 +145,21 @@ Vault Core safety invariants (flag ANY violation as P0):
   steps (`draft_sms`/`draft_email`/tag/task/pipeline/webhook_placeholder) are draft-only
   and must never execute. No new active agents; `draft_ghl_workflow` actions stay
   `adapter_disabled` and human-approved.
+- Lead Reply + Client Message Drafting DRAFT MODE (Phase 9.4, `/message-drafts`,
+  `src/lib/core/messages/**`, `/api/core/message-drafts*`, `vault_core_message_drafts`):
+  agents prepare lead replies / client messages; humans review/approve them INSIDE Vault
+  Core. This is **draft-only — there is NO live send adapter**. Designing/reviewing/
+  approving a message draft internally is EXPECTED and allowed. **Flag P0** if any code:
+  sends a live SMS/email; mutates a GHL contact/opportunity/workflow or triggers a
+  workflow; uses a provider credential or imports an SMS/email/GHL client in the messages
+  module; adds a send/execute route for drafts; exposes raw provider payloads/credentials/
+  live IDs or raw contact PII (DTOs return safe_preview + sanitized body + a sanitized
+  `contact_ref` only); bypasses approval; weakens auth/RLS; or lets Vivian contact clients
+  directly. `approve_internal` must NOT send (it moves the draft to
+  `future_adapter_required`). `messages/adapters/send-disabled.ts` must perform NO I/O.
+  `draft_lead_reply`/`draft_client_message` actions map to the DISABLED send lane (sms/
+  email) and stay `adapter_disabled`. The table is `vault_core_message_drafts` (distinct
+  from the Phase 6 `vault_message_drafts`). No new active agents.
 
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.

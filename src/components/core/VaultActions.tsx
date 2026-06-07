@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -306,6 +306,23 @@ export function VaultActions() {
     } finally { setActing(false); }
   }, [load]);
 
+  // Create a message DRAFT from an approved draft_lead_reply/draft_client_message
+  // action. Draft-only — it never sends or changes the action's adapter state.
+  const createMessageDraft = useCallback(async (id: string) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/message-drafts/from-action`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_id: id }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not create message draft"); return; }
+      setNotice(d.existing
+        ? "A message draft already exists for this action — open Message Drafts to review it."
+        : "Message draft created (draft-only) — open Message Drafts to review it.");
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
   const execute = useCallback(async (id: string, confirm: boolean) => {
     setActing(true); setNotice(null);
     try {
@@ -443,6 +460,7 @@ export function VaultActions() {
           onReview={(act, notes) => review(selected.id, act, notes)} onExecute={(confirm) => execute(selected.id, confirm)}
           onNote={(note) => addNote(selected.id, note)} onAssign={(patch) => assign(selected.id, patch)}
           onCreateWorkflowDraft={() => createWorkflowDraft(selected.id)}
+          onCreateMessageDraft={() => createMessageDraft(selected.id)}
           onClose={() => { setSelectedId(null); setNotice(null); }}
         />
       )}
@@ -459,10 +477,10 @@ function MiniStat({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onClose }: {
+function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onClose }: {
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
   onReview: (a: string, notes?: string) => void; onExecute: (confirm: boolean) => void;
-  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onClose: () => void;
+  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onClose: () => void;
 }) {
   const meta = (a.metadata ?? {}) as {
     quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
@@ -654,6 +672,16 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
                       <ActBtn icon={Workflow} label="Create workflow draft" tone="#c9a84c" disabled={acting} onClick={onCreateWorkflowDraft} />
                       <a href="/ghl-workflows" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
                         <Workflow size={13} /> View workflow drafts
+                      </a>
+                    </div>
+                  </div>
+                ) : (a.action_type === "draft_lead_reply" || a.action_type === "draft_client_message") ? (
+                  <div className="space-y-2 px-3 py-3 rounded-xl" style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.26)" }}>
+                    <p className="text-[11.5px] flex items-center gap-1.5" style={{ color: "#e8c97a" }}><ShieldAlert size={12} /> Approved internally · send adapter disabled — a future approved adapter is required to send.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <ActBtn icon={MessageSquare} label="Create message draft" tone="#c9a84c" disabled={acting} onClick={onCreateMessageDraft} />
+                      <a href="/message-drafts" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
+                        <MessageSquare size={13} /> View message drafts
                       </a>
                     </div>
                   </div>

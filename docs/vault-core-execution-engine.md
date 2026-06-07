@@ -210,6 +210,56 @@ credentials are used; no raw GHL payloads or live IDs are stored or returned.
   → proposal/closeout). Auto-generation remains internal-only and capped/deduped;
   `draft_ghl_workflow` actions are human-approved and never execute externally.
 
+## Phase 9.4 — Lead Reply + Client Message Drafting, Draft Mode (live)
+Agents prepare lead replies, client messages, onboarding/revenue follow-ups, and
+report/update messages for human review. **Draft-only**: there is NO live send adapter.
+Nothing is sent — no SMS, no email, no GHL contact/opportunity/workflow mutation, no
+workflow trigger. No provider credentials are used; no raw provider payloads, live IDs,
+or raw contact PII (only a sanitized `contact_ref`) are stored or returned.
+
+- **Files:** `src/lib/core/messages/` — `types.ts` (`VaultMessageDraft`, statuses,
+  channels, audiences, message types), `validation.ts` (sanitize + reject live-send
+  language + http(s)-only URLs + placeholder-only tokens + per-channel compliance
+  notes), `templates.ts` (15 starter templates), `db.ts` (mock-safe CRUD + re-sanitized
+  DTO + counts + CAS review), `message-draft.ts` (create helper), `adapters/send-disabled.ts`
+  (explicit disabled boundary — NO I/O, no provider client, no credentials). Table:
+  `docs/vault-message-drafts-schema.sql` → **`vault_core_message_drafts`** (RLS on, no
+  policies). NOTE: distinct from the Phase 6 `vault_message_drafts` (legacy Veronica SMS
+  queue at `/drafts`).
+- **Lifecycle:** `draft` → `pending_review` → { `future_adapter_required` (approved) |
+  `needs_revision` | `rejected` | `archived` }. `approve_internal` maps to
+  `future_adapter_required` (the sole approved-internal terminal state; UI labels it
+  "Approved (internal)"). Review is a true compare-and-set with explicit allowed prior
+  states + `updated_at` guard + append-only audit trail. Reject/revision require a
+  reason; approving requires an admin.
+- **Validation/compliance:** title + body required (subject required for email);
+  rejects live-send language ("send now"/"blast"/"trigger"/"deliver immediately");
+  personalization tokens are `{{placeholder}}` shapes only; per-channel compliance notes
+  are auto-attached (SMS concise + no false urgency + opt-out; email non-misleading
+  subject; payment professional/non-threatening; review-request non-incentivized;
+  reactivation opt-out aware). Send adapter (`adapters/send-disabled.ts`) is always off.
+- **APIs** (`/api/core/message-drafts*`, all `canViewApprovals`-guarded): list, create
+  (template or custom — **custom restricted to admin/integration managers**), `[id]`
+  GET/PATCH (notes only), `[id]/review`, `from-action` (links an approved
+  `draft_lead_reply`/`draft_client_message` action — both now in the DISABLED send lane),
+  and `from-workflow-draft` (per-step link from a GHL workflow `draft_sms`/`draft_email`
+  step). **No send route, no execute route, no provider call.** DTOs return safe_preview
+  + sanitized body only.
+- **Action integration:** `ACTION_META.draft_lead_reply` → `{ sms }` and
+  `draft_client_message` → `{ email }` (both disabled) — so these actions are born
+  `adapter_disabled` and can never execute/send. The `/actions` drawer offers "Create
+  message draft" / "View message drafts" for an approved one.
+- **GHL workflow integration:** a `draft_sms`/`draft_email` workflow-draft step offers
+  "Create message draft from step" (links `source_workflow_draft_id`, many:1, per-step
+  idempotent).
+- **UI:** `/message-drafts` — exec summary, send-disabled banner, template library,
+  draft queue, detail drawer (subject, body, personalization tokens, missing inputs,
+  compliance notes, evidence, source links, review trail, review). No "Send/Blast/Push
+  Live/Update Contact" controls. Action Center shows a Message Drafts tile.
+- **Agents** may propose `draft_lead_reply`/`draft_client_message` actions (which stay
+  `adapter_disabled`); auto-generation stays internal-only/capped/deduped; all
+  client/lead-facing messages are human-approved and never sent.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

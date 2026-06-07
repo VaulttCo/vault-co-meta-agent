@@ -76,6 +76,18 @@ an explicit disabled adapter boundary. Approving internally → `future_adapter_
 No new active agents; no external execution. See
 [`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.3).
 
+## Phase 9.4 — Lead Reply + Client Message Drafting, Draft Mode (live)
+
+Agents prepare lead replies, client messages, and follow-ups at `/message-drafts`;
+humans approve them **internally only**. **Draft-only** — no live send adapter: no SMS/
+email is sent, no GHL contact/opportunity/workflow mutation, no workflow trigger, no
+provider credentials. New `vault_core_message_drafts` table (RLS on, no policies;
+distinct from the Phase 6 `vault_message_drafts`), `src/lib/core/messages/**`,
+`/api/core/message-drafts*`, 15 templates, per-channel compliance notes, and a disabled
+send-adapter boundary. `draft_lead_reply`/`draft_client_message` actions are reclassified
+to the disabled send lane. No new active agents; no external execution. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.4).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

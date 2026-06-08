@@ -107,6 +107,25 @@ Approving internally → `future_adapter_required`. No new active agents; no ext
 execution. See [`vault-core-execution-engine.md`](./vault-core-execution-engine.md)
 (Phase 9.5).
 
+## Phase 9.6 — Finance / Invoice Action Builder, Draft Mode (live)
+
+Agents (primarily Valerie) prepare finance **plans** — invoice drafts, setup-fee tracking,
+revenue-share calculations, partner-split summaries, payment follow-ups, overdue-invoice
+reviews, monthly revenue closeouts, commission/attribution notes — for human review at
+`/finance-drafts`; humans approve them **internally only**. **Draft-only** — there is no
+live finance adapter: no Stripe invoice is created/sent/finalized, no card is charged, no
+payment is collected, no money is moved, no bank account is touched, no client is
+contacted, and no Stripe/payment API is called. New `finance_drafts` table (RLS on, no
+policies), `src/lib/core/finance-drafts/**`, `/api/core/finance-drafts*` (incl.
+`from-action` and `from-revenue-snapshot`), 10 starter templates, and an explicit disabled
+finance-adapter boundary. The `from-action` handoff seeds from approved `draft_invoice` /
+`prepare_budget_recommendation` actions (which keep their existing internal lanes); the
+`from-revenue-snapshot` handoff reads only internal aggregate revenue values (Valerie's
+read-only reader) — no Stripe call. Validation rejects charge/send/finalize/collect/debit/
+withdraw/transfer language and strips Stripe IDs + card/bank numbers. Approving internally
+→ `future_adapter_required`. No new active agents; no external execution. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.6).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

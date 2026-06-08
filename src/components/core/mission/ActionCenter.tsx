@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Crosshair, Lightbulb, ClipboardCheck, FileText, Boxes, Radar, Play, Workflow, MessageSquare, Target, ArrowRight, type LucideIcon } from "lucide-react";
+import { Crosshair, Lightbulb, ClipboardCheck, FileText, Boxes, Radar, Play, Workflow, MessageSquare, Target, Receipt, ArrowRight, type LucideIcon } from "lucide-react";
 import { VCPanel, VCPanelHeader, VCChip } from "@/components/ui/VaultUI";
 
 interface ActionCenterProps {
@@ -41,6 +41,7 @@ export function ActionCenter(props: ActionCenterProps) {
   const [wf, setWf] = useState<{ pending: number; approved: number; futureAdapter: number } | null>(null);
   const [msg, setMsg] = useState<{ pending: number; futureAdapter: number } | null>(null);
   const [camp, setCamp] = useState<{ pending: number; futureAdapter: number; missing: number } | null>(null);
+  const [fin, setFin] = useState<{ pending: number; futureAdapter: number; missing: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +93,14 @@ export function ActionCenter(props: ActionCenterProps) {
         setCamp({ pending: c?.pending_review ?? 0, futureAdapter: c?.future_adapter_required ?? 0, missing: c?.missing_inputs ?? 0 });
       })
       .catch(() => { if (!cancelled) setCamp({ pending: 0, futureAdapter: 0, missing: 0 }); });
+    fetch("/api/core/finance-drafts")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled) return;
+        const c = d?.counts;
+        setFin({ pending: c?.pending_review ?? 0, futureAdapter: c?.future_adapter_required ?? 0, missing: c?.missing_inputs ?? 0 });
+      })
+      .catch(() => { if (!cancelled) setFin({ pending: 0, futureAdapter: 0, missing: 0 }); });
     return () => { cancelled = true; };
   }, []);
   const competitorSignals = comp?.captures ?? null;
@@ -115,6 +124,7 @@ export function ActionCenter(props: ActionCenterProps) {
     : (wf?.pending ?? 0) > 0 ? `${wf?.pending} GHL workflow draft${plural(wf?.pending ?? 0)} to review (draft-only).`
     : (msg?.pending ?? 0) > 0 ? `${msg?.pending} message draft${plural(msg?.pending ?? 0)} to review (draft-only).`
     : (camp?.pending ?? 0) > 0 ? `${camp?.pending} Meta campaign draft${plural(camp?.pending ?? 0)} to review (draft-only).`
+    : (fin?.pending ?? 0) > 0 ? `${fin?.pending} finance draft${plural(fin?.pending ?? 0)} to review (draft-only).`
     : plansNeedsReview > 0 ? `${plansNeedsReview} approval${plural(plansNeedsReview)} blocking progress.`
     : recVisible > 0 ? `${recVisible} mission-visible recommendation${plural(recVisible)} to review.`
     : "All clear — nothing needs human action right now.";
@@ -144,6 +154,8 @@ export function ActionCenter(props: ActionCenterProps) {
       note: msg && msg.futureAdapter > 0 ? `${msg.futureAdapter} approved` : undefined },
     { icon: Target, label: "Meta Campaign Drafts", sub: "drafts · meta off", value: camp?.pending ?? 0, href: "/meta-campaign-drafts", accent: "#c9a84c",
       note: camp && camp.futureAdapter > 0 ? `${camp.futureAdapter} approved` : (camp && camp.missing > 0 ? `${camp.missing} missing inputs` : undefined) },
+    { icon: Receipt, label: "Finance Drafts", sub: "drafts · finance off", value: fin?.pending ?? 0, href: "/finance-drafts", accent: "#c9a84c",
+      note: fin && fin.futureAdapter > 0 ? `${fin.futureAdapter} approved` : (fin && fin.missing > 0 ? `${fin.missing} missing inputs` : undefined) },
     { icon: Radar, label: "Competitor Intel", sub: comp ? `${comp.profiles} profile${comp.profiles === 1 ? "" : "s"}` : "Valentina signals", value: competitorSignals ?? 0, href: "/competitor-intel", accent: "#fb923c", note: comp?.topHook ? `top: ${comp.topHook.slice(0, 18)}` : undefined },
   ];
 
@@ -170,7 +182,7 @@ export function ActionCenter(props: ActionCenterProps) {
       </div>
 
       {/* Action tiles */}
-      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9 gap-2.5">
+      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-10 gap-2.5">
         {tiles.map((t) => {
           const Icon = t.icon;
           const has = t.value > 0;

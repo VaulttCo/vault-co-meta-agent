@@ -307,6 +307,58 @@ or raw contact PII (only a sanitized `contact_ref`) are stored or returned.
   clients), Valerie (budget/revenue context) contribute to plans. All drafts are
   human-approved; `execution_status` stays `adapter_disabled` / `future_adapter_required`.
 
+## Phase 9.6 — Finance / Invoice Action Builder, Draft Mode
+- **What it is:** agents (primarily Valerie) prepare finance / invoice **plans** for human
+  review at `/finance-drafts`. **Draft-only** — there is NO live finance adapter. Nothing
+  is invoiced, charged, collected, refunded, or moved; no Stripe/payment API is called; no
+  bank account is touched; no client is contacted.
+- **Model** (`src/lib/core/finance-drafts/**`): a `VaultFinanceDraft` carries finance_type,
+  amount_summary (advisory TEXT only — never a charge instruction), calculation, line_items[]
+  ({label, amount_text, notes}), partner_split ({summary, shares[]}), payment_terms,
+  follow_up_message_ref, missing_inputs, compliance_notes, safe_preview, evidence, audit_log.
+  `target_system` ∈ {`internal`,`stripe`,`report`} (stripe is a DISABLED lane; the finance
+  adapter is ALWAYS off regardless); `risk_level` defaults to `level_3_money_ads_workflow`.
+- **Statuses:** { `draft` | `pending_review` | `approved_internal` | `needs_revision` |
+  `rejected` | `archived` | `future_adapter_required` }. `approve_internal` →
+  `future_adapter_required` (UI labels it "Approved (internal)"). Review is a true compare-
+  and-set (allowed prior states + `updated_at` guard + append-only audit). Reject/revision
+  require a reason; **approving requires an admin** (money tier, L3).
+- **Validation/compliance:** title required; finance_type allowed; target ∈ {internal,
+  stripe,report}; line_items/partner_split sanitized JSON; amount_summary advisory text;
+  **rejects "charge now"/"send invoice"/"finalize invoice"/"collect payment"/"debit"/
+  "withdraw"/"transfer funds"/"create stripe invoice" language** anywhere in the draft;
+  strips Stripe object ids (`in_`/`ch_`/`pi_`/`cus_`/`pm_`/`acct_`/…) and card/bank/account
+  numbers (12+ digit runs); per-type compliance notes auto-attached. `source_action_id` is
+  validated as a strict UUID (DB column is uuid); `source_snapshot_id` is a safe aggregate
+  ref (text). Finance adapter (`adapters/finance-disabled.ts`) is always off and does no I/O.
+- **APIs** (`/api/core/finance-drafts*`, `canViewApprovals`-guarded): list, create (template
+  or custom — **custom restricted to admin/integration managers**), `[id]` GET/PATCH (notes
+  only), `[id]/review`, `from-action` (links an approved `draft_invoice` /
+  `prepare_budget_recommendation` action), and `from-revenue-snapshot` (builds a closeout
+  draft from INTERNAL aggregate revenue values via Valerie's read-only reader — no Stripe
+  call, safe aggregate values only). **No invoice/charge/collect route, no Stripe API call.**
+  DTOs return safe_preview + sanitized fields only.
+- **Action integration:** the `/actions` drawer offers "Create finance draft" / "View
+  finance drafts" for an approved `draft_invoice` or `prepare_budget_recommendation` action.
+  Those actions keep their existing INTERNAL lanes (`report`/`internal`) — their internal
+  completion never touches Stripe; the finance draft is the separate draft-only artifact.
+- **Revenue snapshot integration:** `from-revenue-snapshot` reads `getFinancialData()`
+  (internal aggregate revenue/fee/split values), links a sanitized `source_snapshot_id`, and
+  seeds a `revenue_closeout` draft. No Stripe mutation, no invoice send, safe values only.
+- **UI:** `/finance-drafts` — exec summary, finance-adapter-disabled banner, template
+  library (10 starters), finance draft queue, detail drawer (amount summary, calculation,
+  line items, partner split, payment terms, missing inputs, compliance notes, evidence,
+  source links, human review status, review). **No "Send Invoice/Create Stripe Invoice/
+  Finalize/Charge/Collect Payment/Transfer Funds/Withdraw/Push Live" controls.** Action
+  Center shows a Finance Drafts tile.
+- **Agents:** Valerie (primary owner — setup-fee/revenue-share/retainer invoice drafts,
+  partner splits, closeouts, payment follow-ups), Vanessa (priority/approval agenda,
+  highlights high-value/overdue), Vivian (client-success finance context / missing-input
+  warnings — never contacts clients), Vega (attribution/tracking evidence for revenue
+  share), Veronica (campaign/client context), Valentina (campaign performance context).
+  All drafts are human-approved; payment-facing items stay `adapter_disabled` /
+  `future_adapter_required`.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

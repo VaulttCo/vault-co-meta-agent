@@ -182,6 +182,26 @@ Vault Core safety invariants (flag ANY violation as P0):
   No new active agents; tick cadence unchanged; Codex must not be a production runtime
   dependency.
 
+- Finance / Invoice Action Builder DRAFT MODE (Phase 9.6, `/finance-drafts`,
+  `src/lib/core/finance-drafts/**`, `/api/core/finance-drafts*`, `finance_drafts`): agents
+  (primarily Valerie) PREPARE finance / invoice PLANS; humans review/approve them INSIDE
+  Vault Core. This is **draft-only — there is NO live finance adapter**. Designing/
+  reviewing/approving a finance draft internally is EXPECTED and allowed. **Flag P0** if any
+  code: creates / sends / finalizes / voids a live Stripe (or other) invoice; charges a
+  card, collects a payment, issues a refund, or moves money / touches a bank account;
+  performs any Stripe mutation or calls a Stripe/payment API; uses or imports Stripe/payment
+  credentials, tokens, or an SDK/HTTP client in the finance-drafts module; stores or returns
+  raw Stripe payloads, live Stripe IDs (invoice / payment-intent / customer / payment-method
+  / charge / account), or card/bank/account numbers; contacts a client (SMS/email/call);
+  adds an invoice/charge/collect/execute route for finance drafts; bypasses approval; or
+  weakens auth/RLS. `approve_internal` must NOT invoice/charge (it moves the draft to
+  `future_adapter_required`) and requires an admin. `finance-drafts/adapters/finance-
+  disabled.ts` must perform NO I/O. The `from-revenue-snapshot` route must read ONLY internal
+  aggregate revenue values (no Stripe call). The UI must have NO "Send Invoice / Create
+  Stripe Invoice / Finalize / Charge / Collect Payment / Transfer Funds / Withdraw / Push
+  Live" controls. No new active agents; tick cadence unchanged; Codex must not be a
+  production runtime dependency.
+
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.
 - Secret exposure: hardcoded keys, NEXT_PUBLIC_ secrets, secrets logged or returned from an API,

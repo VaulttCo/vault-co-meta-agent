@@ -202,6 +202,25 @@ Vault Core safety invariants (flag ANY violation as P0):
   Live" controls. No new active agents; tick cadence unchanged; Codex must not be a
   production runtime dependency.
 
+- Content Ideas + Creative Brief Builder DRAFT MODE (Phase 9.7, `/creative-briefs`,
+  `src/lib/core/creative-briefs/**`, `/api/core/creative-briefs*`, `creative_briefs`): agents
+  prepare content/creative PLANS; humans review/approve them INSIDE Vault Core. This is
+  **draft-only — there is NO live content adapter**. Designing/reviewing/approving a creative
+  brief internally is EXPECTED and allowed. **Flag P0** if any code: posts/publishes/uploads/
+  schedules content to any social platform (Instagram/TikTok/Facebook/YouTube/etc.); launches
+  or uploads a Meta ad/creative or performs any Meta mutation; uses or imports social/Meta/
+  YouTube SDKs, credentials, or tokens, or an HTTP client in the creative-briefs module;
+  calls a social/ad API or the Meta Ads Library; scrapes or live-fetches competitor data (the
+  `from-competitor-intel` route must read ONLY internal Vault Core captures, and
+  `from-meta-campaign-draft` must read ONLY the internal campaign draft); contacts a client/
+  creator; adds a post/publish/upload/launch/execute route for briefs; stores or returns raw
+  provider payloads, live social-post or ad IDs, or raw creator/contact PII; bypasses
+  approval; or weakens auth/RLS. `approve_internal` must NOT post/publish/launch (it moves the
+  brief to `future_adapter_required`) and requires an admin. `creative-briefs/adapters/
+  content-disabled.ts` must perform NO I/O. The UI must have NO "Post/Publish/Upload/Schedule
+  Post/Push Live/Boost/Launch Ad/Send to Client" controls. No new active agents; tick cadence
+  unchanged; Codex must not be a production runtime dependency.
+
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.
 - Secret exposure: hardcoded keys, NEXT_PUBLIC_ secrets, secrets logged or returned from an API,

@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare, Target, Receipt,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare, Target, Receipt, Clapperboard,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -357,6 +357,24 @@ export function VaultActions() {
     } finally { setActing(false); }
   }, [load]);
 
+  // Create a creative brief from an approved prepare_content_idea /
+  // prepare_competitor_response / draft_meta_campaign action. Draft-only — it never posts,
+  // publishes, uploads, or launches.
+  const createCreativeBrief = useCallback(async (id: string) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/creative-briefs/from-action`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_id: id }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not create creative brief"); return; }
+      setNotice(d.existing
+        ? "A creative brief already exists for this action — open Creative Briefs to review it."
+        : "Creative brief created (draft-only) — open Creative Briefs to review it.");
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
   const execute = useCallback(async (id: string, confirm: boolean) => {
     setActing(true); setNotice(null);
     try {
@@ -497,6 +515,7 @@ export function VaultActions() {
           onCreateMessageDraft={() => createMessageDraft(selected.id)}
           onCreateCampaignDraft={() => createCampaignDraft(selected.id)}
           onCreateFinanceDraft={() => createFinanceDraft(selected.id)}
+          onCreateCreativeBrief={() => createCreativeBrief(selected.id)}
           onClose={() => { setSelectedId(null); setNotice(null); }}
         />
       )}
@@ -513,10 +532,10 @@ function MiniStat({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onCreateCampaignDraft, onCreateFinanceDraft, onClose }: {
+function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onCreateCampaignDraft, onCreateFinanceDraft, onCreateCreativeBrief, onClose }: {
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
   onReview: (a: string, notes?: string) => void; onExecute: (confirm: boolean) => void;
-  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onCreateCampaignDraft: () => void; onCreateFinanceDraft: () => void; onClose: () => void;
+  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onCreateCampaignDraft: () => void; onCreateFinanceDraft: () => void; onCreateCreativeBrief: () => void; onClose: () => void;
 }) {
   const meta = (a.metadata ?? {}) as {
     quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
@@ -744,6 +763,19 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
                       <ActBtn icon={Receipt} label="Create finance draft" tone="#c9a84c" disabled={acting} onClick={onCreateFinanceDraft} />
                       <a href="/finance-drafts" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
                         <Receipt size={13} /> View finance drafts
+                      </a>
+                    </div>
+                  </div>
+                )}
+                {/* Creative brief offer — for approved content/competitor/campaign actions.
+                    Draft-only: never posts, publishes, uploads, or launches. */}
+                {(a.action_type === "prepare_content_idea" || a.action_type === "prepare_competitor_response" || a.action_type === "draft_meta_campaign") && (
+                  <div className="space-y-2 px-3 py-3 rounded-xl" style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.26)" }}>
+                    <p className="text-[11.5px] flex items-center gap-1.5" style={{ color: "#e8c97a" }}><ShieldAlert size={12} /> Content adapter disabled — a future approved adapter is required to publish. Nothing is posted, uploaded, or launched.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <ActBtn icon={Clapperboard} label="Create creative brief" tone="#c9a84c" disabled={acting} onClick={onCreateCreativeBrief} />
+                      <a href="/creative-briefs" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
+                        <Clapperboard size={13} /> View creative briefs
                       </a>
                     </div>
                   </div>

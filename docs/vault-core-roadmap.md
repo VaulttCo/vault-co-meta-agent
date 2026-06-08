@@ -126,6 +126,26 @@ withdraw/transfer language and strips Stripe IDs + card/bank numbers. Approving 
 → `future_adapter_required`. No new active agents; no external execution. See
 [`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.6).
 
+## Phase 9.7 — Content Ideas + Creative Brief Builder, Draft Mode (live)
+
+Agents prepare content/creative **plans** — content ideas, ad creative briefs, editor
+briefs, video scripts, hooks, captions, shot lists, thumbnail concepts, content-calendar
+ideas, UGC/shoot directions — for human review at `/creative-briefs`; humans approve them
+**internally only**. **Draft-only** — there is no live content adapter: nothing is posted to
+any social platform, no video/image is uploaded, no post is scheduled, no Meta ad is
+launched, no client/creator is contacted, and no social/Meta API is called. New
+`creative_briefs` table (RLS on, no policies), `src/lib/core/creative-briefs/**`,
+`/api/core/creative-briefs*` (incl. `from-action`, `from-meta-campaign-draft`,
+`from-competitor-intel`), 15 starter templates, and an explicit disabled content-adapter
+boundary. `from-action` seeds from approved `prepare_content_idea` /
+`prepare_competitor_response` / `draft_meta_campaign` actions; `from-meta-campaign-draft`
+reads an internal campaign draft (no Meta call); `from-competitor-intel` uses internal
+captures only (no scraping). Validation rejects post/publish/upload/schedule/launch/boost
+language and strips social/ad IDs. Ad/campaign-linked creative is L3; other client-facing
+creative is L2. Approving internally → `future_adapter_required`. No new active agents; no
+external execution. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.7).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

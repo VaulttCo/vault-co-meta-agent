@@ -359,6 +359,62 @@ or raw contact PII (only a sanitized `contact_ref`) are stored or returned.
   All drafts are human-approved; payment-facing items stay `adapter_disabled` /
   `future_adapter_required`.
 
+## Phase 9.7 — Content Ideas + Creative Brief Builder, Draft Mode
+- **What it is:** agents prepare content/creative **plans** for human review at
+  `/creative-briefs`. **Draft-only** — there is NO live content adapter. Nothing is posted,
+  published, uploaded, scheduled, or launched; no social/Meta API is called; no client/
+  creator is contacted.
+- **Model** (`src/lib/core/creative-briefs/**`): a `VaultCreativeBrief` carries brief_type,
+  platform, content_format, objective, audience, hook_bank[], script, shot_list[],
+  editor_notes, visual_direction[], caption_options[], thumbnail_concepts[], deliverables[],
+  missing_inputs, compliance_notes, safe_preview, evidence, audit_log. `target_system` ∈
+  {`internal`,`content`,`social`,`meta`,`website`} (external lanes disabled; the content
+  adapter is ALWAYS off). `risk_level` is `level_3_money_ads_workflow` for ad/campaign-linked
+  creative (video_ad_brief / ugc_ad_brief / competitor_response_creative / linked to a Meta
+  campaign draft) and `level_2_client_facing_message` otherwise.
+- **Statuses:** { `draft` | `pending_review` | `approved_internal` | `needs_revision` |
+  `rejected` | `archived` | `future_adapter_required` }. `approve_internal` →
+  `future_adapter_required` (UI: "Approved (internal)"). Review is a true compare-and-set
+  (allowed prior states + `updated_at` guard + append-only audit). Reject/revision require a
+  reason; **approving requires an admin**.
+- **Validation/compliance:** title + objective required; brief_type/target/platform/format
+  validated; all list/text fields sanitized; **rejects post/publish/upload/schedule/launch/
+  boost/"send to client" language** across every field (scoped so legit creative language
+  like "schedule the shoot"/"upload raw footage to the editor" is allowed); strips social/ad
+  IDs (`act_…`, 13+ digit runs) + http(s)-only URLs; per-type compliance notes auto-attached.
+  `source_action_id` + `source_meta_campaign_draft_id` validated as strict UUIDs;
+  `source_competitor_profile_id` a safe slug. Content adapter (`adapters/content-disabled.ts`)
+  is always off and does no I/O.
+- **APIs** (`/api/core/creative-briefs*`, `canViewApprovals`-guarded): list, create (template
+  or custom — **custom restricted to admin/integration managers**), `[id]` GET/PATCH (notes
+  only), `[id]/review`, `from-action` (approved `prepare_content_idea` /
+  `prepare_competitor_response` / `draft_meta_campaign`), `from-meta-campaign-draft` (reads an
+  INTERNAL campaign draft — no Meta call; idempotent per campaign+brief_type), and
+  `from-competitor-intel` (INTERNAL captures only — no scraping). **No post/publish/upload/
+  launch route, no social/Meta API call.** DTOs return safe_preview + sanitized fields only.
+- **Action integration:** the `/actions` drawer offers "Create creative brief" / "View
+  creative briefs" for an approved `prepare_content_idea` / `prepare_competitor_response` /
+  `draft_meta_campaign` action. (Content-lane actions keep their internal lane; the brief is
+  the separate draft-only artifact.)
+- **Meta campaign draft integration:** `from-meta-campaign-draft` maps the campaign's
+  objective/offer-angle/audience/ad-copy/creative-direction/lead-form/compliance into a
+  video-ad brief, links `source_meta_campaign_draft_id`, reads internal only, idempotent.
+- **Competitor intel integration:** `from-competitor-intel` builds a competitor-response
+  creative brief from internal profiles/captures (no scraping / no Ads Library call), links
+  `source_competitor_profile_id`, and forbids naming/disparaging the competitor.
+- **UI:** `/creative-briefs` — exec summary, content-adapter-disabled banner, template
+  library (15 starters), brief queue, detail drawer (objective, audience, hook bank, script,
+  shot list, editor notes, visual direction, caption options, thumbnail concepts,
+  deliverables, missing inputs, compliance notes, evidence, source links, review status,
+  review). **No "Post/Publish/Upload/Schedule/Boost/Launch Ad/Send to Client" controls.**
+  Action Center shows a Creative Briefs tile.
+- **Agents:** Veronica (primary — ad creative, scripts, hooks, shot lists, campaign-linked
+  creative), Valentina (competitor-response angles, positioning, testing angles), Vanessa
+  (content priority/approval agenda), Vivian (brand consistency / missing assets — never
+  contacts clients), Vega (hook/angle performance context), Valerie (value/case-study
+  context). All briefs human-approved; external-facing items stay `adapter_disabled` /
+  `future_adapter_required`.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

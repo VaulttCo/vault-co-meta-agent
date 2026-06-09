@@ -5,6 +5,25 @@ approved **internal** work **execute** with a full audit trail. External executi
 is **adapter-gated and disabled** in this phase — nothing is sent, launched,
 charged, or mutated on any external system.
 
+## Vault Co Internal-First Draft Principle
+**Vault Core is for Vault Co first.** All draft builders (GHL workflows, message drafts, Meta
+campaign drafts, finance drafts, creative briefs) — and the recommendations/actions feeding
+them — default to **Vault Co's OWN internal growth machine**: Vault Co internal GHL sub-account
+follow-up, Vault Co prospects/sales/onboarding/client-success, Vault Co's own client-acquisition
+Meta ads, Vault Co's own content engine, and Vault Co revenue operations. They are **not**
+generic client deliverables. Client-specific deliverables require an **explicitly selected
+client context** (or an explicit user request). Client delivery improves downstream because
+Vault Co's internal system improves first.
+
+- Canonical rule: `src/lib/core/operating-principles.ts` (`VAULT_CORE_INTERNAL_FIRST_PRINCIPLE`).
+- Wired into company DNA: `VAULT_CO_IDENTITY.internalPrinciples` + `internalFirstPrinciple`
+  (`src/lib/core/identity/vault-co-identity.ts`).
+- Seeded into **Vault Memory** as an `internal_principle` node ("Vault Core internal-first
+  operating principle") via `identityNodeSpecs()` → `ingest.ts` (DB) and `memory/mock-graph.ts`
+  (mock), so agents pull it as operating context before generating recommendations/actions/drafts.
+- Applied in each draft module's `templates.ts` defaults + page copy.
+- Still draft-only: no external execution, no provider mutation, human approval required.
+
 ## Flow
 1. An agent identifies work and calls `createAction()`.
 2. Vera/Vesper quality metadata is attached (score + safety status; recommend-only).

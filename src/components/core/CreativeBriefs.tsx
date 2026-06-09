@@ -137,9 +137,9 @@ export function CreativeBriefs() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Content Ideas + Creative Brief Builder"
+        sectionLabel="Vault Core · Vault Co Content Engine"
         title="Creative Briefs"
-        description="Agents design content ideas, ad creative briefs, scripts, hooks, and shot lists · you review and approve them internally. Nothing is posted, published, uploaded, or launched — this phase is draft-only."
+        description="Briefs for Vault Co's OWN content engine — founder-led content, Vault Co's own ad creative, market research, competitor response, and brand. Not client content deliverables. You review and approve internally. Nothing is posted, published, uploaded, or launched — draft-only."
         badge={<VCStatusBadge label="Draft mode" variant="gold" dot />}
       />
 
@@ -149,7 +149,7 @@ export function CreativeBriefs() {
         <div>
           <p className="text-[12.5px] font-semibold" style={{ color: "#e8c97a" }}>Content publishing is disabled (future adapter required)</p>
           <p className="text-[11.5px] mt-0.5" style={{ color: "var(--t-text-body)" }}>
-            These are internal planning artifacts only. Nothing is posted to a social platform, no video/image is uploaded, no post is scheduled, no Meta ad is launched, and no social/Meta API is called. Producing or publishing requires a separate, explicitly-approved future content adapter phase.
+            These are internal plans for Vault Co&apos;s own content engine. Nothing is posted to a social platform, no video/image is uploaded, no post is scheduled, no Meta ad is launched, and no social/Meta API is called. Producing or publishing requires a separate, explicitly-approved future content adapter phase.
           </p>
         </div>
       </div>
@@ -206,7 +206,7 @@ export function CreativeBriefs() {
         <div className="px-4 py-3 space-y-2.5">
           {loading && <VCSkeleton rows={3} />}
           {!loading && visible.length === 0 && (
-            <VCEmptyState icon={Lightbulb} title="No creative briefs in this view" description="Create one from a template above, from an approved content/competitor/campaign action in /actions, from a Meta campaign draft, or from competitor intel. Briefs are internal planning artifacts — nothing is posted or published." />
+            <VCEmptyState icon={Lightbulb} title="No creative briefs in this view" description="Create one from a template above (Vault Co's own founder-led / ad / market-research / competitor-response content), from an approved content/competitor/campaign action in /actions, from a Meta campaign draft, or from competitor intel. Briefs are internal planning artifacts — nothing is posted or published." />
           )}
           {visible.map((d) => (
             <button key={d.id} onClick={() => { setSelectedId(d.id); setNotice(null); }}

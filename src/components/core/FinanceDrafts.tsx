@@ -136,9 +136,9 @@ export function FinanceDrafts() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Finance / Invoice Action Builder"
+        sectionLabel="Vault Core · Vault Co Revenue Operations"
         title="Finance Drafts"
-        description="Agents prepare invoice, revenue-share, split, and closeout plans · you review and approve them internally. Nothing is invoiced, charged, or collected — this phase is draft-only."
+        description="Drafts for Vault Co's OWN finance — setup fees, revenue share, partner splits, closeouts, payment follow-ups, and client-acquisition economics. You review and approve internally. Nothing is invoiced, charged, or collected — draft-only."
         badge={<VCStatusBadge label="Draft mode" variant="gold" dot />}
       />
 
@@ -148,7 +148,7 @@ export function FinanceDrafts() {
         <div>
           <p className="text-[12.5px] font-semibold" style={{ color: "#e8c97a" }}>Finance execution is disabled (future adapter required)</p>
           <p className="text-[11.5px] mt-0.5" style={{ color: "var(--t-text-body)" }}>
-            These are internal planning artifacts only. No invoice is created, sent, or finalized, no card is charged, no payment is collected, no money is moved, and no Stripe API is called. Acting on a finance draft requires a separate, explicitly-approved future adapter phase.
+            These are internal drafts for Vault Co&apos;s own revenue operations. No invoice is created, sent, or finalized, no card is charged, no payment is collected, no money is moved, and no Stripe API is called. Acting on a finance draft requires a separate, explicitly-approved future adapter phase.
           </p>
         </div>
       </div>
@@ -204,7 +204,7 @@ export function FinanceDrafts() {
         <div className="px-4 py-3 space-y-2.5">
           {loading && <VCSkeleton rows={3} />}
           {!loading && visible.length === 0 && (
-            <VCEmptyState icon={Lightbulb} title="No finance drafts in this view" description="Create one from a template above, from an approved finance action in /actions, or from a revenue snapshot. Drafts are internal planning artifacts — nothing is invoiced or charged." />
+            <VCEmptyState icon={Lightbulb} title="No finance drafts in this view" description="Create one from a template above (Vault Co's own setup fees, revenue share, partner splits, closeouts, acquisition economics), from an approved finance action in /actions, or from a revenue snapshot. Drafts are internal planning artifacts — nothing is invoiced or charged." />
           )}
           {visible.map((d) => (
             <button key={d.id} onClick={() => { setSelectedId(d.id); setNotice(null); }}

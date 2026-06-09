@@ -137,9 +137,9 @@ export function MetaCampaignDrafts() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Meta Campaign Action Builder"
+        sectionLabel="Vault Core · Vault Co Client-Acquisition Ads"
         title="Meta Campaign Drafts"
-        description="Agents design structured Meta campaign plans · you review and approve them internally. Nothing is launched, no budget is changed, no Meta object is created — this phase is draft-only."
+        description="Plans for Vault Co's OWN Meta ads — acquiring agency clients (roofing & home-service business owners), not client roofing campaigns. You review and approve internally. Nothing is launched, no budget is changed, no Meta object is created — draft-only."
         badge={<VCStatusBadge label="Draft mode" variant="gold" dot />}
       />
 
@@ -149,7 +149,7 @@ export function MetaCampaignDrafts() {
         <div>
           <p className="text-[12.5px] font-semibold" style={{ color: "#e8c97a" }}>Meta campaign execution is disabled (future adapter required)</p>
           <p className="text-[11.5px] mt-0.5" style={{ color: "var(--t-text-body)" }}>
-            These are internal planning artifacts only. No campaign is launched, no budget is changed, no ad set / ad / lead form is created, and no Meta API is called. Building anything live requires a separate, explicitly-approved future Meta adapter phase.
+            These are internal plans for Vault Co&apos;s own client-acquisition ads. No campaign is launched, no budget is changed, no ad set / ad / lead form is created, and no Meta API is called. Building anything live requires a separate, explicitly-approved future Meta adapter phase.
           </p>
         </div>
       </div>
@@ -206,7 +206,7 @@ export function MetaCampaignDrafts() {
         <div className="px-4 py-3 space-y-2.5">
           {loading && <VCSkeleton rows={3} />}
           {!loading && visible.length === 0 && (
-            <VCEmptyState icon={Lightbulb} title="No campaign drafts in this view" description="Create one from a template above, from an approved Meta campaign action in /actions, or from internal competitor intel. Drafts are internal planning artifacts — nothing is launched." />
+            <VCEmptyState icon={Lightbulb} title="No campaign drafts in this view" description="Create one from a template above (Vault Co's own client-acquisition ads targeting roofing/home-service owners), from an approved Meta campaign action in /actions, or from internal competitor intel. Drafts are internal planning artifacts — nothing is launched." />
           )}
           {visible.map((d) => (
             <button key={d.id} onClick={() => { setSelectedId(d.id); setNotice(null); }}

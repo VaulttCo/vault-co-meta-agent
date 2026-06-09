@@ -154,9 +154,9 @@ export function GHLWorkflows() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · GHL Workflow Builder"
+        sectionLabel="Vault Core · Vault Co Internal GHL Workflows"
         title="Workflow Drafts"
-        description="Agents design GHL follow-up workflow drafts · you review and approve them internally. Nothing is published to GHL — this phase is draft-only."
+        description="Drafts for Vault Co's OWN internal GHL sub-account — follow-up with Vault Co prospects, sales, onboarding, and client success. They do not publish to GHL; they help Vault Co improve its own follow-up. Draft-only."
         badge={<VCStatusBadge label="Draft mode" variant="gold" dot />}
       />
 
@@ -166,7 +166,7 @@ export function GHLWorkflows() {
         <div>
           <p className="text-[12.5px] font-semibold" style={{ color: "#e8c97a" }}>GHL workflow publishing is disabled (future adapter required)</p>
           <p className="text-[11.5px] mt-0.5" style={{ color: "var(--t-text-body)" }}>
-            These are internal review artifacts only. No GHL workflow is created, no contact or opportunity is updated, and no SMS/email is sent. Publishing requires a separate, explicitly-approved future adapter phase.
+            These are internal drafts for Vault Co&apos;s own GHL sub-account only. No GHL workflow is created, no contact or opportunity is updated, and no SMS/email is sent. Publishing requires a separate, explicitly-approved future adapter phase.
           </p>
         </div>
       </div>
@@ -223,7 +223,7 @@ export function GHLWorkflows() {
         <div className="px-4 py-3 space-y-2.5">
           {loading && <VCSkeleton rows={3} />}
           {!loading && visible.length === 0 && (
-            <VCEmptyState icon={Lightbulb} title="No workflow drafts in this view" description="Create one from a template above, or from an approved GHL workflow action in /actions. Drafts are internal review artifacts — nothing is published to GHL." />
+            <VCEmptyState icon={Lightbulb} title="No workflow drafts in this view" description="Create one from a template above (Vault Co internal prospect/sales/onboarding/client-success follow-up), or from an approved GHL workflow action in /actions. Drafts are internal review artifacts for Vault Co's own GHL sub-account — nothing is published to GHL." />
           )}
           {visible.map((d) => (
             <button key={d.id} onClick={() => { setSelectedId(d.id); setNotice(null); }}

@@ -10,6 +10,7 @@
 // Core" note is the human-readable copy.
 
 import type { VaultNodeCategory } from "../types";
+import { VAULT_CORE_INTERNAL_FIRST_PRINCIPLE, VAULT_CORE_INTERNAL_FIRST_SUMMARY } from "../operating-principles";
 
 export const VAULT_CO_IDENTITY = {
   positioning:
@@ -66,11 +67,15 @@ export const VAULT_CO_IDENTITY = {
     "Promising lead volume instead of booked, qualified appointments.",
   ],
   internalPrinciples: [
+    "Vault Core is for Vault Co first — draft builders default to Vault Co's OWN internal growth machine (Vault Co prospects, ads, content, sales follow-up, client success, revenue ops), not generic client deliverables. Only switch to a client-specific deliverable when a specific client context is explicitly selected.",
     "Read · analyze · recommend · draft — humans approve every external action.",
     "Never send, publish, or mutate client systems automatically.",
     "Learn continuously from Vault Co's own history; never repeat known mistakes.",
     "Specific beats generic; fast beats slow; outcome beats feature.",
   ],
+  // Full canonical text of the internal-first rule (single source of truth lives in
+  // ../operating-principles.ts). Mirrored into Vault Memory as an internal_principle node.
+  internalFirstPrinciple: VAULT_CORE_INTERNAL_FIRST_PRINCIPLE,
 } as const;
 
 // Identity → Vault Memory node specs (category + label + summary), seeded idempotently.
@@ -95,5 +100,8 @@ export function identityNodeSpecs(): IdentityNodeSpec[] {
     { key: "proof_point", category: "proof_point", label: "Proof points", summary: id.proofPoints.join(" · ") },
     { key: "pricing_context", category: "pricing_context", label: "Pricing context", summary: id.pricingContext },
     { key: "internal_principle", category: "internal_principle", label: "Internal operating principles", summary: id.internalPrinciples.join(" · ") },
+    // The permanent Vault Core internal-first rule — seeded into Vault Memory so agents
+    // pull it as operating context before generating recommendations/actions/drafts.
+    { key: "internal_first_principle", category: "internal_principle", label: "Vault Core internal-first operating principle", summary: VAULT_CORE_INTERNAL_FIRST_SUMMARY },
   ];
 }

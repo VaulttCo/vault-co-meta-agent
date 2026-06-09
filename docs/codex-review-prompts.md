@@ -55,6 +55,20 @@ Vault Core safety invariants (flag ANY violation as P0):
 - Read / analyze / recommend / draft only. No SMS sending, no GHL/CRM mutation, no Stripe mutation,
   no invoice sending, no workflow triggers, no client-system mutation, no auto-execution from approvals.
 - Drafts are never sent; approving a draft/recommendation/proposal only updates internal status.
+
+Vault Co Internal-First Draft Principle (alignment — see src/lib/core/operating-principles.ts):
+- Draft builders default to VAULT CO's OWN internal growth machine (Vault Co internal GHL workflows,
+  Vault Co prospect/sales/onboarding/client-success messages, Vault Co's own client-acquisition Meta
+  ads, Vault Co's own content engine, Vault Co revenue operations) — NOT generic client deliverables.
+  Client-specific deliverables require an explicitly selected client context.
+- **Flag P2** if: new/changed templates default back to generic client deliverables (e.g. a client's
+  roofing campaign/content/workflow) instead of Vault Co's own growth; page/template copy implies live
+  client execution; draft builders imply external publishing/sending/launching by default; or agents
+  generate client-facing assets by default without an explicit client context.
+- **Flag P0** (unchanged) if: any external adapter is enabled; any sending/publishing/launching/payment/
+  CRM mutation is added; auth/RLS is weakened; or the active agents change unexpectedly.
+- Note: `client_id` support is allowed to remain for future filtering/association — its presence is NOT
+  a violation; defaulting copy/targets to an external client without explicit client context is.
 - GHL invariant (CORRECTED — scope matters, do NOT blanket-flag per-client credentials as P0):
   • Vault Core EXECUTIVE RUNTIME (src/lib/core/**, src/app/api/core/**) must be Vault-Co-only for GHL:
     it may use ONLY VAULT_CO_GHL_API_KEY / VAULT_CO_GHL_LOCATION_ID / VAULT_CO_LEGACY_GHL_API_KEY /

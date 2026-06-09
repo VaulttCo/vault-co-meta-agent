@@ -133,9 +133,9 @@ export function MessageDrafts() {
   return (
     <VCPageWrapper className="!max-w-none">
       <PageHeader
-        sectionLabel="Vault Core · Lead Reply + Client Messaging"
+        sectionLabel="Vault Core · Vault Co Sales + Lifecycle Messaging"
         title="Message Drafts"
-        description="Agents draft lead replies and client messages · you review and approve them internally. Nothing is sent — this phase is draft-only."
+        description="Drafts default to Vault Co's OWN messages — Vault Co prospects (Meta ads / outreach), inbound leads, sales follow-up, onboarding, client success, and internal team updates. You review and approve internally. Nothing is sent — draft-only."
         badge={<VCStatusBadge label="Draft mode" variant="gold" dot />}
       />
 
@@ -145,7 +145,7 @@ export function MessageDrafts() {
         <div>
           <p className="text-[12.5px] font-semibold" style={{ color: "#e8c97a" }}>Message sending is disabled (future adapter required)</p>
           <p className="text-[11.5px] mt-0.5" style={{ color: "var(--t-text-body)" }}>
-            These are internal review artifacts only. No SMS or email is sent, no GHL contact or opportunity is updated, and no workflow is triggered. Sending requires a separate, explicitly-approved future adapter phase.
+            These are internal drafts for Vault Co&apos;s own prospect, client, and team communication. No SMS or email is sent, no GHL contact or opportunity is updated, and no workflow is triggered. Sending requires a separate, explicitly-approved future adapter phase.
           </p>
         </div>
       </div>
@@ -205,7 +205,7 @@ export function MessageDrafts() {
         <div className="px-4 py-3 space-y-2.5">
           {loading && <VCSkeleton rows={3} />}
           {!loading && visible.length === 0 && (
-            <VCEmptyState icon={Lightbulb} title="No message drafts in this view" description="Create one from a template above, or from an approved message action in /actions, or from a GHL workflow draft step. Drafts are internal review artifacts — nothing is sent." />
+            <VCEmptyState icon={Lightbulb} title="No message drafts in this view" description="Create one from a template above (Vault Co prospect / inbound lead / sales / onboarding / client-success / internal), or from an approved message action in /actions, or from a GHL workflow draft step. Drafts are internal review artifacts — nothing is sent." />
           )}
           {visible.map((d) => {
             const Icon = CHANNEL_ICON[d.channel] ?? MessageSquare;

@@ -5,6 +5,16 @@ runtime is `src/lib/core/agents/registry.ts` (`WORKFORCE`, `ACTIVE_AGENT_IDS`) a
 `src/lib/core/agents/index.ts` (`RUNNABLE_AGENTS`). This doc must stay consistent
 with those files.
 
+## Vault Co Internal-First Draft Principle (permanent)
+Vault Core is for Vault Co first. All draft builders default to **Vault Co's own internal
+growth machine** (Vault Co internal GHL workflows, Vault Co prospect/sales/onboarding/client-
+success messages, Vault Co's own client-acquisition Meta ads, Vault Co's own content engine,
+Vault Co revenue operations) — not generic client deliverables. Client-specific deliverables
+require an explicitly selected client context. Internal systems improve external delivery
+downstream. All builders remain draft-only; no external execution; human approval required.
+Canonical rule: `src/lib/core/operating-principles.ts`; seeded into Vault Memory as an
+`internal_principle` node so agents pull it before generating recommendations/actions/drafts.
+
 ## Active Vault Core runtime executives (6)
 
 These are in `ACTIVE_AGENT_IDS` **and** `RUNNABLE_AGENTS`, run in the tick, and are

@@ -549,6 +549,44 @@ function buildStrategyAssetVariations(
 //    - adVariations            → rebuilt with per-asset copy directions (if provided)
 // ─────────────────────────────────────────────────────────────
 
+// Coerce a raw/partial strategy object (from the tool_use input OR the text-fallback
+// JSON.parse) into a fully-shaped CompactCampaignStrategy. The model can omit required
+// fields — especially arrays — so every array is forced to [] and every string to "".
+// This is what prevents "Cannot read properties of undefined (reading '0')" downstream:
+// after normalization, strategy.recommendedHooks[0] / .length and strategy.primaryObjections[0]
+// / .length can never throw.
+function normalizeStrategy(raw: unknown): CompactCampaignStrategy {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Partial<CompactCampaignStrategy>;
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const strArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+
+  const perAsset = Array.isArray(s.perAssetCopyDirections)
+    ? s.perAssetCopyDirections
+        .filter((d): d is { assetId: string; copyDirection: string; hookVariant: string } =>
+          !!d && typeof d === "object")
+        .map((d) => ({
+          assetId: str(d.assetId),
+          copyDirection: str(d.copyDirection),
+          hookVariant: str(d.hookVariant),
+        }))
+    : undefined;
+
+  return {
+    campaignAngle: str(s.campaignAngle),
+    offerAngle: str(s.offerAngle),
+    audienceStrategy: str(s.audienceStrategy),
+    servicePositioning: str(s.servicePositioning),
+    primaryObjections: strArray(s.primaryObjections),
+    recommendedHooks: strArray(s.recommendedHooks),
+    leadFormIntent: str(s.leadFormIntent),
+    complianceNotes: str(s.complianceNotes),
+    creativeStrategyNotes: str(s.creativeStrategyNotes),
+    whyThisCampaign: str(s.whyThisCampaign),
+    perAssetCopyDirections: perAsset,
+  };
+}
+
 function buildDraftFromStrategy(
   strategy: CompactCampaignStrategy,
   input: CampaignGenerationInput
@@ -822,9 +860,10 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
     const textBlock = content.find((c) => c.type === "text");
     const fallbackText = (textBlock as { text?: string } | undefined)?.text ?? "";
     if (fallbackText) {
-      // Try to parse the text as a compact strategy object and build from it
+      // Try to parse the text as a compact strategy object and build from it.
+      // Normalize before building so a model that omits arrays cannot crash the overlay.
       try {
-        const parsed = JSON.parse(repairJson(fallbackText)) as CompactCampaignStrategy;
+        const parsed = normalizeStrategy(JSON.parse(repairJson(fallbackText)));
         return buildDraftFromStrategy(parsed, input);
       } catch {
         // Text parse failed — fall through to throw
@@ -837,8 +876,9 @@ async function callAnthropic(input: CampaignGenerationInput, apiKey: string): Pr
   }
 
   // toolUse.input is already a plain JS object — no JSON.parse needed.
-  // Pass it to buildDraftFromStrategy which runs generateMockPlan() + applies overlays.
-  return buildDraftFromStrategy(toolUse.input as CompactCampaignStrategy, input);
+  // Normalize first (the model may omit required arrays even on the tool path), then
+  // pass to buildDraftFromStrategy which runs generateMockPlan() + applies overlays.
+  return buildDraftFromStrategy(normalizeStrategy(toolUse.input), input);
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -4986,13 +4986,16 @@ function AICampaignBuilderContent() {
               </button>
             </div>
           </div>
-          <HermesAssistPanel
-            selectedClient={selectedClient}
-            goal={goal}
-            service={service}
-            market={market}
-            displayPlan={displayPlan}
-          />
+          {/* Hermes — internal orchestration, hidden in production */}
+          {SHOW_INTERNAL_AI_DEBUG && (
+            <HermesAssistPanel
+              selectedClient={selectedClient}
+              goal={goal}
+              service={service}
+              market={market}
+              displayPlan={displayPlan}
+            />
+          )}
         </div>
       )}
 

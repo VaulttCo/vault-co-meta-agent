@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Brain, Network, Activity, Fingerprint, ArrowRight, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { VCPageWrapper, VCStatusBadge } from "@/components/ui/VaultUI";
+import { CommandHubOperatorBrief } from "@/components/core/CommandHubOperatorBrief";
+import { ExecutiveDecisionCenter } from "@/components/core/ExecutiveDecisionCenter";
 import { CommandHubExecutiveBrief } from "@/components/core/CommandHubExecutiveBrief";
 import { CommandHubRecommendationsPanel } from "@/components/core/CommandHubRecommendationsPanel";
 import { CommandHubProposalsPanel } from "@/components/core/CommandHubProposalsPanel";
@@ -43,6 +45,12 @@ export default function VaultCoreHomePage() {
         description="The private AI operating system for Vault Co — executive intelligence, workforce, and everything awaiting human review."
         badge={<VCStatusBadge label="5 executives active" variant="success" dot />}
       />
+
+      {/* Daily Operator Brief — unified "what needs my decision today" worklist */}
+      <CommandHubOperatorBrief />
+
+      {/* Executive Decision Center — most important pending decisions, ranked */}
+      <ExecutiveDecisionCenter />
 
       {/* Daily Executive Brief + Executive Queue */}
       <CommandHubExecutiveBrief />

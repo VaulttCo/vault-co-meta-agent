@@ -42,6 +42,7 @@ import {
   Target,
   Receipt,
   Clapperboard,
+  HeartPulse,
 } from "lucide-react";
 import { usePlans } from "@/components/PlanProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -67,6 +68,7 @@ const vaultCoreNavItems: NavItem[] = [
   { label: "Meta Campaign Drafts", href: "/meta-campaign-drafts", icon: Target, permission: "canViewApprovals" },
   { label: "Finance Drafts",    href: "/finance-drafts",  icon: Receipt,       permission: "canViewApprovals" },
   { label: "Creative Briefs",   href: "/creative-briefs", icon: Clapperboard,  permission: "canViewApprovals" },
+  { label: "Client Health",     href: "/client-health",   icon: HeartPulse,    permission: "canViewApprovals" },
   { label: "Drafts",            href: "/drafts",          icon: MessageSquare, permission: "canViewApprovals" },
   { label: "System Proposals",  href: "/proposals",       icon: Wrench,        permission: "canViewApprovals" },
   { label: "Competitor Intel",  href: "/competitor-intel", icon: Radar,        permission: "canViewStrategyData" },
@@ -171,7 +173,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   // ── Determine portal context ─────────────────────────────────────────────
   const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
   const isVictoria = pathname.startsWith("/victoria");
-  const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime", "/actions", "/ghl-workflows", "/message-drafts", "/meta-campaign-drafts", "/finance-drafts", "/creative-briefs"];
+  const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime", "/actions", "/ghl-workflows", "/message-drafts", "/meta-campaign-drafts", "/finance-drafts", "/creative-briefs", "/client-health"];
   const isVaultCore = VAULT_CORE_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
   const portalLabel = isRevenueDashboard

@@ -156,6 +156,29 @@ creative is L2. Approving internally → `future_adapter_required`. No new activ
 external execution. See
 [`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.7).
 
+## Phase 9.8 — Client Health / Retention Risk Builder, Draft Mode (live)
+
+Agents prepare client-health **plans** for Vault Co's OWN client-success operations —
+health reviews, retention-risk reviews, missing access/asset warnings, stalled-delivery
+and communication-risk notes, onboarding/fulfillment reviews, save plans, upsell notes,
+and monthly closeouts — for human review at `/client-health`; humans approve them
+**internally only**. **Draft-only** — there is no live client-success adapter: no client
+is contacted, no SMS/email is sent, no GHL contact/task/opportunity/note/workflow is
+created or updated, no Stripe/Meta call is made, and no workflow is triggered. New
+`client_health_drafts` table (RLS on, no policies), `src/lib/core/client-health/**`,
+`/api/core/client-health*` (incl. `from-action`, `from-message-draft`,
+`from-finance-draft`, `from-revenue-snapshot`), 12 starter templates, and an explicit
+disabled client-success-adapter boundary. `from-action` seeds from approved
+`prepare_client_success_plan` / `draft_client_message` / `draft_report` / `draft_invoice`
+actions; the message/finance handoffs read internal draft TYPES only (no copy crosses
+lanes); the snapshot handoff uses safe internal aggregates. Validation rejects client-
+contact / CRM-mutation / workflow-trigger language and strips provider IDs.
+Finance/revenue-tied drafts are L3 (admin approval); others L2. health_score is an
+internal advisory label — never client-facing truth. Approving internally →
+`future_adapter_required`. Vivian is the primary owner and **never contacts clients**. No
+new active agents; no tick changes; no external execution. See
+[`vault-core-execution-engine.md`](./vault-core-execution-engine.md) (Phase 9.8).
+
 ## Invariant
 
 The active Vault Core runtime workforce is **exactly** `vega, veronica, valentina,

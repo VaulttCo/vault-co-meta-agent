@@ -235,6 +235,30 @@ Vault Co Internal-First Draft Principle (alignment — see src/lib/core/operatin
   Post/Push Live/Boost/Launch Ad/Send to Client" controls. No new active agents; tick cadence
   unchanged; Codex must not be a production runtime dependency.
 
+- Client Health / Retention Risk Builder DRAFT MODE (Phase 9.8, `/client-health`,
+  `src/lib/core/client-health/**`, `/api/core/client-health*`, `client_health_drafts`):
+  agents (primarily Vivian) prepare client-health / retention-risk PLANS for Vault Co's OWN
+  client-success operations; humans review/approve them INSIDE Vault Core. This is
+  **draft-only — there is NO live client-success adapter**. Writing/reviewing/approving a
+  health draft internally is EXPECTED and allowed. **Flag P0** if any code: contacts a
+  client in ANY form (SMS/email/call/DM); sends any message; creates/updates/deletes a GHL
+  contact, task, note, opportunity, pipeline, or workflow, or triggers/enrolls any
+  workflow/automation; performs any Stripe or Meta mutation; creates an external task;
+  uses or imports GHL/SMS/email/Stripe/Meta SDKs, provider credentials, or tokens, or an
+  HTTP client in the client-health module; adds a contact/send/update/trigger/execute
+  route for health drafts; stores or returns raw provider payloads, live GHL/Stripe/Meta
+  IDs, or raw contact PII; exposes health_score or risk labels as client-facing truth;
+  bypasses approval; weakens auth/RLS; or has **Vivian (or any agent) contacting a client
+  directly**. `approve_internal` must NOT contact anyone (it moves the draft to
+  `future_adapter_required`); approving a finance/revenue-tied (L3) health draft requires
+  an admin. `client-health/adapters/client-health-disabled.ts` must perform NO I/O. The
+  `from-message-draft` / `from-finance-draft` handoffs must read INTERNAL drafts only (type
+  + refs, no body copy); `from-revenue-snapshot` must read ONLY internal aggregate revenue
+  values (no provider call). The UI must have NO "Contact Client / Send Message / Send
+  Email / Send SMS / Update GHL / Create GHL Task / Trigger Workflow / Cancel Client /
+  Charge Client / Push Live" controls. No new active agents; tick cadence unchanged; Codex
+  must not be a production runtime dependency.
+
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.
 - Secret exposure: hardcoded keys, NEXT_PUBLIC_ secrets, secrets logged or returned from an API,

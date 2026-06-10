@@ -19,6 +19,7 @@ import { getWorkflowDraftCounts } from "../workflows/db";
 import { getMessageDraftCounts } from "../messages/db";
 import { getFinanceDraftCounts } from "../finance-drafts/db";
 import { getCreativeBriefCounts } from "../creative-briefs/db";
+import { getClientHealthDraftCounts } from "../client-health/db";
 import { getDraftCounts } from "../agents/veronica/drafts";
 import { getExecutiveBrief } from "../agents/vanessa/db";
 
@@ -57,6 +58,7 @@ const QUEUE_DEFS: ReadonlyArray<Omit<OperatorQueueItem, "pending">> = [
   { key: "ghl-workflows",        label: "GHL Workflow Drafts",  href: "/ghl-workflows",        minutesEach: 3 },
   { key: "proposals",            label: "System Proposals",     href: "/proposals",            minutesEach: 3 },
   { key: "recommendations",      label: "Recommendations",      href: "/recommendations",      minutesEach: 2 },
+  { key: "client-health",        label: "Client Health Drafts", href: "/client-health",        minutesEach: 3 },
   { key: "finance-drafts",       label: "Finance Drafts",       href: "/finance-drafts",       minutesEach: 2 },
   { key: "message-drafts",       label: "Message Drafts",       href: "/message-drafts",       minutesEach: 2 },
   { key: "sms-drafts",           label: "SMS / Follow-Up Drafts", href: "/drafts",             minutesEach: 1 },
@@ -82,6 +84,7 @@ export async function getOperatorWorklist(): Promise<OperatorWorklist> {
     messages,
     finance,
     briefs,
+    health,
     sms,
     executive,
   ] = await Promise.all([
@@ -93,6 +96,7 @@ export async function getOperatorWorklist(): Promise<OperatorWorklist> {
     safeCount(async () => (await getMessageDraftCounts()).pending_review),
     safeCount(async () => (await getFinanceDraftCounts()).pending_review),
     safeCount(async () => (await getCreativeBriefCounts()).pending_review),
+    safeCount(async () => (await getClientHealthDraftCounts()).pending_review),
     safeCount(async () => (await getDraftCounts()).draft),
     getExecutiveBrief().catch(() => ({ queue: [] as Awaited<ReturnType<typeof getExecutiveBrief>>["queue"] })),
   ]);
@@ -106,6 +110,7 @@ export async function getOperatorWorklist(): Promise<OperatorWorklist> {
     "message-drafts": messages,
     "finance-drafts": finance,
     "creative-briefs": briefs,
+    "client-health": health,
     "sms-drafts": sms,
   };
 

@@ -434,6 +434,63 @@ or raw contact PII (only a sanitized `contact_ref`) are stored or returned.
   context). All briefs human-approved; external-facing items stay `adapter_disabled` /
   `future_adapter_required`.
 
+## Phase 9.8 — Client Health / Retention Risk Builder, Draft Mode
+- **What it is:** agents prepare client-health and retention-risk **plans** for Vault Co's
+  OWN client-success operations, reviewed at `/client-health`. **Draft-only** — there is NO
+  live client-success adapter. No client is contacted; no SMS/email is sent; no GHL
+  contact/task/opportunity/note/workflow is created or updated; no Stripe/Meta call is made.
+- **Model** (`src/lib/core/client-health/**`): a `VaultClientHealthDraft` carries
+  health_type, health_score (internal advisory text), risk_level_label, risk_reasons[],
+  missing_access[], missing_assets[], delivery_risks[], communication_risks[],
+  next_best_actions[], owner_notes, save_plan[], upsell_opportunities[],
+  follow_up_message_ref, missing_inputs, compliance_notes, safe_preview, evidence,
+  audit_log. `target_system` ∈ {`internal`,`report`,`ghl`,`message`} (external lanes
+  disabled; the client-success adapter is ALWAYS off). `risk_level` is
+  `level_3_money_ads_workflow` when finance/revenue-tied (linked finance draft or revenue
+  snapshot) and `level_2_client_facing_message` otherwise.
+- **Statuses:** { `draft` | `pending_review` | `approved_internal` | `needs_revision` |
+  `rejected` | `archived` | `future_adapter_required` }. `approve_internal` →
+  `future_adapter_required` (UI: "Approved (internal)"). Review is a true compare-and-set
+  (allowed prior states + `updated_at` guard + append-only audit). Reject/revision require a
+  reason; **approving an L3 (finance/revenue-tied) draft requires an admin**.
+- **Validation/compliance:** title + health_type required; target validated; all list/text
+  fields sanitized; **rejects client-contact / CRM-mutation / workflow-trigger language**
+  ("send message/sms/email", "email/text/call/contact the client", "update CRM/GHL",
+  "create task in GHL", "trigger workflow", "cancel client", "charge client") across every
+  field; strips provider-style IDs and 12+ digit runs; http(s)-only URLs; per-type
+  compliance notes auto-attached (always including the no-contact note and the
+  "health_score is internal advisory only" note). `source_action_id` /
+  `source_message_draft_id` / `source_finance_draft_id` validated as strict UUIDs;
+  `source_snapshot_id` a safe aggregate slug. The adapter
+  (`adapters/client-health-disabled.ts`) is always off and does no I/O.
+- **APIs** (`/api/core/client-health*`, `canViewApprovals`-guarded): list, create (template
+  or custom — **custom restricted to admin/integration managers**), `[id]` GET/PATCH (notes
+  only), `[id]/review`, `from-action` (approved `prepare_client_success_plan` /
+  `draft_client_message` / `draft_report` / `draft_invoice`), `from-message-draft` (reads an
+  INTERNAL message draft's TYPE only — check-in / no-response / onboarding / payment /
+  report types; no send), `from-finance-draft` (reads an INTERNAL finance draft's TYPE only
+  — overdue / payment / closeout / refund / attribution types; no Stripe call), and
+  `from-revenue-snapshot` (monthly closeout from internal aggregates; no provider call).
+  All handoffs idempotent via unique source indexes. **No contact/send/update/trigger
+  route.** DTOs return safe_preview + sanitized fields only.
+- **Action integration:** the `/actions` drawer offers "Create client health draft" / "View
+  client health drafts" for an approved client-success-relevant action.
+- **UI:** `/client-health` — exec summary (pending / approved / revision / high-risk /
+  missing-inputs counts), adapter-disabled banner, template library (12 starters), draft
+  queue, detail drawer (score + risk label, risk reasons, missing access, missing assets,
+  delivery risks, communication risks, next best actions, owner notes, save plan, upsell
+  opportunities, missing inputs, compliance notes, evidence, source links, review trail,
+  review). **No "Contact Client / Send Message / Send Email / Send SMS / Update GHL /
+  Create GHL Task / Trigger Workflow / Cancel Client / Charge Client / Push Live"
+  controls.** The Daily Operator Brief and Executive Decision Center include the
+  Client Health queue signal.
+- **Agents:** Vivian (primary — health reviews, retention risk, missing access/assets,
+  onboarding friction, save plans; **never contacts clients**), Vanessa (executive priority
+  + escalation of high-risk retention items internally), Valerie (finance-tied health
+  context), Vega (tracking/attribution evidence), Veronica (communication/report context),
+  Valentina (market/competitor pressure context). All drafts human-approved; client-facing
+  items stay `adapter_disabled` / `future_adapter_required`.
+
 ## Future adapter path
 External adapters stay disabled until a dedicated, explicitly-approved phase that
 (per adapter) defines scope, rate limits, compliance, idempotency, rollback, and

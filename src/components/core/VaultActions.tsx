@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Play, CheckCircle2, XCircle, Archive, RotateCcw, ShieldCheck, ShieldAlert,
-  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare, Target, Receipt, Clapperboard,
+  Lock, X, Gauge, History, Bot, Lightbulb, Sparkles, UserCog, StickyNote, Workflow, MessageSquare, Target, Receipt, Clapperboard, HeartPulse,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
@@ -357,6 +357,24 @@ export function VaultActions() {
     } finally { setActing(false); }
   }, [load]);
 
+  // Create a client-health DRAFT from an approved prepare_client_success_plan /
+  // draft_client_message / draft_report / draft_invoice action. Draft-only — it never
+  // contacts a client, sends anything, or touches GHL/Stripe.
+  const createClientHealthDraft = useCallback(async (id: string) => {
+    setActing(true); setNotice(null);
+    try {
+      const res = await fetch(`/api/core/client-health/from-action`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action_id: id }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setNotice(d.error ?? "Could not create client-health draft"); return; }
+      setNotice(d.existing
+        ? "A client-health draft already exists for this action — open Client Health to review it."
+        : "Client health draft created (draft-only) — open Client Health to review it.");
+      await load();
+    } finally { setActing(false); }
+  }, [load]);
+
   // Create a creative brief from an approved prepare_content_idea /
   // prepare_competitor_response / draft_meta_campaign action. Draft-only — it never posts,
   // publishes, uploads, or launches.
@@ -516,6 +534,7 @@ export function VaultActions() {
           onCreateCampaignDraft={() => createCampaignDraft(selected.id)}
           onCreateFinanceDraft={() => createFinanceDraft(selected.id)}
           onCreateCreativeBrief={() => createCreativeBrief(selected.id)}
+          onCreateClientHealthDraft={() => createClientHealthDraft(selected.id)}
           onClose={() => { setSelectedId(null); setNotice(null); }}
         />
       )}
@@ -532,10 +551,10 @@ function MiniStat({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onCreateCampaignDraft, onCreateFinanceDraft, onCreateCreativeBrief, onClose }: {
+function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, notice, onReview, onExecute, onNote, onAssign, onCreateWorkflowDraft, onCreateMessageDraft, onCreateCampaignDraft, onCreateFinanceDraft, onCreateCreativeBrief, onCreateClientHealthDraft, onClose }: {
   action: VaultActionDTO; canReview: boolean; canApprove: boolean; canExecute: boolean; acting: boolean; notice: string | null;
   onReview: (a: string, notes?: string) => void; onExecute: (confirm: boolean) => void;
-  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onCreateCampaignDraft: () => void; onCreateFinanceDraft: () => void; onCreateCreativeBrief: () => void; onClose: () => void;
+  onNote: (note: string) => void; onAssign: (patch: Record<string, unknown>) => void; onCreateWorkflowDraft: () => void; onCreateMessageDraft: () => void; onCreateCampaignDraft: () => void; onCreateFinanceDraft: () => void; onCreateCreativeBrief: () => void; onCreateClientHealthDraft: () => void; onClose: () => void;
 }) {
   const meta = (a.metadata ?? {}) as {
     quality_gate?: { qualityScore?: number; quality_score?: number; duplicate_score?: number; safety_status?: string };
@@ -776,6 +795,19 @@ function ActionDetail({ action: a, canReview, canApprove, canExecute, acting, no
                       <ActBtn icon={Clapperboard} label="Create creative brief" tone="#c9a84c" disabled={acting} onClick={onCreateCreativeBrief} />
                       <a href="/creative-briefs" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
                         <Clapperboard size={13} /> View creative briefs
+                      </a>
+                    </div>
+                  </div>
+                )}
+                {/* Client health offer — for approved client-success-relevant actions.
+                    Draft-only: never contacts a client, sends anything, or touches GHL/Stripe. */}
+                {(a.action_type === "prepare_client_success_plan" || a.action_type === "draft_client_message" || a.action_type === "draft_report" || a.action_type === "draft_invoice") && (
+                  <div className="space-y-2 px-3 py-3 rounded-xl" style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.22)" }}>
+                    <p className="text-[11.5px] flex items-center gap-1.5" style={{ color: "#22c55e" }}><ShieldAlert size={12} /> Client-success adapter disabled — a future approved adapter is required for anything client-facing. No client is contacted, nothing is sent, no GHL record changes.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <ActBtn icon={HeartPulse} label="Create client health draft" tone="#22c55e" disabled={acting} onClick={onCreateClientHealthDraft} />
+                      <a href="/client-health" className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold" style={{ background: "rgba(0,129,242,0.1)", border: "1px solid rgba(0,129,242,0.3)", color: "#4da6ff" }}>
+                        <HeartPulse size={13} /> View client health drafts
                       </a>
                     </div>
                   </div>

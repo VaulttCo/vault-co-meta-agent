@@ -22,6 +22,7 @@ import { getWorkflowDrafts } from "../workflows/db";
 import { getMessageDrafts } from "../messages/db";
 import { getFinanceDrafts } from "../finance-drafts/db";
 import { getCreativeBriefs } from "../creative-briefs/db";
+import { getClientHealthDrafts } from "../client-health/db";
 import { getDrafts } from "../agents/veronica/drafts";
 import { getDataProvider } from "@/lib/data/data-provider";
 
@@ -64,6 +65,7 @@ const SOURCE_META: Record<string, { label: string; href: string; minutes: number
   "finance-drafts":       { label: "Finance Drafts",       href: "/finance-drafts",       minutes: 2, base: "recommended" },
   "ghl-workflows":        { label: "GHL Workflow Drafts",  href: "/ghl-workflows",        minutes: 3, base: "low" },
   "creative-briefs":      { label: "Creative Briefs",      href: "/creative-briefs",      minutes: 4, base: "low" },
+  "client-health":        { label: "Client Health Drafts", href: "/client-health",        minutes: 3, base: "recommended" },
   "message-drafts":       { label: "Message Drafts",       href: "/message-drafts",       minutes: 2, base: "low" },
   "proposals":            { label: "System Proposals",     href: "/proposals",            minutes: 3, base: "low" },
   "sms-drafts":           { label: "SMS / Follow-Up Drafts", href: "/drafts",             minutes: 1, base: "low" },
@@ -151,6 +153,7 @@ export async function getExecutiveDecisionCenter(): Promise<ExecutiveDecisionCen
     messages,
     finance,
     briefs,
+    health,
     sms,
   ] = await Promise.all([
     read("Recommendations", () => getRecommendations(200)),
@@ -161,6 +164,7 @@ export async function getExecutiveDecisionCenter(): Promise<ExecutiveDecisionCen
     read("Message Drafts", () => getMessageDrafts(500)),
     read("Finance Drafts", () => getFinanceDrafts(500)),
     read("Creative Briefs", () => getCreativeBriefs(500)),
+    read("Client Health Drafts", () => getClientHealthDrafts(500)),
     read("SMS / Follow-Up Drafts", () => getDrafts("draft")),
   ]);
 
@@ -312,6 +316,21 @@ export async function getExecutiveDecisionCenter(): Promise<ExecutiveDecisionCen
       bump(SOURCE_META["message-drafts"].base, riskBoost(m.risk_level)),
       null,
       m.risk_level ?? null,
+    );
+  }
+
+  // ── Client health drafts ───────────────────────────────────────────────────
+  for (const h of health.filter((x) => x.status === "pending_review").slice(0, PER_SOURCE_CAP)) {
+    push(
+      "client-health",
+      h.id,
+      h.title,
+      affectsFor(h.client_id, "Client Success"),
+      h.risk_reasons?.[0] || h.description || "",
+      h.status,
+      bump(SOURCE_META["client-health"].base, riskBoost(h.risk_level)),
+      h.risk_level_label ? `Risk: ${h.risk_level_label}` : null,
+      h.risk_level ?? null,
     );
   }
 

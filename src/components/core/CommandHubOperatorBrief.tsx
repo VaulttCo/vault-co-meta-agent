@@ -20,6 +20,7 @@ import {
   Lightbulb,
   Receipt,
   MessageSquare,
+  HeartPulse,
   CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
@@ -58,6 +59,7 @@ const QUEUE_VISUAL: Record<string, { icon: LucideIcon; color: string }> = {
   "recommendations": { icon: Lightbulb, color: "#c9a84c" },
   "finance-drafts": { icon: Receipt, color: "#c9a84c" },
   "message-drafts": { icon: MessageSquare, color: "#0081f2" },
+  "client-health": { icon: HeartPulse, color: "#22c55e" },
   "sms-drafts": { icon: MessageSquare, color: "#0081f2" },
 };
 

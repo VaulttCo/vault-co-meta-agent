@@ -7,7 +7,7 @@ import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import {
   getVantaProject, getVantaAssets, getVantaRuns, getLatestAnalysis, getVantaTranscript,
-  getVantaScenes, getVantaClips, getVantaHooksByAsset,
+  getVantaScenes, getVantaClips, getVantaHooksByAsset, getCreativePackageSummary,
 } from "@/lib/vanta/db";
 import { redactClaimedBy } from "@/lib/vanta/worker-auth";
 
@@ -32,11 +32,14 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     const scenes: Record<string, unknown[]> = {};
     const clips: Record<string, unknown[]> = {};
     const hooks: Record<string, unknown[]> = {};
+    const packages: Record<string, unknown> = {};
     await Promise.all(assets.map(async (a) => {
-      const [an, tx, sc, cl, hk] = await Promise.all([
+      const [an, tx, sc, cl, hk, pkg] = await Promise.all([
         getLatestAnalysis(a.id), getVantaTranscript(a.id),
         getVantaScenes(a.id), getVantaClips(a.id), getVantaHooksByAsset(a.id),
+        getCreativePackageSummary(a.id),
       ]);
+      packages[a.id] = pkg;
       if (an) analyses[a.id] = an;
       // Trimmed DTOs — bounded text per item so a 100k-char manual transcript can't
       // balloon the payload.
@@ -53,10 +56,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       project, assets,
       runs: runs.map((r) => ({ ...r, claimed_by: redactClaimedBy(r.claimed_by) })),
-      analyses, transcripts, scenes, clips, hooks,
+      analyses, transcripts, scenes, clips, hooks, packages,
     });
   } catch (e) {
     console.error("[GET /api/vanta/projects/[id]]", (e as Error).message);
-    return NextResponse.json({ project, assets: [], runs: [], analyses: {}, transcripts: {}, scenes: {}, clips: {}, hooks: {} });
+    return NextResponse.json({ project, assets: [], runs: [], analyses: {}, transcripts: {}, scenes: {}, clips: {}, hooks: {}, packages: {} });
   }
 }

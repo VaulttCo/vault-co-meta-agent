@@ -10,6 +10,7 @@ import type {
   VantaProject, VantaProjectInput, VantaAsset, VantaAssetInput, VantaTranscript,
   VantaAgentRun, VantaAnalysis, VantaMemoryRow, VantaIndustry, VantaObjective,
   VantaScene, VantaClip, VantaHook, VantaTranscriptSegment,
+  VantaEditPlan, VantaCaption, VantaThumbnail, VantaColorGrade, VantaScore, VantaExport,
 } from "./types";
 import { VANTA_INDUSTRIES, VANTA_OBJECTIVES, VANTA_ASSET_KINDS, VANTA_JOB_TYPES as VANTA_ASSET_PIPELINE_ORDER } from "./types";
 import type { VantaAssetKind } from "./types";
@@ -27,6 +28,12 @@ const mockMemory: VantaMemoryRow[] = [];
 let mockScenes: VantaScene[] = [];
 let mockClips: VantaClip[] = [];
 let mockHooks: VantaHook[] = [];
+let mockEditPlans: VantaEditPlan[] = [];
+let mockCaptions: VantaCaption[] = [];
+let mockThumbnails: VantaThumbnail[] = [];
+let mockColorGrades: VantaColorGrade[] = [];
+const mockScores: VantaScore[] = [];
+let mockExports: VantaExport[] = [];
 
 function uuid(prefix: string): string {
   try { return crypto.randomUUID(); } catch { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
@@ -348,6 +355,181 @@ export async function replaceVantaHooks(
     if (error || !data) return applyMock();
     return data as VantaHook[];
   } catch { return applyMock(); }
+}
+
+// ── Creative package artifacts (V1.6 — edit plan, captions, thumbnails, color,
+//    scores, exports). Replace-per-asset semantics; Vanta tables only. ─────────
+
+export async function getLatestEditPlan(assetId: string): Promise<VantaEditPlan | null> {
+  const fromMock = () => mockEditPlans.find((p) => p.asset_id === assetId) ?? null;
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_edit_plans").select("*").eq("asset_id", assetId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) return fromMock();
+    return (data as VantaEditPlan) ?? fromMock();
+  } catch { return fromMock(); }
+}
+
+/** Replace this asset's DRAFT edit plans with one new draft. Exports referencing the
+ *  retired drafts are deleted FIRST (vanta_exports.edit_plan_id FK would otherwise
+ *  block the plan delete and leave duplicate drafts). */
+export async function replaceVantaEditPlan(
+  assetId: string,
+  draft: Omit<VantaEditPlan, "id" | "created_at" | "updated_at">,
+): Promise<{ plan: VantaEditPlan; removedPlanIds: string[] }> {
+  const plan: VantaEditPlan = { ...draft, asset_id: assetId, id: uuid("vplan"), created_at: nowIso(), updated_at: nowIso() };
+  const applyMock = () => {
+    const removed = mockEditPlans.filter((p) => p.asset_id === assetId && p.status === "draft").map((p) => p.id);
+    mockExports = mockExports.filter((e) => !e.edit_plan_id || !removed.includes(e.edit_plan_id));
+    mockEditPlans = [plan, ...mockEditPlans.filter((p) => !(p.asset_id === assetId && p.status === "draft"))];
+    return { plan, removedPlanIds: removed };
+  };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    const { data: old } = await client.from("vanta_edit_plans").select("id").eq("asset_id", assetId).eq("status", "draft");
+    const removedPlanIds: string[] = Array.isArray(old) ? old.map((r: { id: string }) => r.id) : [];
+    if (removedPlanIds.length > 0) {
+      await client.from("vanta_exports").delete().in("edit_plan_id", removedPlanIds); // FK order: exports first
+    }
+    await client.from("vanta_edit_plans").delete().eq("asset_id", assetId).eq("status", "draft");
+    const { data, error } = await client.from("vanta_edit_plans").insert(plan).select("*").single();
+    if (error || !data) return applyMock();
+    return { plan: data as VantaEditPlan, removedPlanIds };
+  } catch { return applyMock(); }
+}
+
+export async function replaceVantaCaptions(
+  projectId: string | null,
+  assetId: string,
+  drafts: Array<Omit<VantaCaption, "id" | "project_id" | "asset_id" | "created_at">>,
+): Promise<VantaCaption[]> {
+  const rows: VantaCaption[] = drafts.map((d) => ({ ...d, id: uuid("vcap"), project_id: projectId, asset_id: assetId, created_at: nowIso() }));
+  const applyMock = () => { mockCaptions = [...rows, ...mockCaptions.filter((c) => c.asset_id !== assetId)]; return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_captions").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_captions").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaCaption[];
+  } catch { return applyMock(); }
+}
+
+export async function replaceVantaThumbnails(
+  projectId: string | null,
+  assetId: string,
+  drafts: Array<Omit<VantaThumbnail, "id" | "project_id" | "asset_id" | "created_at">>,
+): Promise<VantaThumbnail[]> {
+  const rows: VantaThumbnail[] = drafts.map((d) => ({ ...d, id: uuid("vthumb"), project_id: projectId, asset_id: assetId, created_at: nowIso() }));
+  const applyMock = () => { mockThumbnails = [...rows, ...mockThumbnails.filter((t) => t.asset_id !== assetId)]; return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_thumbnails").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_thumbnails").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaThumbnail[];
+  } catch { return applyMock(); }
+}
+
+export async function replaceVantaColorGrade(
+  projectId: string | null,
+  assetId: string,
+  draft: Omit<VantaColorGrade, "id" | "project_id" | "asset_id" | "created_at">,
+): Promise<VantaColorGrade> {
+  const row: VantaColorGrade = { ...draft, id: uuid("vgrade"), project_id: projectId, asset_id: assetId, created_at: nowIso() };
+  const applyMock = () => { mockColorGrades = [row, ...mockColorGrades.filter((g) => g.asset_id !== assetId)]; return row; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_color_grades").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_color_grades").insert(row).select("*").single();
+    if (error || !data) return applyMock();
+    return data as VantaColorGrade;
+  } catch { return applyMock(); }
+}
+
+/** Append score events (event log — bounded by the caller per materialization). */
+export async function appendVantaScores(events: Array<Omit<VantaScore, "id" | "created_at">>): Promise<VantaScore[]> {
+  const rows: VantaScore[] = events.slice(0, 40).map((e) => ({ ...e, id: uuid("vscore"), created_at: nowIso() }));
+  const applyMock = () => { mockScores.unshift(...rows); return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    const { data, error } = await client.from("vanta_scores").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaScore[];
+  } catch { return applyMock(); }
+}
+
+/** Retire exports tied to replaced edit plans, then create the new internal-review row. */
+export async function replaceVantaExport(
+  projectId: string | null,
+  removedPlanIds: string[],
+  draft: Omit<VantaExport, "id" | "project_id" | "created_at" | "updated_at">,
+): Promise<VantaExport> {
+  const row: VantaExport = { ...draft, id: uuid("vexp"), project_id: projectId, created_at: nowIso(), updated_at: nowIso() };
+  const applyMock = () => {
+    mockExports = [row, ...mockExports.filter((e) => !e.edit_plan_id || !removedPlanIds.includes(e.edit_plan_id))];
+    return row;
+  };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    if (removedPlanIds.length > 0) await client.from("vanta_exports").delete().in("edit_plan_id", removedPlanIds);
+    const { data, error } = await client.from("vanta_exports").insert(row).select("*").single();
+    if (error || !data) return applyMock();
+    return data as VantaExport;
+  } catch { return applyMock(); }
+}
+
+/** Compact per-asset package status for the workbench. */
+export interface VantaPackageSummary {
+  edit_plan: Pick<VantaEditPlan, "id" | "title" | "format" | "target_duration_s" | "status" | "updated_at"> | null;
+  caption_formats: string[];
+  thumbnail_count: number;
+  color_preset: string | null;
+  export: Pick<VantaExport, "id" | "target" | "status"> | null;
+  quality_score: number | null;
+}
+
+export async function getCreativePackageSummary(assetId: string): Promise<VantaPackageSummary> {
+  const plan = await getLatestEditPlan(assetId);
+  const client = db();
+  const summary: VantaPackageSummary = {
+    edit_plan: plan ? { id: plan.id, title: plan.title, format: plan.format, target_duration_s: plan.target_duration_s, status: plan.status, updated_at: plan.updated_at } : null,
+    caption_formats: [], thumbnail_count: 0, color_preset: null, export: null, quality_score: null,
+  };
+  const fromMock = () => {
+    summary.caption_formats = mockCaptions.filter((c) => c.asset_id === assetId).map((c) => c.format);
+    summary.thumbnail_count = mockThumbnails.filter((t) => t.asset_id === assetId).length;
+    summary.color_preset = mockColorGrades.find((g) => g.asset_id === assetId)?.preset_key ?? null;
+    const exp = plan ? mockExports.find((e) => e.edit_plan_id === plan.id) : null;
+    summary.export = exp ? { id: exp.id, target: exp.target, status: exp.status } : null;
+    const q = plan ? mockScores.find((s) => s.entity_type === "edit_plan" && s.entity_id === plan.id && s.score_kind === "quality") : null;
+    summary.quality_score = q?.score ?? null;
+    return summary;
+  };
+  if (!client) return fromMock();
+  try {
+    const [caps, thumbs, grade, exp, q] = await Promise.all([
+      client.from("vanta_captions").select("format").eq("asset_id", assetId).limit(10),
+      client.from("vanta_thumbnails").select("id").eq("asset_id", assetId).limit(20),
+      client.from("vanta_color_grades").select("preset_key").eq("asset_id", assetId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      plan ? client.from("vanta_exports").select("id,target,status").eq("edit_plan_id", plan.id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      plan ? client.from("vanta_scores").select("score").eq("entity_type", "edit_plan").eq("entity_id", plan.id).eq("score_kind", "quality").order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null, error: null }),
+    ]);
+    if (caps.error || thumbs.error) return fromMock();
+    summary.caption_formats = (caps.data ?? []).map((c: { format: string }) => c.format);
+    summary.thumbnail_count = (thumbs.data ?? []).length;
+    summary.color_preset = (grade.data as { preset_key?: string } | null)?.preset_key ?? null;
+    summary.export = (exp.data as VantaPackageSummary["export"]) ?? null;
+    summary.quality_score = (q.data as { score?: number } | null)?.score ?? null;
+    return summary;
+  } catch { return fromMock(); }
 }
 
 // ── Agent runs (queue + audit) ───────────────────────────────────────────────

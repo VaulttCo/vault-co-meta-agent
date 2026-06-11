@@ -199,7 +199,7 @@ create table if not exists public.vanta_exports (
 create table if not exists public.vanta_scores (
   id          uuid primary key default gen_random_uuid(),
   project_id  uuid references public.vanta_projects(id),
-  entity_type text not null,                     -- clip | hook | edit_plan | export | qa
+  entity_type text not null,                     -- clip | hook | edit_plan | export | qa | thumbnail
   entity_id   uuid,
   score_kind  text not null,                     -- clip_score | hook_3s | quality | ctr_rank
   score       integer not null default 0,

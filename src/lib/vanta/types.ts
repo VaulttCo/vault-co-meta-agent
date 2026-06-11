@@ -219,6 +219,60 @@ export interface VantaEditPlan {
   updated_at: string;
 }
 
+/** Mirror of vanta_captions (docs/vanta-schema.sql §9). */
+export interface VantaCaption {
+  id: string;
+  asset_id: string | null;
+  project_id: string | null;
+  format: "srt" | "vtt" | "styled_json";
+  payload: string | null;
+  style_spec: Record<string, unknown>;
+  emphasis_map: Array<{ at_ms: number; text: string; reason: string }>;
+  storage_path: string | null;
+  created_at: string;
+}
+
+/** Mirror of vanta_thumbnails (§10). */
+export interface VantaThumbnail {
+  id: string;
+  project_id: string | null;
+  asset_id: string | null;
+  concept: string;
+  layout_spec: Record<string, unknown>;
+  text_options: string[];
+  ctr_rank: number;
+  predicted_ctr_note: string | null;
+  image_path: string | null;
+  created_at: string;
+}
+
+/** Mirror of vanta_scores (§12) — typed score events. */
+export interface VantaScore {
+  id: string;
+  project_id: string | null;
+  entity_type: "clip" | "hook" | "edit_plan" | "export" | "qa" | "thumbnail";
+  entity_id: string | null;
+  score_kind: "clip_score" | "hook_3s" | "quality" | "ctr_rank";
+  score: number;
+  reasons: string[];
+  scored_by: "vanta" | "human";
+  created_at: string;
+}
+
+/** Mirror of vanta_exports (§11) — deliverables for the Vault Core approval lanes. */
+export interface VantaExport {
+  id: string;
+  project_id: string | null;
+  edit_plan_id: string | null;
+  target: "internal_review" | "creative_brief" | "meta_campaign_draft";
+  format: string | null;
+  storage_path: string | null;
+  status: string;
+  linked_brief_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface VantaQAReview {
   quality_score: number; // 1..100
   revision_notes: string[];

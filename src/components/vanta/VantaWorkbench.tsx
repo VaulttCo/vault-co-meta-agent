@@ -38,6 +38,16 @@ interface DetailPayload {
   scenes?: Record<string, VantaScene[]>;
   clips?: Record<string, VantaClip[]>;
   hooks?: Record<string, VantaHook[]>;
+  packages?: Record<string, VantaPackageSummary>;
+}
+
+interface VantaPackageSummary {
+  edit_plan: { id: string; title: string; format: string; target_duration_s: number | null; status: string; updated_at: string } | null;
+  caption_formats: string[];
+  thumbnail_count: number;
+  color_preset: string | null;
+  export: { id: string; target: string; status: string } | null;
+  quality_score: number | null;
 }
 
 interface JobsPayload {
@@ -119,6 +129,25 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
       await loadJobs();
     } finally { setJobActing(null); }
   }, [projectId, loadJobs]);
+
+  const materialize = useCallback(async (assetId: string) => {
+    setJobActing(`pkg:${assetId}`); setNotice(null);
+    try {
+      const res = await fetch(`/api/vanta/projects/${projectId}/package`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_id: assetId, format }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(Array.isArray(d.missing) && d.missing.length
+          ? `Not ready to materialize — missing: ${d.missing.join("; ")}`
+          : d.error ?? "Materialization failed");
+        return;
+      }
+      setNotice(`Creative package materialized — ${d.counts?.clips ?? 0} clips, ${d.counts?.hooks ?? 0} hooks, quality ${d.counts?.quality ?? "—"}/100.`);
+      await load();
+    } finally { setJobActing(null); }
+  }, [projectId, format, load]);
 
   const runJob = useCallback(async (jobId: string) => {
     setJobActing(jobId); setNotice(null);
@@ -378,13 +407,45 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
         const assetScenes = data.scenes?.[selected] ?? [];
         const assetClips = data.clips?.[selected] ?? [];
         const assetHooks = data.hooks?.[selected] ?? [];
+        const pkg = data.packages?.[selected] ?? null;
         if (segs.length === 0 && assetScenes.length === 0 && assetClips.length === 0 && assetHooks.length === 0) return null;
         const estimated = assetClips.some((c) => c.flags.includes("estimated_timestamps")) || assetScenes.some((s) => (s.detector ?? "").includes("mock"));
+        const canMaterialize = segs.length > 0 && assetScenes.length > 0;
         return (
           <VCPanel>
             <VCPanelHeader icon={FileText} iconColor={ORANGE} label="Footage Intelligence — deterministic (pre-AI)" title="Transcript · Scenes · Clips"
               action={estimated ? <VCStatusBadge label="ESTIMATED / MOCK timing" variant="neutral" dot /> : <VCStatusBadge label="Measured timing" variant="success" dot />} />
             <div className="px-4 py-3 space-y-3">
+              {/* Creative package status (V1.6 — measured materialization) */}
+              <div className="px-3.5 py-2.5 rounded-xl flex items-center justify-between gap-3 flex-wrap"
+                style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold" style={{ color: "var(--t-text)" }}>
+                    Creative package {pkg?.edit_plan ? "— materialized" : "— not materialized"}
+                  </p>
+                  {pkg?.edit_plan ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      <VCChip label={`plan: ${titleCase(pkg.edit_plan.format)} · ${pkg.edit_plan.target_duration_s ?? "—"}s · ${pkg.edit_plan.status}`} color="#0081f2" />
+                      {pkg.quality_score !== null && <VCChip label={`quality ${pkg.quality_score}/100`} color={scoreColor(pkg.quality_score)} />}
+                      <VCChip label={`captions: ${pkg.caption_formats.join(", ") || "—"}`} color="#22d3ee" />
+                      <VCChip label={`${pkg.thumbnail_count} thumbnails`} color="#a78bfa" />
+                      {pkg.color_preset && <VCChip label={`grade: ${titleCase(pkg.color_preset)}`} color="#22c55e" />}
+                      {pkg.export && <VCChip label={`export: ${titleCase(pkg.export.target)} (${pkg.export.status})`} color={ORANGE} />}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] mt-0.5" style={{ color: "var(--t-muted)" }}>
+                      {canMaterialize
+                        ? "Transcript + scenes are ready — materialize the edit plan, captions, thumbnails, color grade, scores, and internal-review export."
+                        : "Needs transcript segments and scenes (run the processing jobs) before the package can be materialized."}
+                    </p>
+                  )}
+                </div>
+                <VCButton onClick={() => materialize(selected)} disabled={jobActing !== null || !canMaterialize}>
+                  {jobActing === `pkg:${selected}`
+                    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Materializing…</span>
+                    : <span className="inline-flex items-center gap-1.5"><Scissors size={12} /> {pkg?.edit_plan ? "Re-materialize package" : "Materialize package"}</span>}
+                </VCButton>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Transcript segments */}
                 <div className="space-y-2">

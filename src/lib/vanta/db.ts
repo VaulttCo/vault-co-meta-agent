@@ -1,0 +1,286 @@
+// VANTA — data layer (server-side, V1). Mock-safe.
+//
+// In-memory store (starts EMPTY) when Supabase is unconfigured or vanta_* tables are
+// absent; otherwise persists via the service-role client. Nothing here publishes,
+// launches, uploads to external platforms, or contacts anyone. The vanta_agent_runs row
+// is the audit trail for every analysis.
+
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import type {
+  VantaProject, VantaProjectInput, VantaAsset, VantaAssetInput, VantaTranscript,
+  VantaAgentRun, VantaAnalysis, VantaMemoryRow, VantaIndustry, VantaObjective,
+} from "./types";
+import { VANTA_INDUSTRIES, VANTA_OBJECTIVES } from "./types";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function db(): any {
+  return getSupabaseServerClient();
+}
+
+const mockProjects: VantaProject[] = [];
+const mockAssets: VantaAsset[] = [];
+const mockTranscripts: VantaTranscript[] = [];
+const mockRuns: VantaAgentRun[] = [];
+const mockMemory: VantaMemoryRow[] = [];
+
+function uuid(prefix: string): string {
+  try { return crypto.randomUUID(); } catch { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
+}
+const nowIso = () => new Date().toISOString();
+
+// Cap + strip control chars on user-provided text. (No outbound risk here — Vanta stores
+// plans — but inputs still get bounded.)
+function clean(v: unknown, max: number): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+  return t || null;
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+
+export async function getVantaProjects(limit = 200): Promise<VantaProject[]> {
+  const client = db();
+  if (!client) return [...mockProjects];
+  try {
+    const { data, error } = await client.from("vanta_projects").select("*").order("created_at", { ascending: false }).limit(limit);
+    if (error || !data) return [...mockProjects];
+    return data as VantaProject[];
+  } catch { return [...mockProjects]; }
+}
+
+export async function getVantaProject(id: string): Promise<VantaProject | null> {
+  const client = db();
+  if (!client) return mockProjects.find((p) => p.id === id) ?? null;
+  try {
+    const { data, error } = await client.from("vanta_projects").select("*").eq("id", id).maybeSingle();
+    if (error) return mockProjects.find((p) => p.id === id) ?? null;
+    return (data as VantaProject) ?? null;
+  } catch { return mockProjects.find((p) => p.id === id) ?? null; }
+}
+
+export async function createVantaProject(input: VantaProjectInput, createdBy: string | null): Promise<VantaProject | null> {
+  const title = clean(input.title, 160);
+  if (!title) return null;
+  const industry = (VANTA_INDUSTRIES as readonly string[]).includes(input.industry ?? "") ? (input.industry as VantaIndustry) : "roofing";
+  const objective = (VANTA_OBJECTIVES as readonly string[]).includes(input.objective ?? "") ? (input.objective as VantaObjective) : "lead_generation";
+  const row: VantaProject = {
+    id: uuid("vproj"),
+    client_id: clean(input.client_id, 120),
+    title,
+    description: clean(input.description, 600),
+    industry, objective,
+    status: "intake",
+    brand_kit: {}, strategy: {}, metadata: {},
+    created_by: createdBy,
+    created_at: nowIso(), updated_at: nowIso(),
+  };
+  const client = db();
+  if (!client) { mockProjects.unshift(row); return row; }
+  try {
+    const { data, error } = await client.from("vanta_projects").insert(row).select("*").single();
+    if (error || !data) { mockProjects.unshift(row); return row; }
+    return data as VantaProject;
+  } catch { mockProjects.unshift(row); return row; }
+}
+
+export async function updateVantaProject(id: string, patch: Partial<VantaProject>): Promise<VantaProject | null> {
+  const next = { ...patch, updated_at: nowIso() };
+  const client = db();
+  if (!client) {
+    const i = mockProjects.findIndex((p) => p.id === id);
+    if (i < 0) return null;
+    mockProjects[i] = { ...mockProjects[i], ...next } as VantaProject;
+    return mockProjects[i];
+  }
+  try {
+    const { data, error } = await client.from("vanta_projects").update(next).eq("id", id).select("*").single();
+    if (error || !data) return null;
+    return data as VantaProject;
+  } catch { return null; }
+}
+
+// ── Assets + transcripts ─────────────────────────────────────────────────────
+
+export async function getVantaAssets(projectId?: string): Promise<VantaAsset[]> {
+  const client = db();
+  const fromMock = () => mockAssets.filter((a) => !projectId || a.project_id === projectId);
+  if (!client) return fromMock();
+  try {
+    let q = client.from("vanta_assets").select("*").order("created_at", { ascending: false }).limit(500);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q;
+    if (error || !data) return fromMock();
+    return data as VantaAsset[];
+  } catch { return fromMock(); }
+}
+
+export async function getVantaAsset(id: string): Promise<VantaAsset | null> {
+  const client = db();
+  if (!client) return mockAssets.find((a) => a.id === id) ?? null;
+  try {
+    const { data, error } = await client.from("vanta_assets").select("*").eq("id", id).maybeSingle();
+    if (error) return mockAssets.find((a) => a.id === id) ?? null;
+    return (data as VantaAsset) ?? null;
+  } catch { return mockAssets.find((a) => a.id === id) ?? null; }
+}
+
+/** Register an asset (metadata + optional manual transcript). http(s) source URLs only. */
+export async function registerVantaAsset(input: VantaAssetInput, createdBy: string | null): Promise<{ asset: VantaAsset; transcript: VantaTranscript | null } | null> {
+  const fileName = clean(input.file_name, 200);
+  if (!fileName || !input.project_id) return null;
+  const sourceUrl = clean(input.source_url, 500);
+  const safeUrl = sourceUrl && /^https?:\/\//i.test(sourceUrl) ? sourceUrl : null;
+
+  const asset: VantaAsset = {
+    id: uuid("vasset"),
+    project_id: input.project_id,
+    asset_kind: input.asset_kind ?? "footage",
+    file_name: fileName,
+    storage_bucket: null, storage_path: null,
+    source_url: safeUrl,
+    mime_type: null, size_bytes: null,
+    duration_ms: typeof input.duration_ms === "number" && input.duration_ms > 0 ? Math.min(input.duration_ms, 6 * 3600_000) : null,
+    width: null, height: null, fps: null, codec: null,
+    probe: {}, audio_analysis: {}, license: {},
+    status: "registered",
+    created_by: createdBy,
+    created_at: nowIso(), updated_at: nowIso(),
+  };
+
+  let transcript: VantaTranscript | null = null;
+  const text = typeof input.transcript_text === "string" ? input.transcript_text.replace(/[\u0000-\u001F\u007F]/g, " ").trim().slice(0, 100_000) : "";
+  if (text) {
+    transcript = {
+      id: uuid("vtx"),
+      asset_id: asset.id,
+      language: "en", source: "manual",
+      full_text: text,
+      segments: [],
+      word_count: text.split(/\s+/).length,
+      filler_word_count: (text.match(/\b(um|uh|like|you know)\b/gi) ?? []).length,
+      storage_path: null,
+      created_at: nowIso(), updated_at: nowIso(),
+    };
+  }
+
+  const client = db();
+  if (!client) {
+    mockAssets.unshift(asset);
+    if (transcript) mockTranscripts.unshift(transcript);
+    return { asset, transcript };
+  }
+  try {
+    const { data, error } = await client.from("vanta_assets").insert(asset).select("*").single();
+    const saved = (error || !data ? asset : (data as VantaAsset));
+    if (error) mockAssets.unshift(asset);
+    if (transcript) {
+      transcript.asset_id = saved.id;
+      const { error: te } = await client.from("vanta_transcripts").insert(transcript);
+      if (te) mockTranscripts.unshift(transcript);
+    }
+    return { asset: saved, transcript };
+  } catch {
+    mockAssets.unshift(asset);
+    if (transcript) mockTranscripts.unshift(transcript);
+    return { asset, transcript };
+  }
+}
+
+export async function getVantaTranscript(assetId: string): Promise<VantaTranscript | null> {
+  const client = db();
+  if (!client) return mockTranscripts.find((t) => t.asset_id === assetId) ?? null;
+  try {
+    const { data, error } = await client.from("vanta_transcripts").select("*").eq("asset_id", assetId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) return mockTranscripts.find((t) => t.asset_id === assetId) ?? null;
+    return (data as VantaTranscript) ?? null;
+  } catch { return mockTranscripts.find((t) => t.asset_id === assetId) ?? null; }
+}
+
+// ── Agent runs (queue + audit) ───────────────────────────────────────────────
+
+export async function getVantaRuns(projectId?: string, limit = 100): Promise<VantaAgentRun[]> {
+  const client = db();
+  const fromMock = () => mockRuns.filter((r) => !projectId || r.project_id === projectId).slice(0, limit);
+  if (!client) return fromMock();
+  try {
+    let q = client.from("vanta_agent_runs").select("*").order("created_at", { ascending: false }).limit(limit);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q;
+    if (error || !data) return fromMock();
+    return data as VantaAgentRun[];
+  } catch { return fromMock(); }
+}
+
+/** Persist a completed intelligence-plane analysis as a succeeded run + project update. */
+export async function persistVantaAnalysis(
+  project: VantaProject,
+  assetId: string,
+  analysis: VantaAnalysis,
+  actor: string | null,
+): Promise<VantaAgentRun> {
+  const now = nowIso();
+  const run: VantaAgentRun = {
+    id: uuid("vrun"),
+    project_id: project.id,
+    asset_id: assetId,
+    agent: "vanta_composite",
+    job_type: "analyze",
+    status: "succeeded",
+    params: { format: analysis.edit_plan.format, mock: analysis.mock },
+    params_hash: null,
+    result: analysis as unknown as Record<string, unknown>,
+    error: null,
+    claimed_by: actor ?? "app",
+    started_at: now, finished_at: now,
+    created_at: now, updated_at: now,
+  };
+  const client = db();
+  if (!client) {
+    mockRuns.unshift(run);
+  } else {
+    try {
+      const { error } = await client.from("vanta_agent_runs").insert(run);
+      if (error) mockRuns.unshift(run);
+    } catch { mockRuns.unshift(run); }
+  }
+  await updateVantaProject(project.id, { strategy: analysis.strategy, status: "review" });
+  return run;
+}
+
+/** Latest succeeded analysis for an asset (what the workbench renders). */
+export async function getLatestAnalysis(assetId: string): Promise<VantaAnalysis | null> {
+  const client = db();
+  const fromMock = () => {
+    const r = mockRuns.find((x) => x.asset_id === assetId && x.job_type === "analyze" && x.status === "succeeded");
+    return r ? (r.result as unknown as VantaAnalysis) : null;
+  };
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_agent_runs").select("*")
+      .eq("asset_id", assetId).eq("job_type", "analyze").eq("status", "succeeded")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error || !data) return fromMock();
+    return ((data as VantaAgentRun).result as unknown as VantaAnalysis) ?? null;
+  } catch { return fromMock(); }
+}
+
+// ── Memory ────────────────────────────────────────────────────────────────────
+
+export async function getVantaMemory(industry?: string, limit = 100): Promise<VantaMemoryRow[]> {
+  const client = db();
+  const fromMock = () => mockMemory.filter((m) => m.active && (!industry || m.industry === industry)).slice(0, limit);
+  if (!client) return fromMock();
+  try {
+    let q = client.from("vanta_memory").select("*").eq("active", true).order("confidence", { ascending: false }).limit(limit);
+    if (industry) q = q.eq("industry", industry);
+    const { data, error } = await q;
+    if (error || !data) return fromMock();
+    return data as VantaMemoryRow[];
+  } catch { return fromMock(); }
+}
+
+/** Top winning patterns to bias new analyses (fed into the prompt). */
+export async function getMemoryWinners(industry: string, limit = 8): Promise<string[]> {
+  const rows = await getVantaMemory(industry, limit);
+  return rows.map((m) => `[${m.memory_kind}] ${m.pattern}`).slice(0, limit);
+}

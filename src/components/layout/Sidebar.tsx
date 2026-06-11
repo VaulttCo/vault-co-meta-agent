@@ -173,6 +173,7 @@ export function Sidebar({ onClose }: SidebarProps) {
   // ── Determine portal context ─────────────────────────────────────────────
   const isRevenueDashboard = pathname.startsWith("/revenue-dashboard");
   const isVictoria = pathname.startsWith("/victoria");
+  const isVanta = pathname.startsWith("/vanta");
   const VAULT_CORE_ROUTES = ["/vault-core", "/vault-memory", "/workforce", "/recommendations", "/drafts", "/proposals", "/runtime", "/actions", "/ghl-workflows", "/message-drafts", "/meta-campaign-drafts", "/finance-drafts", "/creative-briefs", "/client-health"];
   const isVaultCore = VAULT_CORE_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
@@ -180,6 +181,8 @@ export function Sidebar({ onClose }: SidebarProps) {
     ? "Revenue Dashboard"
     : isVictoria
     ? "Victoria AI"
+    : isVanta
+    ? "Vanta Creative"
     : isVaultCore
     ? "Vault Core"
     : "Vault Co Veronica";
@@ -288,6 +291,21 @@ export function Sidebar({ onClose }: SidebarProps) {
           </>
         )}
 
+        {/* ── Vanta portal — Creative Intelligence ───────────────────── */}
+        {isVanta && (
+          <>
+            <SectionLabel label="Vanta Creative" />
+            <NavLink label="Vanta Studio"   href="/vanta"          icon={Clapperboard} />
+            <NavLink label="Projects"       href="/vanta/projects" icon={Layers} />
+
+            <SectionLabel label="Coming Soon" />
+            <ComingSoonItem icon={ImageIcon}     label="Color Lab"      />
+            <ComingSoonItem icon={Sparkles}      label="Hook Lab"       />
+            <ComingSoonItem icon={MessageSquare} label="Caption Lab"    />
+            <ComingSoonItem icon={Brain}         label="Creative Memory" />
+          </>
+        )}
+
         {/* ── Vault Core — private AI operating system ───────────────── */}
         {isVaultCore && (
           <>
@@ -301,7 +319,7 @@ export function Sidebar({ onClose }: SidebarProps) {
         )}
 
         {/* ── Veronica portal (default) ──────────────────────────────── */}
-        {!isRevenueDashboard && !isVictoria && !isVaultCore && (
+        {!isRevenueDashboard && !isVictoria && !isVaultCore && !isVanta && (
           <>
             <SectionLabel label="Veronica AI" />
             {veronicaNavItems
@@ -357,6 +375,30 @@ export function Sidebar({ onClose }: SidebarProps) {
                 style={{ color: "#a78bfa", backgroundColor: "rgba(167,139,250,0.10)", border: "1px solid rgba(167,139,250,0.20)" }}
               >
                 Sales
+              </span>
+            </Link>
+            <Link
+              href="/vanta"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150"
+              style={{ color: "rgba(255,170,80,0.78)", border: "1px solid transparent" }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "#ffaa50";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,132,0,0.08)";
+                (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,132,0,0.18)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = "rgba(255,170,80,0.78)";
+                (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                (e.currentTarget as HTMLElement).style.borderColor = "transparent";
+              }}
+            >
+              <Clapperboard size={15} className="flex-shrink-0" style={{ color: "#ff8400" }} />
+              <span className="truncate">Vanta Creative</span>
+              <span
+                className="ml-auto flex items-center gap-0.5 text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0"
+                style={{ color: "#ff8400", backgroundColor: "rgba(255,132,0,0.10)", border: "1px solid rgba(255,132,0,0.20)" }}
+              >
+                Studio
               </span>
             </Link>
 

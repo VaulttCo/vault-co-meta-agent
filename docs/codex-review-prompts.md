@@ -259,6 +259,23 @@ Vault Co Internal-First Draft Principle (alignment — see src/lib/core/operatin
   Charge Client / Push Live" controls. No new active agents; tick cadence unchanged; Codex
   must not be a production runtime dependency.
 
+- VANTA Creative Intelligence MODULE (V1, `/vanta`, `src/lib/vanta/**`, `/api/vanta/**`,
+  `vanta_*` tables): a PRODUCT SURFACE on the Victoria pattern — its agents are library-
+  level AI roles, NOT Vault Core runtime executives (roster stays exactly 6; no tick
+  changes). Vanta PLANS and BRIEFS: strategy, clip scores, hooks, color recipes, edit
+  plans, caption styles, thumbnail concepts, sound-design cue sheets, QA — via ONE
+  server-side Anthropic structured call with a deterministic mock fallback. **Flag P0**
+  if any code: posts/publishes/uploads content to any social platform; launches/edits a
+  Meta ad or performs any Meta/GHL/Stripe mutation; contacts a client/creator; executes
+  ffmpeg/whisper/media binaries inside a Vercel route (media work belongs to the external
+  Vanta Worker via the vanta_agent_runs queue); fetches an asset source_url server-side;
+  exposes ANTHROPIC_API_KEY or imports `src/lib/vanta/ai.ts` / `analyze.ts` / `db.ts`
+  into a client component; adds a publish/launch/send route; bypasses role guards
+  (canViewCreatives for reads, admin/canViewAiBuilder for writes); or adds a Vanta agent
+  to the Vault Core runtime roster/tick. Mock fallback is mandatory (no key + no DB must
+  still work). Exports hand off to the EXISTING creative-brief / meta-campaign-draft
+  approval lanes — Vanta never gets its own external execution path.
+
 Check for and report:
 - Missing role guards (resolveServerRole) or permission checks (can(role,...)) on any /api route.
 - Secret exposure: hardcoded keys, NEXT_PUBLIC_ secrets, secrets logged or returned from an API,

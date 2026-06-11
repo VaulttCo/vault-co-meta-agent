@@ -35,11 +35,16 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const claimed = await claimJob(run.id, auth.userId ?? "app");
+    // `app:` namespace — inline smoke claims can never collide with `worker:` identities.
+    const claimed = await claimJob(run.id, `app:${auth.userId ?? "operator"}`);
     if (!claimed) return NextResponse.json({ error: "Job was claimed by another runner" }, { status: 409 });
 
     const asset = claimed.asset_id ? await getVantaAsset(claimed.asset_id) : null;
-    const finished = await executeProcessingJob(claimed, asset);
+    // Heavy local media work (whisper/scenedetect) is worker-owned; inline execution
+    // of it is dev-box opt-in only.
+    const finished = await executeProcessingJob(claimed, asset, {
+      allowLocalHeavy: process.env.VANTA_ALLOW_INLINE_HEAVY === "true",
+    });
     if (!finished) return NextResponse.json({ error: "Job execution did not record a result" }, { status: 500 });
 
     const mock = (finished.result as { mock?: boolean })?.mock === true;

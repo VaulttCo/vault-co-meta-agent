@@ -7,6 +7,8 @@ import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import { getVantaProject, getVantaRuns } from "@/lib/vanta/db";
 import { getMediaCapabilities } from "@/lib/vanta/media/ffmpeg";
+import { isStaleRun, STALE_AFTER_MS } from "@/lib/vanta/jobs";
+import { redactClaimedBy } from "@/lib/vanta/worker-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,12 +26,19 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
   try {
     const [runs, capabilities] = await Promise.all([getVantaRuns(project.id, 200), getMediaCapabilities()]);
-    const counts = { queued: 0, claimed: 0, running: 0, succeeded: 0, failed: 0 };
-    for (const r of runs) if (r.status in counts) counts[r.status as keyof typeof counts]++;
-    return NextResponse.json({ jobs: runs, counts, capabilities, mockMode: capabilities.mode === "mock" });
+    const counts = { queued: 0, claimed: 0, running: 0, succeeded: 0, failed: 0, stale: 0 };
+    const staleJobIds: string[] = [];
+    const now = Date.now();
+    for (const r of runs) {
+      if (r.status in counts) counts[r.status as keyof typeof counts]++;
+      if (isStaleRun(r, now)) { counts.stale++; staleJobIds.push(r.id); }
+    }
+    // Claim tokens never leave the server — redact before the UI sees claimed_by.
+    const jobs = runs.map((r) => ({ ...r, claimed_by: redactClaimedBy(r.claimed_by) }));
+    return NextResponse.json({ jobs, counts, staleJobIds, staleAfterMs: STALE_AFTER_MS, capabilities, mockMode: capabilities.mode === "mock" });
   } catch (e) {
     console.error("[GET /api/vanta/projects/[id]/jobs]", (e as Error).message);
     const capabilities = { ffmpeg: false, ffprobe: false, whisper: false, scenedetect: false, mediaRoot: null, mode: "mock" as const };
-    return NextResponse.json({ jobs: [], counts: { queued: 0, claimed: 0, running: 0, succeeded: 0, failed: 0 }, capabilities, mockMode: true });
+    return NextResponse.json({ jobs: [], counts: { queued: 0, claimed: 0, running: 0, succeeded: 0, failed: 0, stale: 0 }, staleJobIds: [], staleAfterMs: STALE_AFTER_MS, capabilities, mockMode: true });
   }
 }

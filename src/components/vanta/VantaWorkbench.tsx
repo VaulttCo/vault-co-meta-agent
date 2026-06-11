@@ -42,7 +42,8 @@ interface DetailPayload {
 
 interface JobsPayload {
   jobs: VantaAgentRun[];
-  counts: { queued: number; claimed: number; running: number; succeeded: number; failed: number };
+  counts: { queued: number; claimed: number; running: number; succeeded: number; failed: number; stale?: number };
+  staleJobIds?: string[];
   capabilities: VantaMediaCapabilities;
   mockMode: boolean;
 }
@@ -281,6 +282,7 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
               {(["queued", "running", "succeeded", "failed"] as const).map((s) => (
                 <VCChip key={s} label={`${s}: ${s === "running" ? jobsData.counts.running + jobsData.counts.claimed : jobsData.counts[s]}`} color={JOB_STATUS_COLOR[s]} />
               ))}
+              {(jobsData.counts.stale ?? 0) > 0 && <VCChip label={`stale (no heartbeat >10m): ${jobsData.counts.stale}`} color="#ef4444" />}
             </div>
 
             {/* Per-asset pipeline */}
@@ -316,9 +318,12 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
                         const j = latestByType.get(t);
                         if (!j) return <VCChip key={t} label={`${titleCase(t)}: —`} color="#3a4158" />;
                         const isMock = (j.result as { mock?: boolean })?.mock === true;
+                        const isWorker = (j.claimed_by ?? "").startsWith("worker:");
+                        const isStale = jobsData.staleJobIds?.includes(j.id) ?? false;
+                        const suffix = j.status === "succeeded" && isMock ? " (mock)" : isStale ? " (stale)" : isWorker && (j.status === "claimed" || j.status === "running") ? " (worker)" : "";
                         return (
-                          <span key={t} className="inline-flex items-center gap-1">
-                            <VCChip label={`${titleCase(t)}: ${j.status}${j.status === "succeeded" && isMock ? " (mock)" : ""}`} color={JOB_STATUS_COLOR[j.status] ?? "#6b7a99"} />
+                          <span key={t} className="inline-flex items-center gap-1" title={j.claimed_by ?? undefined}>
+                            <VCChip label={`${titleCase(t)}: ${j.status}${suffix}`} color={isStale ? "#ef4444" : JOB_STATUS_COLOR[j.status] ?? "#6b7a99"} />
                             {j.status === "queued" && (
                               <button onClick={() => runJob(j.id)} disabled={jobActing !== null} title={`Run ${t} now`}
                                 className="inline-flex items-center justify-center w-5 h-5 rounded disabled:opacity-40"

@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 import {
-  createVantaRun, findActiveVantaRun, claimVantaRun, patchVantaRun,
+  createVantaRun, findActiveVantaRun, claimVantaRun, patchVantaRun, listQueuedRuns,
   getVantaTranscript, updateVantaAssetMedia, updateVantaTranscript, createVantaTranscript,
   getVantaScenes, replaceVantaScenes, replaceVantaClips, replaceVantaHooks,
 } from "./db";
@@ -83,6 +83,33 @@ export function claimJob(id: string, claimedBy: string): Promise<VantaAgentRun |
   return claimVantaRun(id, claimedBy);
 }
 
+/** Job types the external worker may claim. `clips` stays control-plane generated
+ *  (deterministic rubric over transcript × scenes — nothing for a media box to add). */
+export const WORKER_CLAIMABLE_JOB_TYPES: VantaJobType[] = VANTA_JOB_TYPES.filter((t) => t !== "clips");
+
+/** Claim the next queued job (oldest first), CAS-looping past races. Null when idle. */
+export async function claimNextJob(claimedBy: string, jobTypes?: VantaJobType[]): Promise<VantaAgentRun | null> {
+  const allowed = (jobTypes?.length ? jobTypes : WORKER_CLAIMABLE_JOB_TYPES)
+    .filter((t) => WORKER_CLAIMABLE_JOB_TYPES.includes(t));
+  if (allowed.length === 0) return null;
+  const candidates = await listQueuedRuns(allowed, 5);
+  for (const candidate of candidates) {
+    const claimed = await claimVantaRun(candidate.id, claimedBy);
+    if (claimed) return claimed;
+  }
+  return null;
+}
+
+/** A claimed/running job with no heartbeat for this long is surfaced as stale (master
+ *  plan §11: "stuck jobs (claimed > 10min)"). Visibility only — no auto-reclaim. */
+export const STALE_AFTER_MS = 10 * 60_000;
+
+export function isStaleRun(run: VantaAgentRun, nowMs = Date.now()): boolean {
+  if (run.status !== "claimed" && run.status !== "running") return false;
+  const updated = Date.parse(run.updated_at);
+  return Number.isFinite(updated) && nowMs - updated > STALE_AFTER_MS;
+}
+
 export function completeJob(id: string, result: Record<string, unknown>): Promise<VantaAgentRun | null> {
   return patchVantaRun(id, { status: "succeeded", result, error: null, finished_at: nowIso() });
 }
@@ -124,13 +151,19 @@ export async function enqueueAssetPipeline(
   return jobs;
 }
 
-// ── Inline executor (Phase D — POST /api/vanta/jobs/[id]/run) ────────────────
+// ── Inline executor (smoke-test/dev path — POST /api/vanta/jobs/[id]/run) ────
 //
 // Light jobs run for real when binaries + local footage exist; heavy jobs ALWAYS
-// resolve to their worker plan. Every branch completes or fails the run — a job
-// never gets stuck in `running` from this path.
+// resolve to their worker plan. Local whisper/scenedetect are heavy (minutes of
+// decode) and belong to the external worker — the inline path only runs them when
+// explicitly opted in (VANTA_ALLOW_INLINE_HEAVY=true on a dev box), never by default.
+// Every branch completes or fails the run — a job never gets stuck in `running`.
 
-export async function executeProcessingJob(run: VantaAgentRun, asset: VantaAsset | null): Promise<VantaAgentRun | null> {
+export async function executeProcessingJob(
+  run: VantaAgentRun,
+  asset: VantaAsset | null,
+  opts: { allowLocalHeavy?: boolean } = {},
+): Promise<VantaAgentRun | null> {
   if (!isVantaJobType(run.job_type)) {
     return failJob(run.id, `Unsupported job_type for inline execution: ${run.job_type}`);
   }
@@ -187,8 +220,9 @@ export async function executeProcessingJob(run: VantaAgentRun, asset: VantaAsset
             notes: ["Segments estimated from the manual transcript (word-proportional timing). Whisper (worker) replaces these with measured timestamps."],
           });
         }
-        // No transcript → real whisper if this box has it, worker plan otherwise.
-        const real = await transcribeLocalFile(asset);
+        // No transcript → local whisper only when heavy work is explicitly allowed
+        // (dev box); the worker owns this in production.
+        const real = opts.allowLocalHeavy ? await transcribeLocalFile(asset) : null;
         if (real) {
           const tx = await createVantaTranscript({
             asset_id: asset.id, source: "whisper", full_text: real.full_text,
@@ -203,7 +237,8 @@ export async function executeProcessingJob(run: VantaAgentRun, asset: VantaAsset
         return finalizeSuccess(run.id, { ...planTranscription(asset), capabilities: caps });
       }
       case "scenes": {
-        const real = await detectScenesLocal(asset);
+        // Local PySceneDetect decodes the full file — heavy; opt-in only (dev box).
+        const real = opts.allowLocalHeavy ? await detectScenesLocal(asset) : null;
         let drafts = real;
         if (!drafts) {
           const tx = await getVantaTranscript(asset.id);

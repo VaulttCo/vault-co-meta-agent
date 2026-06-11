@@ -9,6 +9,7 @@ import {
   getVantaProject, getVantaAssets, getVantaRuns, getLatestAnalysis, getVantaTranscript,
   getVantaScenes, getVantaClips, getVantaHooksByAsset,
 } from "@/lib/vanta/db";
+import { redactClaimedBy } from "@/lib/vanta/worker-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       clips[a.id] = cl.slice(0, 60).map((c) => ({ ...c, transcript_excerpt: c.transcript_excerpt?.slice(0, 200) ?? null }));
       hooks[a.id] = hk.slice(0, 10).map((h) => ({ ...h, hook_text: h.hook_text.slice(0, 300), rationale: h.rationale?.slice(0, 600) ?? null }));
     }));
-    return NextResponse.json({ project, assets, runs, analyses, transcripts, scenes, clips, hooks });
+    return NextResponse.json({
+      project, assets,
+      runs: runs.map((r) => ({ ...r, claimed_by: redactClaimedBy(r.claimed_by) })),
+      analyses, transcripts, scenes, clips, hooks,
+    });
   } catch (e) {
     console.error("[GET /api/vanta/projects/[id]]", (e as Error).message);
     return NextResponse.json({ project, assets: [], runs: [], analyses: {}, transcripts: {}, scenes: {}, clips: {}, hooks: {} });

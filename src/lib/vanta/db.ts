@@ -449,20 +449,23 @@ export async function claimVantaRun(id: string, claimedBy: string): Promise<Vant
   } catch { return fromMock(); }
 }
 
-/** Next queued runs of the given types, oldest first (claim candidates). Same-timestamp
+/** Next queued runs of the given types, oldest first (claim candidates), optionally
+ *  scoped to one project (fixture workers stay inside throwaway projects). Same-timestamp
  *  ties (one enqueueAssetPipeline burst) break on pipeline order: probe before the rest. */
-export async function listQueuedRuns(jobTypes: string[], limit = 5): Promise<VantaAgentRun[]> {
+export async function listQueuedRuns(jobTypes: string[], limit = 5, projectId?: string | null): Promise<VantaAgentRun[]> {
   const pipelineRank = (t: string) => { const i = (VANTA_ASSET_PIPELINE_ORDER as readonly string[]).indexOf(t); return i < 0 ? 99 : i; };
   const fromMock = () => mockRuns
-    .filter((r) => r.status === "queued" && jobTypes.includes(r.job_type))
+    .filter((r) => r.status === "queued" && jobTypes.includes(r.job_type) && (!projectId || r.project_id === projectId))
     .sort((a, b) => a.created_at.localeCompare(b.created_at) || pipelineRank(a.job_type) - pipelineRank(b.job_type))
     .slice(0, limit);
   const client = db();
   if (!client) return fromMock();
   try {
-    const { data, error } = await client.from("vanta_agent_runs").select("*")
+    let q = client.from("vanta_agent_runs").select("*")
       .eq("status", "queued").in("job_type", jobTypes)
       .order("created_at", { ascending: true }).limit(limit);
+    if (projectId) q = q.eq("project_id", projectId);
+    const { data, error } = await q;
     if (error || !data) return fromMock();
     return data as VantaAgentRun[];
   } catch { return fromMock(); }

@@ -224,6 +224,19 @@ artifacts (real Anthropic when key present, deterministic mock otherwise) → 5 
 displays everything. Steps 3–7 of the upload pipeline (proxy/audio/whisper/scenes) land
 with the worker in Phase 1.2 — the data model, queue, and UI for them ship now.
 
+## 12.1 Status — V1.2–V1.5 (built 2026-06)
+
+V1.2 media foundation (ffmpeg/ffprobe detection, job queue over `vanta_agent_runs`,
+auto-enqueued asset pipeline, processing routes + UI) · V1.3 transcription & scene
+intelligence (whisper/derived/planned transcript tiers, `vanta_scenes` population,
+deterministic clips/hooks/dead-space rubric in `scoring.ts`, Footage Intelligence panel)
+· V1.4 worker contract hardening (bearer + per-claim-token guarded
+claim/heartbeat/complete/fail under `/api/vanta/runs`, validated completion payloads,
+stale visibility, `docs/vanta-worker-spec.md`) · V1.5 local worker runtime
+(`scripts/vanta-worker.mjs` — fixture contract-QA mode + real media mode).
+**Next unblocked step:** run the schema + stand up the worker box against a real
+Supabase project (claim → real whisper/scenes → measured clips), then Phase 2 labs.
+
 ## 13. Phase 2 — auto production
 Worker live: auto proxies, whisper, scene detect, ffmpeg color pass, auto clips → auto
 shorts (9:16 crops via face tracking), remotion caption burn-in + motion-graphics packs,

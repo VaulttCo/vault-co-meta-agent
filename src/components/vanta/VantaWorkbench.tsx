@@ -52,6 +52,23 @@ const JOB_STATUS_COLOR: Record<string, string> = {
   queued: "#6b7a99", claimed: "#f59e0b", running: "#0081f2", succeeded: "#22c55e", failed: "#ef4444",
 };
 
+/** One-line artifact summary for a succeeded processing job's validated result. */
+function jobResultSummary(job: VantaAgentRun): string | null {
+  if (job.status !== "succeeded") return null;
+  const r = job.result as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof r.segment_count === "number") parts.push(`${r.segment_count} segments`);
+  if (typeof r.scene_count === "number") parts.push(`${r.scene_count} scenes`);
+  if (typeof r.clip_count === "number") parts.push(`${r.clip_count} clips`);
+  if (typeof r.hook_count === "number") parts.push(`${r.hook_count} hooks`);
+  if (typeof r.width === "number" && typeof r.height === "number") parts.push(`${r.width}×${r.height}`);
+  if (typeof r.codec === "string" && r.codec) parts.push(String(r.codec));
+  if (Array.isArray(r.outputs) && r.outputs.length) parts.push(`${r.outputs.length} artifact${r.outputs.length > 1 ? "s" : ""}`);
+  if (r.planned === true) parts.push("worker plan");
+  if (parts.length === 0) return null;
+  return `${titleCase(job.job_type)}: ${parts.join(" · ")}${r.mock === true ? " (mock)" : ""}`;
+}
+
 export function VantaWorkbench({ projectId }: { projectId: string }) {
   const [data, setData] = useState<DetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -336,6 +353,13 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
                       })}
                     </div>
                   )}
+                  {/* Completed artifact summaries */}
+                  {(() => {
+                    const summaries = [...latestByType.values()].map(jobResultSummary).filter((s): s is string => !!s);
+                    return summaries.length > 0
+                      ? <p className="text-[10.5px]" style={{ color: "var(--t-dim)" }}>{summaries.join("  ·  ")}</p>
+                      : null;
+                  })()}
                   {/* Failures */}
                   {[...latestByType.values()].filter((j) => j.status === "failed" && j.error).map((j) => (
                     <p key={j.id} className="text-[11px]" style={{ color: "#ef4444" }}>{titleCase(j.job_type)}: {j.error}</p>

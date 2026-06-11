@@ -87,12 +87,13 @@ export function claimJob(id: string, claimedBy: string): Promise<VantaAgentRun |
  *  (deterministic rubric over transcript × scenes — nothing for a media box to add). */
 export const WORKER_CLAIMABLE_JOB_TYPES: VantaJobType[] = VANTA_JOB_TYPES.filter((t) => t !== "clips");
 
-/** Claim the next queued job (oldest first), CAS-looping past races. Null when idle. */
-export async function claimNextJob(claimedBy: string, jobTypes?: VantaJobType[]): Promise<VantaAgentRun | null> {
+/** Claim the next queued job (oldest first), CAS-looping past races. Null when idle.
+ *  `projectId` scopes the claim to one project (fixture workers / dedicated pools). */
+export async function claimNextJob(claimedBy: string, jobTypes?: VantaJobType[], projectId?: string | null): Promise<VantaAgentRun | null> {
   const allowed = (jobTypes?.length ? jobTypes : WORKER_CLAIMABLE_JOB_TYPES)
     .filter((t) => WORKER_CLAIMABLE_JOB_TYPES.includes(t));
   if (allowed.length === 0) return null;
-  const candidates = await listQueuedRuns(allowed, 5);
+  const candidates = await listQueuedRuns(allowed, 5, projectId);
   for (const candidate of candidates) {
     const claimed = await claimVantaRun(candidate.id, claimedBy);
     if (claimed) return claimed;

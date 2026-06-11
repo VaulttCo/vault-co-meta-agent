@@ -1,4 +1,4 @@
-# Vanta Worker — Queue Contract Spec (V1.4)
+# Vanta Worker — Queue Contract Spec (V1.4 contract · V1.5 local runtime)
 
 The Vanta Worker is an **external** media box (Hermes pattern: Mac Studio / GPU VPS) that
 pulls processing jobs from `vanta_agent_runs` over HTTPS, runs the real media work
@@ -63,6 +63,8 @@ curl -s -X POST "$APP_URL/api/vanta/runs/claim" \
   own `VANTA_MEDIA_ROOT`.
 - `200 { job: null }` — queue idle; sleep and poll again (suggested 5–15s).
 - `job_types` is optional (defaults to all worker-claimable types). `clips` is ignored.
+- `project_id` is optional — scopes the claim to one project. Fixture workers MUST use
+  it so test payloads never land on real footage.
 
 ### 2. Heartbeat (every ≤60s while working)
 
@@ -150,6 +152,48 @@ processing in the app so the control-plane `clips` job rescores against measured
 ```
 Replaces the asset's `vanta_scenes` rows. `kind` must be one of
 `talking_head | b_roll | drone | site | unknown` (anything else → `unknown`).
+
+## Local worker runtime — `scripts/vanta-worker.mjs` (V1.5)
+
+A dependency-free Node ≥18 implementation of this contract. Two execution modes:
+
+```bash
+# Contract QA — deterministic fixture payloads, no media tools or files needed.
+# REQUIRES --project: fixture completions overwrite artifacts on the claimed asset,
+# so they must stay inside a throwaway project.
+APP_URL=http://localhost:3000 VANTA_WORKER_SECRET=dev-secret-at-least-16ch \
+  node scripts/vanta-worker.mjs --once --fixture --project <project-id>
+
+# Real media execution — ffprobe/ffmpeg/whisper/scenedetect against local footage.
+# A missing tool or source file FAILS the job with a clear reason (never faked).
+APP_URL=https://app.example.com VANTA_WORKER_SECRET=... \
+  node scripts/vanta-worker.mjs --loop --real --name mac-studio-01 --media-root /footage
+```
+
+Flags: `--once | --loop` · `--fixture | --real` · `--name <id>` · `--project <id>` ·
+`--job-types probe,transcript,…` · `--poll <seconds>` · `--media-root <dir>` ·
+`--allow-any-project` (fixture mode escape hatch — throwaway databases only).
+
+Behavior per lifecycle step: claims with `claimed_by` + optional `job_types`/`project_id`;
+stores the returned `claim_token`; heartbeats immediately (claimed → running) then every
+45s; completes with the per-job-type payloads in this spec (fixture or real); on any
+execution error posts `fail` with the bounded reason; never requests `clips`; after a
+`transcript` or `scenes` completion it logs a reminder to re-queue processing in the app
+so the control-plane clips job rescores against measured timing. The bearer secret is
+read from the environment and never printed.
+
+### Fixture lifecycle (what contract QA proves)
+
+1. `claim` returns the oldest queued job in the target project with a fresh `claim_token`.
+2. First heartbeat flips it `claimed → running` (sets `started_at`).
+3. `complete` submits the fixture payload → server validates per job_type → artifacts
+   land (probe → asset metadata; transcript → whisper-sourced segments; scenes →
+   `vanta_scenes`) and the run shows `succeeded` with a bounded result.
+4. Invalid payloads come back `422` and the run shows `failed` with the reason.
+5. The workbench Processing panel shows owner (`worker:{name}`, token redacted), stale
+   flags, failure reasons, and completed artifact summaries.
+6. Re-queueing processing in the app regenerates `clips` from the fixture transcript ×
+   scenes via the control-plane rubric.
 
 ## Worker loop (reference pseudocode)
 

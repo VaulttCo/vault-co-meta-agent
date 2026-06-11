@@ -26,9 +26,12 @@ export async function POST(req: NextRequest) {
     const jobTypes = Array.isArray(body.job_types)
       ? (body.job_types.filter((t: unknown) => (VANTA_JOB_TYPES as readonly string[]).includes(t as string)) as VantaJobType[])
       : undefined;
+    const projectId = typeof body.project_id === "string" && body.project_id.trim()
+      ? body.project_id.trim().slice(0, 120)
+      : null;
 
     const identity = newClaimIdentity(name);
-    const job = await claimNextJob(identity.claimedBy, jobTypes);
+    const job = await claimNextJob(identity.claimedBy, jobTypes, projectId);
     if (!job) return NextResponse.json({ job: null });
     const asset = job.asset_id ? await getVantaAsset(job.asset_id) : null;
     return NextResponse.json({

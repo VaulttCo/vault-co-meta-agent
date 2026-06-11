@@ -198,6 +198,24 @@ export async function getVantaTranscript(assetId: string): Promise<VantaTranscri
   } catch { return mockTranscripts.find((t) => t.asset_id === assetId) ?? null; }
 }
 
+/** Patch media metadata on an asset (probe results). Vanta tables only. */
+export async function updateVantaAssetMedia(id: string, patch: Partial<Pick<VantaAsset, "duration_ms" | "width" | "height" | "fps" | "codec" | "mime_type" | "size_bytes" | "probe" | "audio_analysis" | "status">>): Promise<VantaAsset | null> {
+  const next = { ...patch, updated_at: nowIso() };
+  const apply = () => {
+    const i = mockAssets.findIndex((a) => a.id === id);
+    if (i < 0) return null;
+    mockAssets[i] = { ...mockAssets[i], ...next } as VantaAsset;
+    return mockAssets[i];
+  };
+  const client = db();
+  if (!client) return apply();
+  try {
+    const { data, error } = await client.from("vanta_assets").update(next).eq("id", id).select("*").single();
+    if (error || !data) return apply();
+    return data as VantaAsset;
+  } catch { return apply(); }
+}
+
 // ── Agent runs (queue + audit) ───────────────────────────────────────────────
 
 export async function getVantaRuns(projectId?: string, limit = 100): Promise<VantaAgentRun[]> {
@@ -210,6 +228,108 @@ export async function getVantaRuns(projectId?: string, limit = 100): Promise<Van
     const { data, error } = await q;
     if (error || !data) return fromMock();
     return data as VantaAgentRun[];
+  } catch { return fromMock(); }
+}
+
+export async function getVantaRun(id: string): Promise<VantaAgentRun | null> {
+  const client = db();
+  const fromMock = () => mockRuns.find((r) => r.id === id) ?? null;
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_agent_runs").select("*").eq("id", id).maybeSingle();
+    if (error) return fromMock();
+    return (data as VantaAgentRun) ?? fromMock();
+  } catch { return fromMock(); }
+}
+
+/** Insert a new (queued) run row. Mock-safe. */
+export async function createVantaRun(input: Pick<VantaAgentRun, "project_id" | "asset_id" | "agent" | "job_type" | "params" | "params_hash">): Promise<VantaAgentRun> {
+  const now = nowIso();
+  const run: VantaAgentRun = {
+    id: uuid("vrun"),
+    project_id: input.project_id,
+    asset_id: input.asset_id,
+    agent: input.agent,
+    job_type: input.job_type,
+    status: "queued",
+    params: input.params,
+    params_hash: input.params_hash,
+    result: {},
+    error: null,
+    claimed_by: null,
+    started_at: null, finished_at: null,
+    created_at: now, updated_at: now,
+  };
+  const client = db();
+  if (!client) { mockRuns.unshift(run); return run; }
+  try {
+    const { data, error } = await client.from("vanta_agent_runs").insert(run).select("*").single();
+    if (error || !data) {
+      // Unique-index race (uq_vanta_runs_dedupe): a concurrent enqueue won — return the
+      // persisted active row instead of a phantom in-memory one.
+      if (input.params_hash && input.asset_id) {
+        const existing = await findActiveVantaRun(input.asset_id, input.job_type, input.params_hash);
+        if (existing) return existing;
+      }
+      mockRuns.unshift(run); return run;
+    }
+    return data as VantaAgentRun;
+  } catch { mockRuns.unshift(run); return run; }
+}
+
+/** Active (queued/claimed/running) run for (asset, job_type, params_hash) — idempotency probe. */
+export async function findActiveVantaRun(assetId: string, jobType: string, paramsHash: string): Promise<VantaAgentRun | null> {
+  const fromMock = () => mockRuns.find((r) =>
+    r.asset_id === assetId && r.job_type === jobType && r.params_hash === paramsHash &&
+    (r.status === "queued" || r.status === "claimed" || r.status === "running")) ?? null;
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_agent_runs").select("*")
+      .eq("asset_id", assetId).eq("job_type", jobType).eq("params_hash", paramsHash)
+      .in("status", ["queued", "claimed", "running"])
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (error) return fromMock();
+    return (data as VantaAgentRun) ?? fromMock();
+  } catch { return fromMock(); }
+}
+
+/** Compare-and-set claim: queued → claimed. Returns null when the job was not claimable. */
+export async function claimVantaRun(id: string, claimedBy: string): Promise<VantaAgentRun | null> {
+  const now = nowIso();
+  const fromMock = () => {
+    const i = mockRuns.findIndex((r) => r.id === id);
+    if (i < 0 || mockRuns[i].status !== "queued") return null;
+    mockRuns[i] = { ...mockRuns[i], status: "claimed", claimed_by: claimedBy, updated_at: now };
+    return mockRuns[i];
+  };
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_agent_runs")
+      .update({ status: "claimed", claimed_by: claimedBy, updated_at: now })
+      .eq("id", id).eq("status", "queued")
+      .select("*").maybeSingle();
+    if (error) return fromMock();
+    return (data as VantaAgentRun) ?? fromMock();
+  } catch { return fromMock(); }
+}
+
+/** Status/result patch for a run (running/succeeded/failed transitions). Mock-safe. */
+export async function patchVantaRun(id: string, patch: Partial<Pick<VantaAgentRun, "status" | "result" | "error" | "started_at" | "finished_at">>): Promise<VantaAgentRun | null> {
+  const next = { ...patch, updated_at: nowIso() };
+  const fromMock = () => {
+    const i = mockRuns.findIndex((r) => r.id === id);
+    if (i < 0) return null;
+    mockRuns[i] = { ...mockRuns[i], ...next } as VantaAgentRun;
+    return mockRuns[i];
+  };
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_agent_runs").update(next).eq("id", id).select("*").maybeSingle();
+    if (error || !data) return fromMock();
+    return data as VantaAgentRun;
   } catch { return fromMock(); }
 }
 

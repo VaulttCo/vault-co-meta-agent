@@ -11,12 +11,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Clapperboard, ArrowLeft, Plus, Lock, Loader2, Sparkles, Film, Palette, Scissors,
-  Music4, Type, ImageIcon, ShieldCheck, Gauge, Lightbulb, FileText,
+  Music4, Type, ImageIcon, ShieldCheck, Gauge, Lightbulb, FileText, Cpu, Play,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { VCPageWrapper, VCPanel, VCPanelHeader, VCStatusBadge, VCChip, VCEmptyState, VCSkeleton, VCButton } from "@/components/ui/VaultUI";
-import type { VantaProject, VantaAsset, VantaAnalysis, VantaFormat } from "@/lib/vanta/types";
-import { VANTA_FORMATS } from "@/lib/vanta/types";
+import type { VantaProject, VantaAsset, VantaAnalysis, VantaFormat, VantaAgentRun, VantaMediaCapabilities } from "@/lib/vanta/types";
+import { VANTA_FORMATS, VANTA_JOB_TYPES } from "@/lib/vanta/types";
 
 const ORANGE = "#ff8400";
 
@@ -34,6 +34,17 @@ interface DetailPayload {
   transcripts: Record<string, { word_count: number; source: string } | null>;
 }
 
+interface JobsPayload {
+  jobs: VantaAgentRun[];
+  counts: { queued: number; claimed: number; running: number; succeeded: number; failed: number };
+  capabilities: VantaMediaCapabilities;
+  mockMode: boolean;
+}
+
+const JOB_STATUS_COLOR: Record<string, string> = {
+  queued: "#6b7a99", claimed: "#f59e0b", running: "#0081f2", succeeded: "#22c55e", failed: "#ef4444",
+};
+
 export function VantaWorkbench({ projectId }: { projectId: string }) {
   const [data, setData] = useState<DetailPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +57,9 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [format, setFormat] = useState<VantaFormat>("short_916");
   const [assetForm, setAssetForm] = useState({ file_name: "", duration_min: "", transcript_text: "", notes: "" });
+
+  const [jobsData, setJobsData] = useState<JobsPayload | null>(null);
+  const [jobActing, setJobActing] = useState<string | null>(null); // asset_id (process) or job id (run)
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/vanta/projects/${projectId}`).catch(() => null);
@@ -60,7 +74,37 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
     setLoading(false);
   }, [projectId]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadJobs = useCallback(async () => {
+    const res = await fetch(`/api/vanta/projects/${projectId}/jobs`).catch(() => null);
+    if (!res?.ok) return;
+    const d = await res.json().catch(() => null);
+    if (d?.jobs) setJobsData(d as JobsPayload);
+  }, [projectId]);
+
+  useEffect(() => { load(); loadJobs(); }, [load, loadJobs]);
+
+  const processAsset = useCallback(async (assetId: string) => {
+    setJobActing(assetId); setNotice(null);
+    try {
+      const res = await fetch(`/api/vanta/projects/${projectId}/process`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_id: assetId }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setNotice(d.error ?? "Could not enqueue processing jobs"); return; }
+      await loadJobs();
+    } finally { setJobActing(null); }
+  }, [projectId, loadJobs]);
+
+  const runJob = useCallback(async (jobId: string) => {
+    setJobActing(jobId); setNotice(null);
+    try {
+      const res = await fetch(`/api/vanta/jobs/${jobId}/run`, { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setNotice(d.error ?? "Job run failed"); }
+      await Promise.all([loadJobs(), load()]); // probe results update asset metadata
+    } finally { setJobActing(null); }
+  }, [loadJobs, load]);
 
   const registerAsset = useCallback(async () => {
     setActing(true); setNotice(null);
@@ -79,9 +123,9 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
       if (!res.ok) { setNotice(d.error ?? "Could not register asset"); return; }
       setShowAssetForm(false);
       setAssetForm({ file_name: "", duration_min: "", transcript_text: "", notes: "" });
-      await load();
+      await Promise.all([load(), loadJobs()]); // registration auto-enqueues the pipeline
     } finally { setActing(false); }
-  }, [assetForm, projectId, load]);
+  }, [assetForm, projectId, load, loadJobs]);
 
   const analyze = useCallback(async (assetId: string) => {
     setAnalyzing(assetId); setNotice(null);
@@ -209,6 +253,88 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
           {notice && <p className="text-[11.5px] px-3 py-2 rounded-lg" style={{ background: "rgba(255,132,0,0.08)", border: "1px solid rgba(255,132,0,0.2)", color: ORANGE }}>{notice}</p>}
         </div>
       </VCPanel>
+
+      {/* Processing pipeline (V1.2 — media plane) */}
+      {assets.length > 0 && jobsData && (
+        <VCPanel>
+          <VCPanelHeader icon={Cpu} iconColor={ORANGE} label="Media plane" title="Processing Status"
+            action={jobsData.mockMode
+              ? <VCStatusBadge label="MOCK MODE" variant="neutral" dot />
+              : <VCStatusBadge label="Media tools live" variant="success" dot />} />
+          <div className="px-4 py-3 space-y-3">
+            {jobsData.mockMode && (
+              <p className="text-[11.5px] px-3 py-2 rounded-lg" style={{ background: "rgba(107,122,153,0.08)", border: "1px solid rgba(107,122,153,0.2)", color: "var(--t-muted)" }}>
+                MOCK MODE — {jobsData.capabilities.ffmpeg ? "" : "ffmpeg unavailable. "}{jobsData.capabilities.ffprobe ? "" : "ffprobe unavailable. "}
+                {jobsData.capabilities.mediaRoot ? "" : "VANTA_MEDIA_ROOT not configured. "}
+                Jobs complete with deterministic mock results / worker plans; real media processing runs on a media-capable box or the Vanta Worker.
+              </p>
+            )}
+
+            {/* Queue summary */}
+            <div className="flex flex-wrap gap-1.5">
+              {(["queued", "running", "succeeded", "failed"] as const).map((s) => (
+                <VCChip key={s} label={`${s}: ${s === "running" ? jobsData.counts.running + jobsData.counts.claimed : jobsData.counts[s]}`} color={JOB_STATUS_COLOR[s]} />
+              ))}
+            </div>
+
+            {/* Per-asset pipeline */}
+            {assets.map((a) => {
+              const assetJobs = jobsData.jobs.filter((j) => j.asset_id === a.id && (VANTA_JOB_TYPES as readonly string[]).includes(j.job_type));
+              const latestByType = new Map<string, VantaAgentRun>();
+              for (const j of assetJobs) if (!latestByType.has(j.job_type)) latestByType.set(j.job_type, j); // jobs arrive newest-first
+              return (
+                <div key={a.id} className="px-3.5 py-2.5 rounded-xl space-y-2" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-[12.5px] font-semibold" style={{ color: "var(--t-text)" }}>{a.file_name}</p>
+                    {latestByType.size === 0 && (
+                      <VCButton onClick={() => processAsset(a.id)} disabled={jobActing !== null}>
+                        {jobActing === a.id
+                          ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Queueing…</span>
+                          : <span className="inline-flex items-center gap-1.5"><Cpu size={12} /> Queue processing</span>}
+                      </VCButton>
+                    )}
+                  </div>
+                  {/* Probed metadata */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <VCChip label={a.duration_ms ? `${Math.round(a.duration_ms / 1000)}s` : "duration —"} color="#6b7a99" />
+                    <VCChip label={a.width && a.height ? `${a.width}×${a.height}` : "resolution —"} color="#6b7a99" />
+                    <VCChip label={a.fps ? `${a.fps} fps` : "fps —"} color="#6b7a99" />
+                    <VCChip label={a.codec ?? "codec —"} color="#6b7a99" />
+                    <VCChip label={titleCase(a.status)} color={a.status === "probed" ? "#22c55e" : "#6b7a99"} />
+                    {(a.probe as { mock?: boolean })?.mock === true && <VCChip label="MOCK metadata" color="#f59e0b" />}
+                  </div>
+                  {/* Job rail */}
+                  {latestByType.size > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {VANTA_JOB_TYPES.map((t) => {
+                        const j = latestByType.get(t);
+                        if (!j) return <VCChip key={t} label={`${titleCase(t)}: —`} color="#3a4158" />;
+                        const isMock = (j.result as { mock?: boolean })?.mock === true;
+                        return (
+                          <span key={t} className="inline-flex items-center gap-1">
+                            <VCChip label={`${titleCase(t)}: ${j.status}${j.status === "succeeded" && isMock ? " (mock)" : ""}`} color={JOB_STATUS_COLOR[j.status] ?? "#6b7a99"} />
+                            {j.status === "queued" && (
+                              <button onClick={() => runJob(j.id)} disabled={jobActing !== null} title={`Run ${t} now`}
+                                className="inline-flex items-center justify-center w-5 h-5 rounded disabled:opacity-40"
+                                style={{ background: "rgba(255,132,0,0.12)", border: "1px solid rgba(255,132,0,0.24)" }}>
+                                {jobActing === j.id ? <Loader2 size={10} className="animate-spin" style={{ color: ORANGE }} /> : <Play size={10} style={{ color: ORANGE }} />}
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Failures */}
+                  {[...latestByType.values()].filter((j) => j.status === "failed" && j.error).map((j) => (
+                    <p key={j.id} className="text-[11px]" style={{ color: "#ef4444" }}>{titleCase(j.job_type)}: {j.error}</p>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </VCPanel>
+      )}
 
       {/* The creative package */}
       {analysis && (

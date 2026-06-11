@@ -30,6 +30,48 @@ export type VantaAssetKind = (typeof VANTA_ASSET_KINDS)[number];
 export const VANTA_FORMATS = ["short_916", "wide_169", "square_11"] as const;
 export type VantaFormat = (typeof VANTA_FORMATS)[number];
 
+// ── Media processing (V1.2) ──────────────────────────────────────────────────
+
+export const VANTA_JOB_TYPES = ["probe", "proxy", "thumbnail", "audio", "transcript", "scenes"] as const;
+export type VantaJobType = (typeof VANTA_JOB_TYPES)[number];
+
+/** What media tooling is available where this process runs (control plane vs worker). */
+export interface VantaMediaCapabilities {
+  ffmpeg: boolean;
+  ffprobe: boolean;
+  mediaRoot: string | null;
+  mode: "real" | "mock";
+}
+
+/** Normalized ffprobe output (or its deterministic mock equivalent). */
+export interface VantaProbeResult {
+  mock: boolean;
+  duration_ms: number | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  codec: string | null;
+  audio_codec: string | null;
+  audio_channels: number | null;
+  sample_rate_hz: number | null;
+  bit_rate: number | null;
+  size_bytes: number | null;
+  format_name: string | null;
+  notes: string[];
+}
+
+/** A planned (not yet executed) media operation — the worker contract payload. */
+export interface VantaMediaPlan {
+  mock: boolean;
+  planned: true;
+  operation: string;
+  argv: string[][];     // EXECUTABLE contract: argv arrays (binary first) — worker must
+                        // spawn these without a shell; file names are single argv tokens
+  commands: string[];   // DISPLAY ONLY: human-readable join of argv — never execute these
+  outputs: string[];    // relative artifact paths ({asset_id}/{artifact})
+  notes: string[];
+}
+
 // ── Entities (mirror docs/vanta-schema.sql) ──────────────────────────────────
 
 export interface VantaProject {

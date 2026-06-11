@@ -10,7 +10,8 @@
 import { createHash } from "node:crypto";
 import {
   createVantaRun, findActiveVantaRun, claimVantaRun, patchVantaRun,
-  getVantaTranscript, updateVantaAssetMedia,
+  getVantaTranscript, updateVantaAssetMedia, updateVantaTranscript, createVantaTranscript,
+  getVantaScenes, replaceVantaScenes, replaceVantaClips, replaceVantaHooks,
 } from "./db";
 import { getMediaCapabilities } from "./media/ffmpeg";
 import { probeAsset } from "./media/ffprobe";
@@ -18,6 +19,9 @@ import { extractThumbnails } from "./media/thumbnails";
 import { planProxy } from "./media/proxies";
 import { planAudioExtraction } from "./media/audio";
 import { planWaveform } from "./media/waveform";
+import { transcribeLocalFile, segmentizeTranscript, planTranscription } from "./media/transcribe";
+import { detectScenesLocal, deriveScenesMock } from "./media/scenes";
+import { generateClips } from "./scoring";
 import { VANTA_JOB_TYPES } from "./types";
 import type { VantaAgentRun, VantaAsset, VantaJobType } from "./types";
 
@@ -31,6 +35,7 @@ const JOB_AGENT: Record<VantaJobType, string> = {
   audio: "sound",
   transcript: "caption",
   scenes: "footage",
+  clips: "footage",
 };
 
 export function isVantaJobType(v: unknown): v is VantaJobType {
@@ -164,26 +169,77 @@ export async function executeProcessingJob(run: VantaAgentRun, asset: VantaAsset
       }
       case "transcript": {
         const existing = await getVantaTranscript(asset.id);
-        if (existing) {
+        // Already timestamped (whisper or prior derivation) — nothing to do.
+        if (existing && existing.segments.length > 0) {
           return finalizeSuccess(run.id, {
-            mock: false, planned: false, source: existing.source,
-            word_count: existing.word_count, transcript_id: existing.id,
-            notes: ["Transcript already present — whisper pass not required."],
+            mock: false, planned: false, source: existing.source, transcript_id: existing.id,
+            segment_count: existing.segments.length, word_count: existing.word_count,
+            notes: ["Timestamped transcript already present."],
           });
         }
-        return finalizeSuccess(run.id, {
-          mock: true, planned: true, operation: "transcript",
-          engine: "faster-whisper (worker)",
-          outputs: [`${asset.id}/transcript.json`, `${asset.id}/transcript.srt`],
-          notes: ["Placeholder — transcription runs on the Vanta Worker (faster-whisper, 16kHz mono feed from the audio job)."],
-        });
+        // Manual transcript without timestamps → deterministic word-proportional segments.
+        if (existing?.full_text) {
+          const segments = segmentizeTranscript(existing.full_text, asset.duration_ms);
+          await updateVantaTranscript(existing.id, { segments });
+          return finalizeSuccess(run.id, {
+            mock: false, planned: false, derived: true, source: existing.source,
+            transcript_id: existing.id, segment_count: segments.length,
+            notes: ["Segments estimated from the manual transcript (word-proportional timing). Whisper (worker) replaces these with measured timestamps."],
+          });
+        }
+        // No transcript → real whisper if this box has it, worker plan otherwise.
+        const real = await transcribeLocalFile(asset);
+        if (real) {
+          const tx = await createVantaTranscript({
+            asset_id: asset.id, source: "whisper", full_text: real.full_text,
+            segments: real.segments, language: real.language,
+          });
+          return finalizeSuccess(run.id, {
+            mock: false, planned: false, source: "whisper", engine: real.engine,
+            transcript_id: tx.id, segment_count: tx.segments.length, word_count: tx.word_count,
+            notes: ["Transcribed locally via whisper CLI."],
+          });
+        }
+        return finalizeSuccess(run.id, { ...planTranscription(asset), capabilities: caps });
       }
       case "scenes": {
+        const real = await detectScenesLocal(asset);
+        let drafts = real;
+        if (!drafts) {
+          const tx = await getVantaTranscript(asset.id);
+          drafts = deriveScenesMock(asset, tx?.segments ?? [], asset.duration_ms);
+        }
+        const scenes = await replaceVantaScenes(asset.id, drafts);
         return finalizeSuccess(run.id, {
-          mock: true, planned: true, operation: "scenes",
-          engine: "pyscenedetect ContentDetector (worker)",
-          outputs: [`${asset.id}/scenes.json`],
-          notes: ["Placeholder — scene detection runs on the Vanta Worker (PySceneDetect), rows land in vanta_scenes."],
+          mock: !real, planned: false, scene_count: scenes.length,
+          detector: scenes[0]?.detector ?? null,
+          notes: real
+            ? ["Detected locally via PySceneDetect ContentDetector."]
+            : ["Derived scenes (mock) — transcript-pause cuts when segments exist, fixed intervals otherwise. PySceneDetect (worker) replaces these."],
+        });
+      }
+      case "clips": {
+        const [tx, scenes] = await Promise.all([getVantaTranscript(asset.id), getVantaScenes(asset.id)]);
+        const segments = tx?.segments ?? [];
+        if (segments.length === 0 && scenes.length === 0) {
+          return finalizeSuccess(run.id, {
+            mock: true, planned: true, clip_count: 0, hook_count: 0,
+            notes: ["No transcript segments or scenes yet — run the transcript and scenes jobs first, then queue processing again."],
+          });
+        }
+        const estimated = !tx || tx.source !== "whisper";
+        const out = generateClips({ segments, scenes, durationMs: asset.duration_ms, estimated });
+        const [clips, hooks] = await Promise.all([
+          replaceVantaClips(run.project_id, asset.id, out.clips),
+          replaceVantaHooks(run.project_id, asset.id, out.hooks),
+        ]);
+        return finalizeSuccess(run.id, {
+          mock: false, planned: false,
+          clip_count: clips.length, hook_count: hooks.length,
+          dead_space_clips: clips.filter((c) => c.is_dead_space).length,
+          dead_space_ms: out.deadSpaceMs,
+          estimated_timestamps: estimated,
+          notes: ["Deterministic scoring rubric (scoring.ts) over transcript segments × scenes — hooks from first strong spoken moments, dead space from silence gaps + low speech density."],
         });
       }
     }

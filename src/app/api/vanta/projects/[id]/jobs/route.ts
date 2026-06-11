@@ -29,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ jobs: runs, counts, capabilities, mockMode: capabilities.mode === "mock" });
   } catch (e) {
     console.error("[GET /api/vanta/projects/[id]/jobs]", (e as Error).message);
-    const capabilities = { ffmpeg: false, ffprobe: false, mediaRoot: null, mode: "mock" as const };
+    const capabilities = { ffmpeg: false, ffprobe: false, whisper: false, scenedetect: false, mediaRoot: null, mode: "mock" as const };
     return NextResponse.json({ jobs: [], counts: { queued: 0, claimed: 0, running: 0, succeeded: 0, failed: 0 }, capabilities, mockMode: true });
   }
 }

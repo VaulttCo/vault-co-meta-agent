@@ -32,14 +32,33 @@ export type VantaFormat = (typeof VANTA_FORMATS)[number];
 
 // ── Media processing (V1.2) ──────────────────────────────────────────────────
 
-export const VANTA_JOB_TYPES = ["probe", "proxy", "thumbnail", "audio", "transcript", "scenes"] as const;
+export const VANTA_JOB_TYPES = ["probe", "proxy", "thumbnail", "audio", "transcript", "scenes", "clips"] as const;
 export type VantaJobType = (typeof VANTA_JOB_TYPES)[number];
+
+export type VantaTranscriptSegment = { start_ms: number; end_ms: number; text: string; speaker?: string };
+
+/** Mirror of vanta_scenes (docs/vanta-schema.sql §3). */
+export interface VantaScene {
+  id: string;
+  asset_id: string | null;
+  scene_index: number;
+  start_ms: number;
+  end_ms: number;
+  kind: string;          // talking_head | b_roll | drone | site | unknown
+  detector: string | null;
+  thumb_path: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
 
 /** What media tooling is available where this process runs (control plane vs worker). */
 export interface VantaMediaCapabilities {
   ffmpeg: boolean;
   ffprobe: boolean;
+  whisper: boolean;
+  scenedetect: boolean;
   mediaRoot: string | null;
+  /** real = ffmpeg+ffprobe+media root. whisper/scenedetect upgrade individual jobs. */
   mode: "real" | "mock";
 }
 
@@ -120,7 +139,7 @@ export interface VantaTranscript {
   language: string;
   source: "manual" | "whisper" | "import";
   full_text: string | null;
-  segments: Array<{ start_ms: number; end_ms: number; text: string; speaker?: string }>;
+  segments: VantaTranscriptSegment[];
   word_count: number;
   filler_word_count: number;
   storage_path: string | null;

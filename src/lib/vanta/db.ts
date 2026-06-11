@@ -9,6 +9,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   VantaProject, VantaProjectInput, VantaAsset, VantaAssetInput, VantaTranscript,
   VantaAgentRun, VantaAnalysis, VantaMemoryRow, VantaIndustry, VantaObjective,
+  VantaScene, VantaClip, VantaHook, VantaTranscriptSegment,
 } from "./types";
 import { VANTA_INDUSTRIES, VANTA_OBJECTIVES, VANTA_ASSET_KINDS } from "./types";
 import type { VantaAssetKind } from "./types";
@@ -23,6 +24,9 @@ const mockAssets: VantaAsset[] = [];
 const mockTranscripts: VantaTranscript[] = [];
 const mockRuns: VantaAgentRun[] = [];
 const mockMemory: VantaMemoryRow[] = [];
+let mockScenes: VantaScene[] = [];
+let mockClips: VantaClip[] = [];
+let mockHooks: VantaHook[] = [];
 
 function uuid(prefix: string): string {
   try { return crypto.randomUUID(); } catch { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`; }
@@ -214,6 +218,136 @@ export async function updateVantaAssetMedia(id: string, patch: Partial<Pick<Vant
     if (error || !data) return apply();
     return data as VantaAsset;
   } catch { return apply(); }
+}
+
+/** Patch a transcript (V1.3 — derived/whisper segments land here). Vanta tables only. */
+export async function updateVantaTranscript(id: string, patch: Partial<Pick<VantaTranscript, "segments" | "full_text" | "word_count" | "source" | "language">>): Promise<VantaTranscript | null> {
+  const next = { ...patch, updated_at: nowIso() };
+  const apply = () => {
+    const i = mockTranscripts.findIndex((t) => t.id === id);
+    if (i < 0) return null;
+    mockTranscripts[i] = { ...mockTranscripts[i], ...next } as VantaTranscript;
+    return mockTranscripts[i];
+  };
+  const client = db();
+  if (!client) return apply();
+  try {
+    const { data, error } = await client.from("vanta_transcripts").update(next).eq("id", id).select("*").single();
+    if (error || !data) return apply();
+    return data as VantaTranscript;
+  } catch { return apply(); }
+}
+
+/** Create a transcript row (V1.3 — whisper output). Mock-safe. */
+export async function createVantaTranscript(input: { asset_id: string; source: VantaTranscript["source"]; full_text: string; segments: VantaTranscriptSegment[]; language?: string }): Promise<VantaTranscript> {
+  const row: VantaTranscript = {
+    id: uuid("vtx"),
+    asset_id: input.asset_id,
+    language: input.language ?? "en",
+    source: input.source,
+    full_text: input.full_text.slice(0, 100_000),
+    segments: input.segments.slice(0, 400),
+    word_count: input.full_text.split(/\s+/).length,
+    filler_word_count: (input.full_text.match(/\b(um|uh|like|you know)\b/gi) ?? []).length,
+    storage_path: null,
+    created_at: nowIso(), updated_at: nowIso(),
+  };
+  const client = db();
+  if (!client) { mockTranscripts.unshift(row); return row; }
+  try {
+    const { data, error } = await client.from("vanta_transcripts").insert(row).select("*").single();
+    if (error || !data) { mockTranscripts.unshift(row); return row; }
+    return data as VantaTranscript;
+  } catch { mockTranscripts.unshift(row); return row; }
+}
+
+// ── Scenes / clips / hooks (V1.3 — footage intelligence artifacts) ──────────
+// Replace semantics: regeneration is idempotent — delete this asset's rows, insert the
+// new set. Scoped strictly to vanta_* tables for the one asset.
+
+export async function getVantaScenes(assetId: string): Promise<VantaScene[]> {
+  const fromMock = () => mockScenes.filter((s) => s.asset_id === assetId).sort((a, b) => a.scene_index - b.scene_index);
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_scenes").select("*").eq("asset_id", assetId).order("scene_index").limit(200);
+    if (error || !data) return fromMock();
+    return data as VantaScene[];
+  } catch { return fromMock(); }
+}
+
+export async function replaceVantaScenes(assetId: string, drafts: Omit<VantaScene, "id" | "created_at">[]): Promise<VantaScene[]> {
+  // asset_id forced to the delete target — replace semantics stay self-contained.
+  const rows: VantaScene[] = drafts.map((d) => ({ ...d, asset_id: assetId, id: uuid("vscene"), created_at: nowIso() }));
+  const applyMock = () => { mockScenes = [...mockScenes.filter((s) => s.asset_id !== assetId), ...rows]; return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_scenes").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_scenes").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaScene[];
+  } catch { return applyMock(); }
+}
+
+export async function getVantaClips(assetId: string): Promise<VantaClip[]> {
+  const fromMock = () => mockClips.filter((c) => c.asset_id === assetId).sort((a, b) => a.start_ms - b.start_ms);
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_clips").select("*").eq("asset_id", assetId).order("start_ms").limit(200);
+    if (error || !data) return fromMock();
+    return data as VantaClip[];
+  } catch { return fromMock(); }
+}
+
+export async function replaceVantaClips(
+  projectId: string | null,
+  assetId: string,
+  drafts: Array<Pick<VantaClip, "start_ms" | "end_ms" | "clip_score" | "is_hook" | "is_highlight" | "is_dead_space" | "is_emotional" | "energy" | "transcript_excerpt" | "score_reasons" | "flags">>,
+): Promise<VantaClip[]> {
+  const rows: VantaClip[] = drafts.map((d) => ({
+    ...d, id: uuid("vclip"), project_id: projectId, asset_id: assetId, scene_id: null, created_at: nowIso(),
+  }));
+  const applyMock = () => { mockClips = [...mockClips.filter((c) => c.asset_id !== assetId), ...rows]; return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_clips").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_clips").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaClip[];
+  } catch { return applyMock(); }
+}
+
+export async function getVantaHooksByAsset(assetId: string): Promise<VantaHook[]> {
+  const fromMock = () => mockHooks.filter((h) => h.asset_id === assetId).sort((a, b) => b.three_sec_score - a.three_sec_score);
+  const client = db();
+  if (!client) return fromMock();
+  try {
+    const { data, error } = await client.from("vanta_hooks").select("*").eq("asset_id", assetId).order("three_sec_score", { ascending: false }).limit(50);
+    if (error || !data) return fromMock();
+    return data as VantaHook[];
+  } catch { return fromMock(); }
+}
+
+export async function replaceVantaHooks(
+  projectId: string | null,
+  assetId: string,
+  drafts: Array<Pick<VantaHook, "hook_text" | "hook_type" | "three_sec_score" | "rationale">>,
+): Promise<VantaHook[]> {
+  const rows: VantaHook[] = drafts.map((d) => ({
+    ...d, id: uuid("vhook"), project_id: projectId, asset_id: assetId, clip_id: null, created_at: nowIso(),
+  }));
+  const applyMock = () => { mockHooks = [...mockHooks.filter((h) => h.asset_id !== assetId), ...rows]; return rows; };
+  const client = db();
+  if (!client) return applyMock();
+  try {
+    await client.from("vanta_hooks").delete().eq("asset_id", assetId);
+    const { data, error } = await client.from("vanta_hooks").insert(rows).select("*");
+    if (error || !data) return applyMock();
+    return data as VantaHook[];
+  } catch { return applyMock(); }
 }
 
 // ── Agent runs (queue + audit) ───────────────────────────────────────────────

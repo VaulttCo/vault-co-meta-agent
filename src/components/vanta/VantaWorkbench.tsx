@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { VCPageWrapper, VCPanel, VCPanelHeader, VCStatusBadge, VCChip, VCEmptyState, VCSkeleton, VCButton } from "@/components/ui/VaultUI";
-import type { VantaProject, VantaAsset, VantaAnalysis, VantaFormat, VantaAgentRun, VantaMediaCapabilities } from "@/lib/vanta/types";
+import type {
+  VantaProject, VantaAsset, VantaAnalysis, VantaFormat, VantaAgentRun, VantaMediaCapabilities,
+  VantaScene, VantaClip, VantaHook, VantaTranscriptSegment,
+} from "@/lib/vanta/types";
 import { VANTA_FORMATS, VANTA_JOB_TYPES } from "@/lib/vanta/types";
 
 const ORANGE = "#ff8400";
@@ -31,7 +34,10 @@ interface DetailPayload {
   project: VantaProject;
   assets: VantaAsset[];
   analyses: Record<string, VantaAnalysis>;
-  transcripts: Record<string, { word_count: number; source: string } | null>;
+  transcripts: Record<string, { word_count: number; source: string; segment_count?: number; segments?: VantaTranscriptSegment[] } | null>;
+  scenes?: Record<string, VantaScene[]>;
+  clips?: Record<string, VantaClip[]>;
+  hooks?: Record<string, VantaHook[]>;
 }
 
 interface JobsPayload {
@@ -335,6 +341,100 @@ export function VantaWorkbench({ projectId }: { projectId: string }) {
           </div>
         </VCPanel>
       )}
+
+      {/* Footage intelligence (V1.3 — transcript · scenes · clips · hooks, deterministic) */}
+      {selected && (() => {
+        const tx = data.transcripts[selected];
+        const segs = tx?.segments ?? [];
+        const assetScenes = data.scenes?.[selected] ?? [];
+        const assetClips = data.clips?.[selected] ?? [];
+        const assetHooks = data.hooks?.[selected] ?? [];
+        if (segs.length === 0 && assetScenes.length === 0 && assetClips.length === 0 && assetHooks.length === 0) return null;
+        const estimated = assetClips.some((c) => c.flags.includes("estimated_timestamps")) || assetScenes.some((s) => (s.detector ?? "").includes("mock"));
+        return (
+          <VCPanel>
+            <VCPanelHeader icon={FileText} iconColor={ORANGE} label="Footage Intelligence — deterministic (pre-AI)" title="Transcript · Scenes · Clips"
+              action={estimated ? <VCStatusBadge label="ESTIMATED / MOCK timing" variant="neutral" dot /> : <VCStatusBadge label="Measured timing" variant="success" dot />} />
+            <div className="px-4 py-3 space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Transcript segments */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <VCChip label={tx ? `transcript: ${tx.source}` : "no transcript"} color={tx ? "#22c55e" : "#6b7a99"} />
+                    {tx && <VCChip label={`${tx.word_count} words`} color="#6b7a99" />}
+                    {tx && <VCChip label={`${tx.segment_count ?? segs.length} segments`} color="#0081f2" />}
+                  </div>
+                  {segs.slice(0, 8).map((s, i) => (
+                    <div key={i} className="flex items-start gap-2 text-[11.5px]">
+                      <span className="tabular-nums font-semibold w-10 flex-shrink-0" style={{ color: ORANGE }}>{ts(s.start_ms)}</span>
+                      <span className="line-clamp-2" style={{ color: "var(--t-text-body)" }}>{s.text}</span>
+                    </div>
+                  ))}
+                  {segs.length > 8 && <p className="text-[10.5px]" style={{ color: "var(--t-dim)" }}>+ {segs.length - 8} more segments</p>}
+                  {segs.length === 0 && <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>Run the transcript job to generate timestamped segments.</p>}
+                </div>
+                {/* Hook candidates */}
+                <div className="space-y-2">
+                  <p className="vc-label">Hook candidates — first strong spoken moments</p>
+                  {assetHooks.map((h) => (
+                    <div key={h.id} className="px-3 py-2 rounded-lg" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[12px] font-semibold" style={{ color: "var(--t-text)" }}>&ldquo;{h.hook_text}&rdquo;</p>
+                        <span className="text-[13px] font-bold tabular-nums flex-shrink-0" style={{ color: scoreColor(h.three_sec_score), fontFamily: "var(--font-rajdhani), sans-serif" }}>{h.three_sec_score}</span>
+                      </div>
+                      {h.rationale && <p className="text-[10.5px] mt-0.5" style={{ color: "var(--t-dim)" }}>{h.rationale}</p>}
+                    </div>
+                  ))}
+                  {assetHooks.length === 0 && <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>Run the clips job to surface hook candidates.</p>}
+                </div>
+              </div>
+
+              {/* Scenes rail */}
+              {assetScenes.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="vc-label">Scenes ({assetScenes.length}) · {assetScenes[0]?.detector}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {assetScenes.slice(0, 16).map((s) => (
+                      <VCChip key={s.id} label={`#${s.scene_index + 1} ${ts(s.start_ms)}–${ts(s.end_ms)}${s.kind !== "unknown" ? ` · ${titleCase(s.kind)}` : ""}`} color="#22d3ee" />
+                    ))}
+                    {assetScenes.length > 16 && <VCChip label={`+${assetScenes.length - 16} more`} color="#6b7a99" />}
+                  </div>
+                </div>
+              )}
+
+              {/* Generated clips */}
+              {assetClips.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="vc-label">Scored clips ({assetClips.length}) — deterministic rubric</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {[...assetClips].sort((a, b) => b.clip_score - a.clip_score).slice(0, 10).map((c) => (
+                      <div key={c.id} className="px-3 py-2 rounded-lg" style={{ background: "var(--t-surface-2)", border: "1px solid var(--t-border-subtle)" }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11.5px] font-semibold tabular-nums" style={{ color: "var(--t-text)" }}>{ts(c.start_ms)}–{ts(c.end_ms)}</span>
+                          <span className="text-[13px] font-bold tabular-nums" style={{ color: scoreColor(c.clip_score), fontFamily: "var(--font-rajdhani), sans-serif" }}>{c.clip_score}</span>
+                        </div>
+                        {c.transcript_excerpt && <p className="text-[10.5px] mt-0.5 line-clamp-1" style={{ color: "var(--t-muted)" }}>&ldquo;{c.transcript_excerpt}&rdquo;</p>}
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.is_hook && <VCChip label="hook" color="#22c55e" />}
+                          {c.is_highlight && <VCChip label="highlight" color="#0081f2" />}
+                          {c.is_emotional && <VCChip label="emotional" color="#a78bfa" />}
+                          {c.is_dead_space && <VCChip label="dead space" color="#ef4444" />}
+                          {c.energy && <VCChip label={c.energy} color="#6b7a99" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {assetClips.some((c) => c.is_dead_space) && (
+                    <p className="text-[10.5px]" style={{ color: "var(--t-dim)" }}>
+                      Dead space: {assetClips.filter((c) => c.is_dead_space).length} segment(s) flagged from silence gaps / low speech density — cut these first.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </VCPanel>
+        );
+      })()}
 
       {/* The creative package */}
       {analysis && (

@@ -24,9 +24,17 @@ export interface VantaExecResult {
   error: string | null;
 }
 
-type MediaBinary = "ffmpeg" | "ffprobe";
+type MediaBinary = "ffmpeg" | "ffprobe" | "whisper" | "scenedetect";
 
 const availability: Partial<Record<MediaBinary, boolean>> = {};
+
+/** Detection probe per binary — whisper/scenedetect don't support -version. */
+const DETECT_ARGS: Record<MediaBinary, string[]> = {
+  ffmpeg: ["-version"],
+  ffprobe: ["-version"],
+  whisper: ["--help"],
+  scenedetect: ["version"],
+};
 
 /** Run a media binary with a fixed argv array. Never throws; never uses a shell. */
 export function execBin(bin: MediaBinary, args: string[], timeoutMs = DEFAULT_EXEC_TIMEOUT_MS): Promise<VantaExecResult> {
@@ -47,13 +55,15 @@ export function execBin(bin: MediaBinary, args: string[], timeoutMs = DEFAULT_EX
 
 async function detectBinary(bin: MediaBinary): Promise<boolean> {
   if (availability[bin] !== undefined) return availability[bin]!;
-  const res = await execBin(bin, ["-version"], DETECT_TIMEOUT_MS);
+  const res = await execBin(bin, DETECT_ARGS[bin], DETECT_TIMEOUT_MS);
   availability[bin] = res.ok;
   return res.ok;
 }
 
 export function isFfmpegAvailable(): Promise<boolean> { return detectBinary("ffmpeg"); }
 export function isFfprobeAvailable(): Promise<boolean> { return detectBinary("ffprobe"); }
+export function isWhisperAvailable(): Promise<boolean> { return detectBinary("whisper"); }
+export function isSceneDetectAvailable(): Promise<boolean> { return detectBinary("scenedetect"); }
 
 /** Local footage root (worker box / dev machine). Null when unset or missing → mock mode. */
 export function getMediaRoot(): string | null {
@@ -106,11 +116,15 @@ export function ensureWorkDir(assetId: string): string | null {
 
 /** Capability snapshot for routes/UI — drives the MOCK MODE labels. */
 export async function getMediaCapabilities(): Promise<VantaMediaCapabilities> {
-  const [ffmpeg, ffprobe] = await Promise.all([isFfmpegAvailable(), isFfprobeAvailable()]);
+  const [ffmpeg, ffprobe, whisper, scenedetect] = await Promise.all([
+    isFfmpegAvailable(), isFfprobeAvailable(), isWhisperAvailable(), isSceneDetectAvailable(),
+  ]);
   const mediaRoot = getMediaRoot();
   return {
     ffmpeg,
     ffprobe,
+    whisper,
+    scenedetect,
     mediaRoot,
     mode: ffmpeg && ffprobe && mediaRoot ? "real" : "mock",
   };

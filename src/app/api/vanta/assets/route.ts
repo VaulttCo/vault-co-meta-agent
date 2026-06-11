@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import { getVantaAssets, registerVantaAsset, getVantaProject } from "@/lib/vanta/db";
+import { VANTA_ASSET_KINDS } from "@/lib/vanta/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +34,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) ?? {};
     if (typeof body.project_id !== "string") return NextResponse.json({ error: "project_id is required" }, { status: 400 });
+    if (body.asset_kind !== undefined && body.asset_kind !== null && !(VANTA_ASSET_KINDS as readonly string[]).includes(body.asset_kind)) {
+      return NextResponse.json({ error: `asset_kind must be one of: ${VANTA_ASSET_KINDS.join(", ")}` }, { status: 400 });
+    }
     const project = await getVantaProject(body.project_id);
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
     const result = await registerVantaAsset(body, auth.userId);

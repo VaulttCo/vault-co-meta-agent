@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Clapperboard, Palette, Music4, ArrowRight, Layers, ShieldAlert, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { VCPageWrapper, VCPanel, VCPanelHeader, VCStatusBadge, VCChip } from "@/components/ui/VaultUI";
-import { VANTA_AGENTS } from "@/lib/vanta/agents/registry";
+import { VANTA_AGENTS } from "@/lib/vanta/agents/meta";
 import { VANTA_COLOR_PRESETS } from "@/lib/vanta/color/presets";
 import { CONTENT_PACKS, MUSIC_CATEGORIES } from "@/lib/vanta/sound/taxonomy";
 

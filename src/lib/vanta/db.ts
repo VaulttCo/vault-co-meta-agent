@@ -10,7 +10,8 @@ import type {
   VantaProject, VantaProjectInput, VantaAsset, VantaAssetInput, VantaTranscript,
   VantaAgentRun, VantaAnalysis, VantaMemoryRow, VantaIndustry, VantaObjective,
 } from "./types";
-import { VANTA_INDUSTRIES, VANTA_OBJECTIVES } from "./types";
+import { VANTA_INDUSTRIES, VANTA_OBJECTIVES, VANTA_ASSET_KINDS } from "./types";
+import type { VantaAssetKind } from "./types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function db(): any {
@@ -134,7 +135,8 @@ export async function registerVantaAsset(input: VantaAssetInput, createdBy: stri
   const asset: VantaAsset = {
     id: uuid("vasset"),
     project_id: input.project_id,
-    asset_kind: input.asset_kind ?? "footage",
+    asset_kind: (VANTA_ASSET_KINDS as readonly string[]).includes(input.asset_kind ?? "")
+      ? (input.asset_kind as VantaAssetKind) : "footage",
     file_name: fileName,
     storage_bucket: null, storage_path: null,
     source_url: safeUrl,

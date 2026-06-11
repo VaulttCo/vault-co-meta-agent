@@ -10,7 +10,8 @@ import { vantaToolCall, isVantaAiAvailable, type VantaToolSchema } from "./ai";
 import { buildAnalysisSystemPrompt, buildAnalysisUserPrompt } from "./agents/registry";
 import { pickPreset, getPreset, type FootageCondition } from "./color/presets";
 import { buildCueSheet, pickMusic, LOUDNESS_TARGETS } from "./sound/taxonomy";
-import type { VantaAnalysis, VantaProject, VantaAsset, VantaTranscript, VantaFormat } from "./types";
+import type { VantaAnalysis, VantaProject, VantaAsset, VantaTranscript, VantaFormat, VantaSoundCue } from "./types";
+import { VANTA_FORMATS } from "./types";
 
 // ── Tool schema (kept permissive on nested shapes; DTO layer re-validates) ───
 
@@ -168,25 +169,177 @@ function mockAnalysis(project: VantaProject, asset: VantaAsset, transcript: Vant
 }
 
 // ── Sanitization of AI output (defense in depth — never trust model output) ──
+//
+// Deep-normalizes EVERY field the workbench renders: missing/null/mistyped nested values
+// become safe fallbacks, arrays are validated element-by-element, scores clamp to 0–100,
+// and enum-ish fields (format, hook_type, energy, preset_key) are whitelisted. Malformed
+// model output must never be able to break VantaWorkbench.
+
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 
 function clampScore(n: unknown): number {
   const v = typeof n === "number" && Number.isFinite(n) ? Math.round(n) : 0;
   return Math.max(0, Math.min(100, v));
 }
 
-function sanitize(a: VantaAnalysis, project: VantaProject, fallbackFormat: VantaFormat): VantaAnalysis {
-  // Whitelist preset + music keys; clamp all scores; cap list sizes.
-  const preset = getPreset(a.color?.preset_key) ?? pickPreset(["ok"], project.objective);
-  const cap = <T,>(arr: T[] | undefined, n: number): T[] => (Array.isArray(arr) ? arr.slice(0, n) : []);
+function safeStr(v: unknown, fallback: string, max = 4000): string {
+  return typeof v === "string" && v.trim() ? v.slice(0, max) : fallback;
+}
+
+function strOrNull(v: unknown, max = 2000): string | null {
+  return typeof v === "string" && v.trim() ? v.slice(0, max) : null;
+}
+
+// Colors render into inline styles client-side — accept hex only, never arbitrary CSS.
+function safeColor(v: unknown, fallback: string): string {
+  return typeof v === "string" && /^#[0-9a-fA-F]{3,8}$/.test(v.trim()) ? v.trim() : fallback;
+}
+
+function strList(v: unknown, max: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+    .map((x) => x.slice(0, 2000)).slice(0, max);
+}
+
+function objArr(v: unknown, max: number): Record<string, unknown>[] {
+  return Array.isArray(v) ? v.filter(isObj).slice(0, max) : [];
+}
+
+function nonNegInt(v: unknown, fallback = 0): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : fallback;
+  return Math.max(0, n);
+}
+
+function cueList(v: unknown, max: number): VantaSoundCue[] {
+  return objArr(v, max)
+    .map((c) => ({ at_ms: nonNegInt(c.at_ms), cue: safeStr(c.cue, "", 120), category: safeStr(c.category, "general", 60) }))
+    .filter((c) => c.cue !== "");
+}
+
+function sanitize(raw: unknown, project: VantaProject, fallbackFormat: VantaFormat): VantaAnalysis {
+  const a = isObj(raw) ? raw : {};
+  const strategy = isObj(a.strategy) ? a.strategy : {};
+  const color = isObj(a.color) ? a.color : {};
+  const editPlan = isObj(a.edit_plan) ? a.edit_plan : {};
+  const captions = isObj(a.caption_style) ? a.caption_style : {};
+  const sound = isObj(a.sound_design) ? a.sound_design : {};
+  const music = isObj(sound.music) ? sound.music : {};
+  const musicBrief = isObj(editPlan.music_brief) ? editPlan.music_brief : {};
+  const qa = isObj(a.qa) ? a.qa : {};
+
+  const preset = getPreset(safeStr(color.preset_key, "", 60)) ?? pickPreset(["ok"], project.objective);
+  const defaultMusic = pickMusic(project.objective, "medium");
+  const format = (VANTA_FORMATS as readonly string[]).includes(editPlan.format as string)
+    ? (editPlan.format as VantaFormat) : fallbackFormat;
+
+  const tds = editPlan.target_duration_s;
   return {
-    ...a,
-    clips: cap(a.clips, 30).map((c) => ({ ...c, clip_score: clampScore(c.clip_score) })),
-    hooks: cap(a.hooks, 12).map((h) => ({ ...h, three_sec_score: clampScore(h.three_sec_score) })),
-    color: { ...a.color, preset_key: preset.key, detected_condition: cap(a.color?.detected_condition, 8) },
-    thumbnails: cap(a.thumbnails, 8).map((t) => ({ ...t, ctr_rank: clampScore(t.ctr_rank) })),
-    edit_plan: { ...a.edit_plan, format: (["short_916", "wide_169", "square_11"].includes(a.edit_plan?.format) ? a.edit_plan.format : fallbackFormat) as VantaFormat, timeline: cap(a.edit_plan?.timeline, 60), sound_design: cap(a.edit_plan?.sound_design, 60) },
-    sound_design: { ...a.sound_design, cue_sheet: cap(a.sound_design?.cue_sheet, 60) },
-    qa: { ...a.qa, quality_score: clampScore(a.qa?.quality_score) },
+    strategy: {
+      creative_brief: safeStr(strategy.creative_brief, "Creative brief unavailable — re-run the analysis."),
+      campaign_concepts: strList(strategy.campaign_concepts, 12),
+      content_plan: objArr(strategy.content_plan, 12).map((p) => ({
+        slot: safeStr(p.slot, "Video", 120),
+        concept: safeStr(p.concept, "Concept unavailable", 300),
+        format: (VANTA_FORMATS as readonly string[]).includes(p.format as string) ? (p.format as VantaFormat) : format,
+      })),
+      hook_bank: strList(strategy.hook_bank, 20),
+      positioning_notes: strList(strategy.positioning_notes, 12),
+    },
+    clips: objArr(a.clips, 30).map((c) => {
+      const start = nonNegInt(c.start_ms);
+      return {
+        start_ms: start,
+        end_ms: Math.max(start, nonNegInt(c.end_ms)),
+        clip_score: clampScore(c.clip_score),
+        is_hook: c.is_hook === true,
+        is_highlight: c.is_highlight === true,
+        is_dead_space: c.is_dead_space === true,
+        is_emotional: c.is_emotional === true,
+        energy: c.energy === "low" || c.energy === "medium" || c.energy === "high" ? c.energy : null,
+        transcript_excerpt: strOrNull(c.transcript_excerpt, 500),
+        score_reasons: strList(c.score_reasons, 8),
+        flags: strList(c.flags, 8),
+      };
+    }),
+    hooks: objArr(a.hooks, 12)
+      .map((h) => ({
+        hook_text: safeStr(h.hook_text, "", 300),
+        hook_type: (["spoken", "text_overlay", "visual", "pattern_interrupt"] as const).find((t) => t === h.hook_type) ?? "spoken",
+        three_sec_score: clampScore(h.three_sec_score),
+        rationale: strOrNull(h.rationale, 600),
+      }))
+      .filter((h) => h.hook_text !== ""),
+    color: {
+      detected_condition: strList(color.detected_condition, 8),
+      preset_key: preset.key,
+      notes: safeStr(color.notes, `${preset.name}: ${preset.look}`, 1200),
+    },
+    edit_plan: {
+      title: safeStr(editPlan.title, "Edit plan", 200),
+      format,
+      target_duration_s: typeof tds === "number" && Number.isFinite(tds) && tds > 0 ? Math.round(tds) : null,
+      story_beats: objArr(editPlan.story_beats, 12).map((b) => ({
+        beat: safeStr(b.beat, "Beat", 120),
+        note: safeStr(b.note, "", 400),
+      })),
+      timeline: objArr(editPlan.timeline, 60).map((t, i) => {
+        const start = nonNegInt(t.start_ms);
+        return {
+          order: nonNegInt(t.order, i + 1),
+          clip_ref: safeStr(t.clip_ref, `clip-${i + 1}`, 80),
+          start_ms: start,
+          end_ms: Math.max(start, nonNegInt(t.end_ms)),
+          note: safeStr(t.note, "", 400),
+          ...(strOrNull(t.zoom, 120) ? { zoom: strOrNull(t.zoom, 120)! } : {}),
+          ...(strOrNull(t.broll, 200) ? { broll: strOrNull(t.broll, 200)! } : {}),
+        };
+      }),
+      pacing_notes: strList(editPlan.pacing_notes, 20),
+      sound_design: cueList(editPlan.sound_design, 60),
+      music_brief: {
+        category: safeStr(musicBrief.category, defaultMusic.key, 60),
+        energy: safeStr(musicBrief.energy, defaultMusic.energy, 30),
+        tempo: safeStr(musicBrief.tempo, defaultMusic.tempo, 60),
+        mood: safeStr(musicBrief.mood, defaultMusic.mood, 120),
+      },
+    },
+    caption_style: {
+      font: safeStr(captions.font, "Rajdhani Bold (brand) / Inter ExtraBold fallback", 120),
+      base_color: safeColor(captions.base_color, "#FFFFFF"),
+      emphasis_color: safeColor(captions.emphasis_color, "#c9a84c"),
+      placement: safeStr(captions.placement, "lower-third center, safe for 9:16 UI", 200),
+      words_per_card: Math.min(8, Math.max(1, nonNegInt(captions.words_per_card, 3) || 3)),
+      emphasis_rules: strList(captions.emphasis_rules, 12),
+      burn_in_recipe: safeStr(captions.burn_in_recipe, "ffmpeg subtitles= styled ASS (worker)", 400),
+    },
+    thumbnails: objArr(a.thumbnails, 8).map((t, i) => ({
+      concept: safeStr(t.concept, `Thumbnail concept ${i + 1}`, 300),
+      layout: safeStr(t.layout, "", 300),
+      text_options: strList(t.text_options, 6),
+      ctr_rank: clampScore(t.ctr_rank) || i + 1,
+      rationale: safeStr(t.rationale, "", 600),
+    })),
+    sound_design: {
+      audio_flags: strList(sound.audio_flags, 12),
+      fixes: strList(sound.fixes, 12),
+      cue_sheet: cueList(sound.cue_sheet, 60),
+      music: {
+        category: safeStr(music.category, defaultMusic.key, 60),
+        energy: safeStr(music.energy, defaultMusic.energy, 30),
+        tempo: safeStr(music.tempo, defaultMusic.tempo, 60),
+        mood: safeStr(music.mood, defaultMusic.mood, 120),
+        rationale: safeStr(music.rationale, `${defaultMusic.label} bed for ${project.objective}`, 400),
+      },
+      loudness_target: safeStr(sound.loudness_target, LOUDNESS_TARGETS.social, 80),
+    },
+    qa: {
+      quality_score: clampScore(qa.quality_score),
+      revision_notes: strList(qa.revision_notes, 20),
+      pacing_issues: strList(qa.pacing_issues, 20),
+      audio_issues: strList(qa.audio_issues, 20),
+      caption_issues: strList(qa.caption_issues, 20),
+    },
     mock: false,
   };
 }

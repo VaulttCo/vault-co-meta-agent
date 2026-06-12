@@ -95,7 +95,7 @@ CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 
 | Variable | Required for | Behaviour when missing |
 |---|---|---|
-| `AI_PROVIDER=openai` + `OPENAI_API_KEY` | Cloud transcription (Auto Editor tier 1) | Falls through: local whisper → external worker → manual paste. App fully functional. |
+| `VANTA_TRANSCRIPTION_PROVIDER=openai` + `OPENAI_API_KEY` | Cloud transcription (Auto Editor tier 1) | Falls through: local whisper → external worker → manual paste. App fully functional. |
 | Supabase URL + `SUPABASE_SERVICE_ROLE_KEY` + private `vanta-transcripts` bucket | Signed audio upload + server-side download | Same fall-through; "Cloud transcription unavailable" (409), never a crash. |
 
 Caps: extracted audio ≤ 24 MB and ≤ 12 minutes (16kHz mono WAV), enforced in the browser
@@ -104,3 +104,7 @@ call. Only browser-extracted AUDIO is uploaded (private bucket) — never the ra
 Audio is sent to OpenAI (whisper-1) for transcription when this tier is active; no other
 external destination. Signed URLs, keys, audio bytes, and raw provider responses are
 never logged.
+
+`VANTA_TRANSCRIPTION_PROVIDER` is deliberately separate from `AI_PROVIDER` — the latter
+belongs to the Veronica campaign builder and selects its reasoning provider; the two
+modules are configured independently.

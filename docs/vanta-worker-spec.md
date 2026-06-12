@@ -230,7 +230,7 @@ fail, plus ownership 409s) is exercised in the V1.4 QA session via the in-memory
 
 For an asset with no pasted transcript, transcription resolves in this order:
 
-1. **Cloud** — `AI_PROVIDER=openai` + `OPENAI_API_KEY` + Supabase Storage: browser
+1. **Cloud** — `VANTA_TRANSCRIPTION_PROVIDER=openai` + `OPENAI_API_KEY` + Supabase Storage: browser
    extracts 16kHz mono audio → signed-URL PUT to the private `vanta-transcripts` bucket
    (`{project_id}/{asset_id}/audio-16k.wav`) → `POST /api/vanta/jobs/[id]/transcribe-cloud`
    downloads server-side and transcribes with whisper-1 (verbose_json segments).

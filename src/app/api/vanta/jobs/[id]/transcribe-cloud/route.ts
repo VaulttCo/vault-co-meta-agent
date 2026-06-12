@@ -39,7 +39,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
   if (!isCloudTranscriptionAvailable()) {
     return NextResponse.json({
       error: "Cloud transcription unavailable",
-      detail: "Requires AI_PROVIDER=openai, OPENAI_API_KEY, and Supabase Storage — use local whisper, the worker, or paste the transcript.",
+      detail: "Requires VANTA_TRANSCRIPTION_PROVIDER=openai, OPENAI_API_KEY, and Supabase Storage — use local whisper, the worker, or paste the transcript.",
     }, { status: 409 });
   }
 

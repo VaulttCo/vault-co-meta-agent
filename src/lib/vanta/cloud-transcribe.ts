@@ -2,9 +2,11 @@
 //
 // Sends the asset's PRIVATE stored audio artifact (extracted/downsampled in the
 // browser, never the raw video) to OpenAI's transcription API and returns sanitized,
-// timestamped segments. Enabled ONLY when AI_PROVIDER=openai, OPENAI_API_KEY is set,
-// and Supabase Storage is configured — otherwise callers fall through the existing
-// tiers (local whisper → external worker → manual paste).
+// timestamped segments. Enabled ONLY when VANTA_TRANSCRIPTION_PROVIDER=openai,
+// OPENAI_API_KEY is set, and Supabase Storage is configured — otherwise callers fall
+// through the existing tiers (local whisper → external worker → manual paste).
+// NOTE: deliberately NOT keyed off AI_PROVIDER — that env var belongs to the Veronica
+// campaign-builder module and selects its reasoning provider, not Vanta transcription.
 //
 // Privacy rules: never log API keys, signed URLs, audio bytes, or raw provider
 // responses; errors surface as bounded generic messages. Segment output is capped and
@@ -21,7 +23,7 @@ const REQUEST_TIMEOUT_MS = 240_000;
 
 export function isCloudTranscriptionAvailable(): boolean {
   return (
-    (process.env.AI_PROVIDER ?? "").trim() === "openai" &&
+    (process.env.VANTA_TRANSCRIPTION_PROVIDER ?? "").trim() === "openai" &&
     !!process.env.OPENAI_API_KEY?.trim() &&
     isVantaStorageConfigured()
   );
@@ -38,7 +40,7 @@ export async function transcribeStoredAudio(
   assetId: string,
 ): Promise<{ ok: true; result: TranscriptionResult; audio_bytes: number; storage_path: string } | { ok: false; reason: string }> {
   if (!isCloudTranscriptionAvailable()) {
-    return { ok: false, reason: "Cloud transcription is not configured (AI_PROVIDER=openai + OPENAI_API_KEY + Supabase required)" };
+    return { ok: false, reason: "Cloud transcription is not configured (VANTA_TRANSCRIPTION_PROVIDER=openai + OPENAI_API_KEY + Supabase required)" };
   }
   const audio = await downloadAudio(projectId, assetId);
   if (!audio) {

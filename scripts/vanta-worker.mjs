@@ -209,7 +209,15 @@ async function realResult(job, asset) {
       return { outputs: [`${aid}/audio-16k.wav`], notes: [`written under ${dir}`] };
     }
     case "transcript": {
-      await run("whisper", [input, "--model", "base", "--task", "transcribe", "--output_format", "json", "--output_dir", dir]);
+      // V1.8: extract 16kHz mono wav first — much faster for whisper than decoding the
+      // full container. Fall back to the source if extraction fails.
+      let whisperInput = input;
+      try {
+        const wav = path.join(dir, "audio-16k.wav");
+        await run("ffmpeg", ["-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", wav], 5 * 60_000);
+        if (existsSync(wav)) whisperInput = wav;
+      } catch { /* whisper decodes the source directly */ }
+      await run("whisper", [whisperInput, "--model", "base", "--task", "transcribe", "--output_format", "json", "--output_dir", dir]);
       const jsonFile = readdirSync(dir).find((f) => f.endsWith(".json"));
       if (!jsonFile) throw new Error("whisper produced no JSON output");
       const d = JSON.parse(readBounded(path.join(dir, jsonFile)));

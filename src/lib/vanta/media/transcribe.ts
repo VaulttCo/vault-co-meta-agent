@@ -8,8 +8,10 @@
 //    contract. Never throws; never fetches URLs.
 
 import path from "node:path";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { execBin, isWhisperAvailable, resolveLocalMediaPath, ensureWorkDir } from "./ffmpeg";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { execBin, isWhisperAvailable, isFfmpegAvailable, resolveLocalMediaPath, ensureWorkDir } from "./ffmpeg";
+
+const AUDIO_EXTRACT_TIMEOUT_MS = 5 * 60_000;
 
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
 
@@ -61,34 +63,71 @@ export function planTranscription(asset: VantaAsset): VantaMediaPlan {
 interface WhisperJsonSegment { start?: number; end?: number; text?: string }
 interface WhisperJson { text?: string; language?: string; segments?: WhisperJsonSegment[] }
 
-/** REAL transcription via the local whisper CLI. Null on any failure — callers fall back. */
-export async function transcribeLocalFile(asset: VantaAsset): Promise<TranscriptionResult | null> {
+/** True when this box can transcribe this asset right now (whisper CLI + local file). */
+export async function isLocalTranscriptionAvailable(asset: Pick<VantaAsset, "file_name">): Promise<boolean> {
+  try {
+    return (await isWhisperAvailable()) && resolveLocalMediaPath(asset.file_name) !== null;
+  } catch { return false; }
+}
+
+/**
+ * V1.8: extract a 16kHz mono wav first (much faster for whisper than decoding the full
+ * video container). Returns the wav path, or null → caller transcribes the source
+ * directly (whisper bundles its own ffmpeg decode).
+ */
+async function extractAudioForTranscription(localPath: string, workDir: string, timeoutMs = AUDIO_EXTRACT_TIMEOUT_MS): Promise<string | null> {
+  try {
+    if (!(await isFfmpegAvailable())) return null;
+    const out = path.join(workDir, "audio-16k.wav");
+    const res = await execBin("ffmpeg", ["-y", "-i", localPath, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", out], timeoutMs);
+    return res.ok && existsSync(out) ? out : null;
+  } catch { return null; }
+}
+
+async function runWhisper(inputPath: string, workDir: string, timeoutMs = WHISPER_TIMEOUT_MS): Promise<TranscriptionResult | null> {
+  const startedAt = Date.now();
+  const res = await execBin("whisper", [
+    inputPath, "--model", "base", "--task", "transcribe",
+    "--output_format", "json", "--output_dir", workDir,
+  ], timeoutMs);
+  if (!res.ok) return null;
+  const jsonFile = findFreshArtifact(workDir, ".json", startedAt);
+  if (!jsonFile) return null;
+  const data = JSON.parse(readFileSync(jsonFile, "utf8")) as WhisperJson;
+  const segments: VantaTranscriptSegment[] = (data.segments ?? [])
+    .filter((s) => typeof s.start === "number" && typeof s.end === "number" && typeof s.text === "string")
+    .slice(0, MAX_SEGMENTS)
+    .map((s) => ({ start_ms: Math.round(s.start! * 1000), end_ms: Math.round(s.end! * 1000), text: s.text!.trim() }))
+    .filter((s) => s.text.length > 0 && s.end_ms > s.start_ms);
+  if (segments.length === 0) return null;
+  return {
+    full_text: (data.text ?? segments.map((s) => s.text).join(" ")).trim(),
+    segments,
+    language: typeof data.language === "string" ? data.language : "en",
+    engine: "whisper-cli (local)",
+  };
+}
+
+/**
+ * REAL transcription via the local whisper CLI — audio-extract first (V1.8), whisper on
+ * the source as fallback. `onStage` reports progress for UI status. Null on any failure.
+ * `budgets` lets the inline route fit inside its maxDuration so a platform kill can't
+ * strand the job mid-process (the worker uses the default, larger budgets).
+ */
+export async function transcribeLocalFile(
+  asset: VantaAsset,
+  onStage?: (stage: "extracting_audio" | "transcribing") => void | Promise<void>,
+  budgets?: { extractMs?: number; whisperMs?: number },
+): Promise<TranscriptionResult | null> {
   try {
     if (!(await isWhisperAvailable())) return null;
     const local = resolveLocalMediaPath(asset.file_name);
     const workDir = ensureWorkDir(asset.id);
     if (!local || !workDir) return null;
-    const startedAt = Date.now();
-    const res = await execBin("whisper", [
-      local, "--model", "base", "--task", "transcribe",
-      "--output_format", "json", "--output_dir", workDir,
-    ], WHISPER_TIMEOUT_MS);
-    if (!res.ok) return null;
-    const jsonFile = findFreshArtifact(workDir, ".json", startedAt);
-    if (!jsonFile) return null;
-    const data = JSON.parse(readFileSync(jsonFile, "utf8")) as WhisperJson;
-    const segments: VantaTranscriptSegment[] = (data.segments ?? [])
-      .filter((s) => typeof s.start === "number" && typeof s.end === "number" && typeof s.text === "string")
-      .slice(0, MAX_SEGMENTS)
-      .map((s) => ({ start_ms: Math.round(s.start! * 1000), end_ms: Math.round(s.end! * 1000), text: s.text!.trim() }))
-      .filter((s) => s.text.length > 0 && s.end_ms > s.start_ms);
-    if (segments.length === 0) return null;
-    return {
-      full_text: (data.text ?? segments.map((s) => s.text).join(" ")).trim(),
-      segments,
-      language: typeof data.language === "string" ? data.language : "en",
-      engine: "whisper-cli (local)",
-    };
+    await onStage?.("extracting_audio");
+    const wav = await extractAudioForTranscription(local, workDir, budgets?.extractMs);
+    await onStage?.("transcribing");
+    return await runWhisper(wav ?? local, workDir, budgets?.whisperMs);
   } catch { return null; }
 }
 

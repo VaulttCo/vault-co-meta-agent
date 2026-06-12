@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error, missing: result.missing }, { status: 409 });
     }
-    return NextResponse.json({ summary: result.summary, counts: result.counts }, { status: 201 });
+    return NextResponse.json({ summary: result.summary, counts: result.counts, plan: result.plan }, { status: 201 });
   } catch (e) {
     console.error("[POST /api/vanta/projects/[id]/package]", (e as Error).message);
     return NextResponse.json({ error: "Materialization failed" }, { status: 500 });

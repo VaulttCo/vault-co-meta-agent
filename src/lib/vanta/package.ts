@@ -17,11 +17,12 @@
 // rows we previously validated; outputs are clamped/bounded here again regardless.
 
 import {
-  getVantaTranscript, getVantaScenes, replaceVantaClips, replaceVantaHooks,
+  getVantaTranscript, getVantaScenes, replaceVantaScenes, replaceVantaClips, replaceVantaHooks,
   replaceVantaEditPlan, replaceVantaCaptions, replaceVantaThumbnails, replaceVantaColorGrade,
   appendVantaScores, replaceVantaExport, createVantaRun, patchVantaRun, updateVantaProject,
   getCreativePackageSummary, getVantaMemory,
 } from "./db";
+import { deriveScenesMock } from "./media/scenes";
 import type { VantaPackageSummary } from "./db";
 import { generateClips } from "./scoring";
 import { pickPreset, getPreset } from "./color/presets";
@@ -183,8 +184,22 @@ export async function materializeCreativePackage(
   const remembered = rememberedDirectives(await getVantaMemory(project.industry, 50));
   const rev: VantaRevisionDirectives = { ...remembered, ...(opts.revision ?? {}) };
 
-  const [transcript, scenes] = await Promise.all([getVantaTranscript(asset.id), getVantaScenes(asset.id)]);
+  const [transcript, storedScenes] = await Promise.all([getVantaTranscript(asset.id), getVantaScenes(asset.id)]);
   const segments = transcript?.segments ?? [];
+  let scenes = storedScenes;
+  // Self-healing (V1.8): scenes derived from fixed intervals BEFORE a transcript existed
+  // are superseded by pause-derived scenes once segments are available — auto-transcribed
+  // assets get measured-quality scenes without re-running the scenes job manually.
+  if (segments.length > 0 && scenes.length > 0 && scenes.every((s) => (s.detector ?? "").includes("fixed_interval"))) {
+    // TOCTOU guard: re-read right before replacing — a worker may have written REAL
+    // PySceneDetect scenes in the meantime; never clobber those with derived ones.
+    const current = await getVantaScenes(asset.id);
+    if (current.length === 0 || current.every((s) => (s.detector ?? "").includes("fixed_interval"))) {
+      scenes = await replaceVantaScenes(asset.id, deriveScenesMock(asset, segments, asset.duration_ms));
+    } else {
+      scenes = current;
+    }
+  }
   const missing: string[] = [];
   if (segments.length === 0) missing.push("transcript segments (run the transcript job)");
   if (scenes.length === 0) missing.push("scenes (run the scenes job)");

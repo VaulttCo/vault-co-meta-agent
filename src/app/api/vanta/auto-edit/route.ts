@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import { createVantaProject, registerVantaAsset } from "@/lib/vanta/db";
-import { enqueueAssetPipeline, claimJob, executeProcessingJob } from "@/lib/vanta/jobs";
+import { enqueueAssetPipeline, claimJob, executeProcessingJob, isLocalTranscriptionAvailable } from "@/lib/vanta/jobs";
 import { materializeCreativePackage } from "@/lib/vanta/package";
 
 export const runtime = "nodejs";
@@ -47,15 +47,37 @@ export async function POST(req: NextRequest) {
     if (!registered) return NextResponse.json({ error: "file_name is required" }, { status: 400 });
     const asset = registered.asset;
 
-    // Execute the pipeline inline — every job here is light/deterministic (heavy work
-    // resolves to worker plans by design; see jobs.ts).
-    const jobs = await enqueueAssetPipeline(project.id, asset, { hasManualTranscript: !!registered.transcript });
-    const jobResults: Array<{ job_type: string; status: string }> = [];
+    // Execute the light/deterministic jobs inline. WITHOUT a manual transcript (V1.8),
+    // transcript + scenes + clips stay QUEUED: the dedicated transcribe route (whisper
+    // on this box) or the external Vanta Worker fills the transcript, then the Auto
+    // Editor advances scenes → clips → materialization.
+    const hasManualTranscript = !!registered.transcript;
+    const deferred = new Set(hasManualTranscript ? [] : ["transcript", "scenes", "clips"]);
+    const jobs = await enqueueAssetPipeline(project.id, asset, { hasManualTranscript });
+    const jobResults: Array<{ id: string; job_type: string; status: string }> = [];
     for (const job of jobs) {
+      if (deferred.has(job.job_type)) { jobResults.push({ id: job.id, job_type: job.job_type, status: "queued" }); continue; }
       const claimed = await claimJob(job.id, `app:auto-editor:${auth.userId ?? "operator"}`);
-      if (!claimed) { jobResults.push({ job_type: job.job_type, status: job.status }); continue; }
+      if (!claimed) { jobResults.push({ id: job.id, job_type: job.job_type, status: job.status }); continue; }
       const done = await executeProcessingJob(claimed, asset);
-      jobResults.push({ job_type: job.job_type, status: done?.status ?? "failed" });
+      jobResults.push({ id: job.id, job_type: job.job_type, status: done?.status ?? "failed" });
+    }
+
+    // No transcript yet → hand the client the auto-transcription handle instead of a
+    // failed materialization.
+    if (!hasManualTranscript) {
+      const transcriptJob = jobResults.find((j) => j.job_type === "transcript");
+      const localTranscription = await isLocalTranscriptionAvailable(asset);
+      return NextResponse.json({
+        project_id: project.id, asset_id: asset.id, jobs: jobResults,
+        draft: null,
+        stage: "needs_transcription",
+        transcript_job_id: transcriptJob?.id ?? null,
+        transcription: localTranscription ? "local_available" : "worker_required",
+        ...(localTranscription ? {} : {
+          notice: "Transcription worker required — start scripts/vanta-worker.mjs on a media box (or paste the transcript manually).",
+        }),
+      }, { status: 202 });
     }
 
     const draft = await materializeCreativePackage(project, asset, {
@@ -63,8 +85,6 @@ export async function POST(req: NextRequest) {
       actor: auth.userId,
     });
     if (!draft.ok) {
-      // Transcript missing (no paste, no whisper on this box) → tell the operator what
-      // the draft still needs instead of failing the whole flow.
       return NextResponse.json({
         project_id: project.id, asset_id: asset.id, jobs: jobResults,
         draft: null, needs: draft.missing, error: draft.error,

@@ -66,6 +66,7 @@ function readDurationMs(file: File): Promise<number | null> {
 export function VantaAutoEditor() {
   const [file, setFile] = useState<{ name: string; duration_ms: number | null } | null>(null);
   const [transcriptText, setTranscriptText] = useState("");
+  const [showManualTranscript, setShowManualTranscript] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState<"draft" | "revise" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -76,7 +77,15 @@ export function VantaAutoEditor() {
   const [instruction, setInstruction] = useState("");
   const [learned, setLearned] = useState<LearnedNote[]>([]);
   const [lastApplied, setLastApplied] = useState<string | null>(null);
+  // V1.8 auto-transcription pipeline stage (drives the status rail)
+  const [phase, setPhase] = useState<"registering" | "extracting" | "transcribing" | "waiting_worker" | "building" | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+  useEffect(() => stopPolling, [stopPolling]);
 
   useEffect(() => {
     fetch("/api/vanta/memory").then((r) => (r.ok ? r.json() : null)).then((d) => {
@@ -90,25 +99,101 @@ export function VantaAutoEditor() {
     setFile({ name: f.name, duration_ms });
   }, []);
 
-  const createDraft = useCallback(async () => {
-    if (!file) return;
-    setBusy("draft"); setNotice(null); setNeeds(null);
+  /** After the transcript lands: run queued scenes + clips inline, then materialize. */
+  const buildDraftFromTranscript = useCallback(async (pid: string, aid: string, jobIds: Record<string, string>) => {
+    setPhase("building");
     try {
-      const res = await fetch("/api/vanta/auto-edit", {
+      for (const t of ["scenes", "clips"] as const) {
+        if (jobIds[t]) await fetch(`/api/vanta/jobs/${jobIds[t]}/run`, { method: "POST" }).catch(() => null); // 409 = worker already did it
+      }
+      const res = await fetch(`/api/vanta/projects/${pid}/package`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_name: file.name, duration_ms: file.duration_ms, transcript_text: transcriptText || null, format: "short_916" }),
+        body: JSON.stringify({ asset_id: aid, format: "short_916" }),
       });
       const d = await res.json().catch(() => ({}));
-      if (res.status === 202) {
-        setProjectId(d.project_id ?? null); setAssetId(d.asset_id ?? null);
-        setNeeds(Array.isArray(d.needs) ? d.needs : []);
-        setNotice("Footage registered — the draft still needs a transcript. Paste it above and create the draft again (the worker's whisper pass automates this).");
-        return;
+      if (!res.ok) { setNotice(d.error ?? "Could not build the draft"); return; }
+      setDraft({ summary: d.summary, counts: d.counts, plan: d.plan });
+      setLastApplied(null); setNeeds(null);
+    } finally { setPhase(null); setBusy(null); }
+  }, []);
+
+  /** Poll the transcript job for stage/status (drives the rail; covers the worker path). */
+  const watchTranscription = useCallback((pid: string, aid: string, transcriptJobId: string, jobIds: Record<string, string>) => {
+    stopPolling();
+    let ticks = 0;
+    let inFlight = false;  // overlapping polls must not stack
+    let advanced = false;  // succeeded must trigger exactly one build
+    pollRef.current = setInterval(async () => {
+      if (inFlight || advanced) return;
+      inFlight = true;
+      try {
+        if (++ticks > 150) { stopPolling(); setBusy(null); setPhase(null); setNotice("Transcription is taking a while — leave the worker running and re-open this draft from Projects."); return; }
+        const r = await fetch(`/api/vanta/projects/${pid}/jobs`).catch(() => null);
+        const d = r?.ok ? await r.json().catch(() => null) : null;
+        const tj = d?.jobs?.find((j: { id: string }) => j.id === transcriptJobId);
+        if (!tj) return;
+        if (tj.status === "running" || tj.status === "claimed") {
+          setPhase(tj.result?.stage === "extracting_audio" ? "extracting" : "transcribing");
+        } else if (tj.status === "succeeded") {
+          advanced = true;
+          stopPolling();
+          await buildDraftFromTranscript(pid, aid, jobIds);
+        } else if (tj.status === "failed") {
+          advanced = true;
+          stopPolling(); setBusy(null); setPhase(null);
+          setNotice(tj.error ?? "Transcription failed — paste the transcript manually and create the draft again.");
+          setShowManualTranscript(true);
+        }
+      } finally { inFlight = false; }
+    }, 4000);
+  }, [stopPolling, buildDraftFromTranscript]);
+
+  const createDraft = useCallback(async () => {
+    if (!file) return;
+    setBusy("draft"); setNotice(null); setNeeds(null); setPhase("registering");
+    try {
+      // A pasted transcript only applies while the override is visible — collapsing it
+      // returns to the auto-transcription default.
+      const manualTranscript = showManualTranscript && transcriptText.trim() ? transcriptText : null;
+      const res = await fetch("/api/vanta/auto-edit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: file.name, duration_ms: file.duration_ms, transcript_text: manualTranscript, format: "short_916" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 202) { setNotice(d.error ?? "Could not create the draft"); setBusy(null); setPhase(null); return; }
+      setProjectId(d.project_id ?? null); setAssetId(d.asset_id ?? null);
+      const jobIds: Record<string, string> = {};
+      for (const j of d.jobs ?? []) jobIds[j.job_type] = j.id;
+
+      // Manual transcript (or already complete) → draft came back directly.
+      if (res.status === 201 && d.draft) { setDraft(d.draft); setLastApplied(null); setBusy(null); setPhase(null); return; }
+
+      if (d.stage === "needs_transcription" && d.transcript_job_id) {
+        if (d.transcription === "local_available") {
+          // Auto-transcribe on this box: fire the dedicated route; the poller renders
+          // extracting → transcribing from the job's stage patches.
+          setPhase("extracting");
+          watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
+          fetch(`/api/vanta/jobs/${d.transcript_job_id}/transcribe`, { method: "POST" }).catch(() => null);
+        } else {
+          // No whisper here → the external Vanta Worker owns the job; keep watching.
+          setPhase("waiting_worker");
+          setNotice(d.notice ?? "Transcription worker required — start scripts/vanta-worker.mjs on a media box, or paste the transcript manually.");
+          setShowManualTranscript(true);
+          watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
+        }
+        return; // busy stays on; the watcher/builder clears it
       }
-      if (!res.ok) { setNotice(d.error ?? "Could not create the draft"); return; }
-      setProjectId(d.project_id); setAssetId(d.asset_id); setDraft(d.draft); setLastApplied(null);
-    } finally { setBusy(null); }
-  }, [file, transcriptText]);
+
+      // 202 without a transcription handle (e.g. paste was present but materialization
+      // reported missing pieces) — surface what's needed.
+      setNeeds(Array.isArray(d.needs) ? d.needs : []);
+      setNotice(d.error ?? "The draft needs more inputs.");
+      setBusy(null); setPhase(null);
+    } catch {
+      setBusy(null); setPhase(null); setNotice("Could not create the draft");
+    }
+  }, [file, transcriptText, showManualTranscript, watchTranscription]);
 
   const revise = useCallback(async (text: string) => {
     if (!projectId || !assetId || !text.trim()) return;
@@ -168,11 +253,18 @@ export function VantaAutoEditor() {
             )}
           </div>
 
-          <textarea
-            value={transcriptText} onChange={(e) => setTranscriptText(e.target.value)} rows={3}
-            placeholder="Paste the transcript (strongly recommended — Vanta cuts by what's said; the worker's whisper pass automates this in production)…"
-            className="w-full px-3 py-2 rounded-lg text-[12.5px] outline-none resize-y"
-            style={{ background: "var(--t-bg)", border: `1px solid ${needs ? "rgba(255,132,0,0.5)" : "var(--t-border)"}`, color: "var(--t-text)" }} />
+          {/* Manual override only — auto-transcription is the default path (V1.8) */}
+          <button onClick={() => setShowManualTranscript((v) => !v)}
+            className="text-[11px] font-semibold hover:underline" style={{ color: "var(--t-dim)" }}>
+            {showManualTranscript ? "− Hide manual transcript override" : "+ Manual override: paste a transcript instead of auto-transcribing"}
+          </button>
+          {showManualTranscript && (
+            <textarea
+              value={transcriptText} onChange={(e) => setTranscriptText(e.target.value)} rows={3}
+              placeholder="Paste the transcript here to skip auto-transcription (fallback when no whisper/worker is available)…"
+              className="w-full px-3 py-2 rounded-lg text-[12.5px] outline-none resize-y"
+              style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)", color: "var(--t-text)" }} />
+          )}
 
           <div className="flex items-center gap-3 flex-wrap">
             <VCButton onClick={createDraft} disabled={!file || busy !== null}>
@@ -182,6 +274,34 @@ export function VantaAutoEditor() {
             </VCButton>
             {needs && <VCChip label={`waiting on: ${needs.join(", ")}`} color="#f59e0b" />}
           </div>
+
+          {/* Pipeline status rail (V1.8) */}
+          {phase && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {([
+                ["registering", "Register footage"],
+                ["extracting", "Extract audio"],
+                ["transcribing", "Transcribe"],
+                ["building", "Build draft"],
+              ] as const).map(([key, label]) => {
+                const order = ["registering", "extracting", "transcribing", "building"];
+                const activeIdx = order.indexOf(phase === "waiting_worker" ? "transcribing" : phase);
+                const myIdx = order.indexOf(key);
+                const state = myIdx < activeIdx ? "done" : myIdx === activeIdx ? "active" : "pending";
+                return (
+                  <span key={key} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold"
+                    style={{
+                      background: state === "active" ? "rgba(255,132,0,0.1)" : "var(--t-surface-2)",
+                      border: `1px solid ${state === "active" ? "rgba(255,132,0,0.3)" : "var(--t-border-subtle)"}`,
+                      color: state === "done" ? "#22c55e" : state === "active" ? ORANGE : "var(--t-dim)",
+                    }}>
+                    {state === "done" ? "✓" : state === "active" ? <Loader2 size={10} className="animate-spin" /> : "·"} {label}
+                    {key === "transcribing" && phase === "waiting_worker" && " (waiting for worker)"}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           {notice && <p className="text-[11.5px] px-3 py-2 rounded-lg" style={{ background: "rgba(255,132,0,0.08)", border: "1px solid rgba(255,132,0,0.2)", color: ORANGE }}>{notice}</p>}
         </div>
       </VCPanel>

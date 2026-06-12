@@ -19,7 +19,7 @@ import { extractThumbnails } from "./media/thumbnails";
 import { planProxy } from "./media/proxies";
 import { planAudioExtraction } from "./media/audio";
 import { planWaveform } from "./media/waveform";
-import { transcribeLocalFile, segmentizeTranscript, planTranscription } from "./media/transcribe";
+import { transcribeLocalFile, segmentizeTranscript, planTranscription, isLocalTranscriptionAvailable } from "./media/transcribe";
 import { detectScenesLocal, deriveScenesMock } from "./media/scenes";
 import { generateClips } from "./scoring";
 import { VANTA_JOB_TYPES } from "./types";
@@ -150,6 +150,49 @@ export async function enqueueAssetPipeline(
     }
   }
   return jobs;
+}
+
+// ── Auto-transcription executor (V1.8 — POST /api/vanta/jobs/[id]/transcribe) ─
+//
+// The dedicated local-transcription path: claim → extract audio (ffmpeg) → whisper →
+// persist timestamped segments → complete. Stage progress is patched into the run's
+// result so the Auto Editor can poll "extracting audio → transcribing". This is the
+// ONE sanctioned inline-heavy path (single-purpose, availability-gated, bounded by the
+// route's maxDuration); everything else heavy stays worker-owned.
+
+export { isLocalTranscriptionAvailable };
+
+export async function executeTranscriptionJob(run: VantaAgentRun, asset: VantaAsset): Promise<VantaAgentRun | null> {
+  await patchVantaRun(run.id, { status: "running", started_at: nowIso(), result: { stage: "extracting_audio" } });
+  try {
+    const existing = await getVantaTranscript(asset.id);
+    if (existing && existing.segments.length > 0) {
+      return finalizeSuccess(run.id, {
+        mock: false, planned: false, stage: "done", source: existing.source,
+        transcript_id: existing.id, segment_count: existing.segments.length,
+        notes: ["Timestamped transcript already present."],
+      });
+    }
+    // Budgets sum to ~260s — safely inside the route's maxDuration (300s) so a timeout
+    // resolves through failJob instead of a platform kill stranding the run as running.
+    const real = await transcribeLocalFile(asset, async (stage) => {
+      await patchVantaRun(run.id, { result: { stage } });
+    }, { extractMs: 60_000, whisperMs: 200_000 });
+    if (!real) {
+      return failJob(run.id, "Transcription worker required — whisper/ffmpeg or the source file is unavailable on this box (run scripts/vanta-worker.mjs on a media box, or paste the transcript manually)");
+    }
+    const tx = await createVantaTranscript({
+      asset_id: asset.id, source: "whisper", full_text: real.full_text,
+      segments: real.segments, language: real.language,
+    });
+    return finalizeSuccess(run.id, {
+      mock: false, planned: false, stage: "done", source: "whisper", engine: real.engine,
+      transcript_id: tx.id, segment_count: tx.segments.length, word_count: tx.word_count,
+      notes: ["Auto-transcribed locally (ffmpeg audio extract → whisper)."],
+    });
+  } catch (e) {
+    return failJob(run.id, (e as Error).message);
+  }
 }
 
 // ── Inline executor (smoke-test/dev path — POST /api/vanta/jobs/[id]/run) ────

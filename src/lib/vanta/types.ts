@@ -364,6 +364,18 @@ export interface VantaAnalysis {
   mock: boolean; // true when produced by the deterministic fallback
 }
 
+// ── Auto Editor revisions (V1.7) ─────────────────────────────────────────────
+
+/** Bounded, deterministic directives a revision can apply to materialization. */
+export interface VantaRevisionDirectives {
+  hook_offset?: number;            // use the Nth-ranked hook candidate (0 = best)
+  pace?: "faster" | "standard";    // faster → tighter target duration, fewer clips
+  captions_density?: "more" | "standard"; // more → fewer words/card, denser emphasis
+  style?: "luxury" | "standard";   // luxury → vault_signature grade + luxury music bed
+  music_category?: string;         // explicit music category override (taxonomy key)
+  cut_dead_space?: boolean;        // explicit confirmation — already default behavior
+}
+
 // ── DTO inputs ────────────────────────────────────────────────────────────────
 
 export interface VantaProjectInput {

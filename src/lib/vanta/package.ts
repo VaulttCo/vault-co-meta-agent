@@ -20,16 +20,17 @@ import {
   getVantaTranscript, getVantaScenes, replaceVantaClips, replaceVantaHooks,
   replaceVantaEditPlan, replaceVantaCaptions, replaceVantaThumbnails, replaceVantaColorGrade,
   appendVantaScores, replaceVantaExport, createVantaRun, patchVantaRun, updateVantaProject,
-  getCreativePackageSummary,
+  getCreativePackageSummary, getVantaMemory,
 } from "./db";
 import type { VantaPackageSummary } from "./db";
 import { generateClips } from "./scoring";
-import { pickPreset } from "./color/presets";
-import { buildCueSheet, pickMusic, LOUDNESS_TARGETS } from "./sound/taxonomy";
+import { pickPreset, getPreset } from "./color/presets";
+import { buildCueSheet, pickMusic, LOUDNESS_TARGETS, MUSIC_CATEGORIES } from "./sound/taxonomy";
+import { rememberedDirectives } from "./revise";
 import { VANTA_FORMATS } from "./types";
 import type {
   VantaProject, VantaAsset, VantaClip, VantaHook, VantaFormat,
-  VantaTranscriptSegment, VantaEditPlan, VantaScore,
+  VantaTranscriptSegment, VantaEditPlan, VantaScore, VantaRevisionDirectives,
 } from "./types";
 
 const clamp100 = (n: number) => Math.max(1, Math.min(100, Math.round(n)));
@@ -43,8 +44,14 @@ const ts = (ms: number) => {
 
 const EMPHASIS = /(\$[\d,]+|\b\d{2,}\b|\b\d+%)|\b(stop|never|warning|mistake|free|insurance|adjuster|claim|damage|guarantee)\b/i;
 
+/** Bounded plan view for review UIs (timeline ≤6 entries, cue sheet trimmed). */
+export type MaterializedPlanView = Pick<VantaEditPlan,
+  "id" | "title" | "format" | "target_duration_s" | "story_beats" | "timeline" | "pacing_notes" | "music_brief"> & {
+  sound_design: VantaEditPlan["sound_design"];
+};
+
 export type MaterializeResult =
-  | { ok: true; summary: VantaPackageSummary; counts: Record<string, number> }
+  | { ok: true; summary: VantaPackageSummary; counts: Record<string, number>; plan: MaterializedPlanView }
   | { ok: false; error: string; missing: string[] };
 
 // ── Builders (pure, deterministic, bounded) ──────────────────────────────────
@@ -65,15 +72,27 @@ function buildEmphasisMap(segments: VantaTranscriptSegment[]): Array<{ at_ms: nu
 }
 
 function buildEditPlanDraft(
-  project: VantaProject, asset: VantaAsset, clips: VantaClip[], format: VantaFormat,
+  project: VantaProject, asset: VantaAsset, clips: VantaClip[], hooks: VantaHook[],
+  format: VantaFormat, rev: VantaRevisionDirectives,
 ): Omit<VantaEditPlan, "id" | "created_at" | "updated_at"> {
-  const usable = clips.filter((c) => !c.is_dead_space).sort((a, b) => b.clip_score - a.clip_score).slice(0, 6)
+  const faster = rev.pace === "faster";
+  const usable = clips.filter((c) => !c.is_dead_space).sort((a, b) => b.clip_score - a.clip_score)
+    .slice(0, faster ? 4 : 6)
     .sort((a, b) => a.start_ms - b.start_ms);
   const totalS = Math.round(usable.reduce((sum, c) => sum + (c.end_ms - c.start_ms), 0) / 1000);
-  const targetS = Math.min(format === "short_916" ? 60 : 90, Math.max(15, totalS));
+  const cap = (format === "short_916" ? 60 : 90) * (faster ? 0.75 : 1);
+  const targetS = Math.round(Math.min(cap, Math.max(15, totalS * (faster ? 0.75 : 1))));
   const hookClip = usable.find((c) => c.is_hook) ?? usable[0] ?? null;
+  const chosenHook = hooks[0] ?? null; // caller passes hooks pre-rotated by hook_offset
   const highEnergy = clips.filter((c) => c.energy === "high").length >= 2;
-  const music = pickMusic(project.objective, highEnergy ? "high" : "medium");
+  let music = pickMusic(project.objective, faster || highEnergy ? "high" : "medium");
+  if (rev.style === "luxury") music = MUSIC_CATEGORIES.find((m) => m.key === "luxury") ?? music;
+  if (rev.music_category === "__different__") {
+    const i = MUSIC_CATEGORIES.findIndex((m) => m.key === music.key);
+    music = MUSIC_CATEGORIES[(i + 1) % MUSIC_CATEGORIES.length];
+  } else if (rev.music_category) {
+    music = MUSIC_CATEGORIES.find((m) => m.key === rev.music_category) ?? music;
+  }
   const durMs = asset.duration_ms ?? (clips[clips.length - 1]?.end_ms ?? 60_000);
   const cueSheet = buildCueSheet(Math.round(durMs / 1000), [
     { at_ms: hookClip?.start_ms ?? 0, kind: "hook" },
@@ -88,7 +107,7 @@ function buildEditPlanDraft(
     format,
     target_duration_s: targetS,
     story_beats: [
-      { beat: "Hook", note: hookClip?.transcript_excerpt?.slice(0, 120) ?? "Strongest scored moment first — no logo" },
+      { beat: "Hook", note: (chosenHook?.hook_text ?? hookClip?.transcript_excerpt ?? "Strongest scored moment first — no logo").slice(0, 120) },
       { beat: "Proof", note: "Highest-density measured clips, chronological" },
       { beat: "CTA", note: "Verbal + on-screen, final 5s" },
     ],
@@ -101,8 +120,8 @@ function buildEditPlanDraft(
       ...(c.is_hook ? { zoom: "punch in 110% on hook" } : {}),
     })),
     pacing_notes: [
-      "Cut every 2–4s in the first 15s",
-      `Dead space removed: ${clips.filter((c) => c.is_dead_space).length} flagged segment(s)`,
+      faster ? "FASTER cut requested — cut every 1.5–3s in the first 15s, no breath room" : "Cut every 2–4s in the first 15s",
+      `Dead space removed: ${clips.filter((c) => c.is_dead_space).length} flagged segment(s)${rev.cut_dead_space ? " (operator-confirmed)" : ""}`,
       ...(clips.some((c) => c.flags.includes("estimated_timestamps")) ? ["Timestamps estimated from manual transcript — confirm against footage before cutting"] : []),
     ],
     sound_design: cueSheet,
@@ -154,10 +173,15 @@ function qualityScore(clips: VantaClip[], hooks: VantaHook[], segments: VantaTra
 export async function materializeCreativePackage(
   project: VantaProject,
   asset: VantaAsset,
-  opts: { format?: VantaFormat; actor?: string | null } = {},
+  opts: { format?: VantaFormat; actor?: string | null; revision?: VantaRevisionDirectives } = {},
 ): Promise<MaterializeResult> {
   const format: VantaFormat = (VANTA_FORMATS as readonly string[]).includes(opts.format ?? "")
     ? (opts.format as VantaFormat) : "short_916";
+
+  // Learned preferences (vanta_memory, source=human) seed the directives; the explicit
+  // revision for THIS run wins on conflicts. This is how revision feedback compounds.
+  const remembered = rememberedDirectives(await getVantaMemory(project.industry, 50));
+  const rev: VantaRevisionDirectives = { ...remembered, ...(opts.revision ?? {}) };
 
   const [transcript, scenes] = await Promise.all([getVantaTranscript(asset.id), getVantaScenes(asset.id)]);
   const segments = transcript?.segments ?? [];
@@ -175,29 +199,38 @@ export async function materializeCreativePackage(
     replaceVantaHooks(project.id, asset.id, generated.hooks),
   ]);
 
+  // Hook offset rotates the ranked candidates (revision: "use a different hook").
+  const hookOffset = Math.min(rev.hook_offset ?? 0, Math.max(0, hooks.length - 1));
+  const orderedHooks = hooks.length ? [...hooks.slice(hookOffset), ...hooks.slice(0, hookOffset)] : hooks;
+
   // 2. Edit plan (one draft per asset; prior drafts + their exports retired).
-  const { plan, removedPlanIds } = await replaceVantaEditPlan(asset.id, buildEditPlanDraft(project, asset, clips, format));
+  const { plan, removedPlanIds } = await replaceVantaEditPlan(asset.id, buildEditPlanDraft(project, asset, clips, orderedHooks, format, rev));
 
   // 3. Captions — real SRT from measured segments + the Vault style spec.
+  const denseCaptions = rev.captions_density === "more";
   const captions = await replaceVantaCaptions(project.id, asset.id, [{
     format: "srt",
     payload: buildSrt(segments),
     style_spec: {
       font: "Rajdhani Bold (brand) / Inter ExtraBold fallback",
       base_color: "#FFFFFF", emphasis_color: "#c9a84c",
-      placement: "lower-third center, safe for 9:16 UI", words_per_card: 3,
+      placement: "lower-third center, safe for 9:16 UI",
+      words_per_card: denseCaptions ? 2 : 3,
       burn_in_recipe: "ffmpeg subtitles= styled ASS, 64px, 4px shadow (worker)",
       source: transcript?.source ?? "unknown", estimated_timestamps: estimated,
+      ...(denseCaptions ? { density: "high — operator revision" } : {}),
     },
-    emphasis_map: buildEmphasisMap(segments),
+    emphasis_map: buildEmphasisMap(segments).slice(0, denseCaptions ? 30 : 20),
     storage_path: null,
   }]);
 
-  // 4. Thumbnail concepts from the top hooks.
-  const thumbnails = await replaceVantaThumbnails(project.id, asset.id, thumbnailDrafts(hooks));
+  // 4. Thumbnail concepts from the (possibly rotated) top hooks.
+  const thumbnails = await replaceVantaThumbnails(project.id, asset.id, thumbnailDrafts(orderedHooks));
 
   // 5. Color grade recommendation (preset + runnable recipes; worker verifies later).
-  const preset = pickPreset(["ok"], project.objective);
+  const preset = rev.style === "luxury"
+    ? (getPreset("vault_signature") ?? pickPreset(["ok"], project.objective))
+    : pickPreset(["ok"], project.objective);
   await replaceVantaColorGrade(project.id, asset.id, {
     detected_condition: ["unverified — worker histogram pass pending"],
     preset_key: preset.key,
@@ -236,7 +269,7 @@ export async function materializeCreativePackage(
   const statusUpdated = !!(await updateVantaProject(project.id, { status: "review" }));
   const audit = await createVantaRun({
     project_id: project.id, asset_id: asset.id, agent: "editor", job_type: "package",
-    params: { format, estimated }, params_hash: null,
+    params: { format, estimated, revision: rev as unknown as Record<string, unknown> }, params_hash: null,
   });
   await patchVantaRun(audit.id, {
     status: "succeeded", started_at: audit.created_at, finished_at: new Date().toISOString(),
@@ -270,6 +303,11 @@ export async function materializeCreativePackage(
     counts: {
       clips: clips.length, hooks: hooks.length, captions: captions.length,
       thumbnails: thumbnails.length, scores: events.length, quality: quality.score,
+    },
+    plan: {
+      id: plan.id, title: plan.title, format: plan.format, target_duration_s: plan.target_duration_s,
+      story_beats: plan.story_beats, timeline: plan.timeline, pacing_notes: plan.pacing_notes,
+      music_brief: plan.music_brief, sound_design: plan.sound_design.slice(0, 12),
     },
   };
 }

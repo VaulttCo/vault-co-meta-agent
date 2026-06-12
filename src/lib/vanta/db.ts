@@ -801,6 +801,34 @@ export async function getVantaMemory(industry?: string, limit = 100): Promise<Va
   } catch { return fromMock(); }
 }
 
+/** Record a learned pattern (V1.7 — Auto Editor revision feedback). Mock-safe. */
+export async function addVantaMemoryRow(input: {
+  memory_kind: VantaMemoryRow["memory_kind"];
+  industry: VantaIndustry;
+  pattern: string;
+  evidence?: string[];
+  source?: VantaMemoryRow["source"];
+}): Promise<VantaMemoryRow> {
+  const row: VantaMemoryRow = {
+    id: uuid("vmem"),
+    memory_kind: input.memory_kind,
+    industry: input.industry,
+    pattern: input.pattern.slice(0, 600),
+    evidence: (input.evidence ?? []).slice(0, 6).map((e) => e.slice(0, 300)),
+    win_count: 1, loss_count: 0, confidence: 0.5,
+    source: input.source ?? "human",
+    active: true,
+    created_at: nowIso(), updated_at: nowIso(),
+  };
+  const client = db();
+  if (!client) { mockMemory.unshift(row); return row; }
+  try {
+    const { data, error } = await client.from("vanta_memory").insert(row).select("*").single();
+    if (error || !data) { mockMemory.unshift(row); return row; }
+    return data as VantaMemoryRow;
+  } catch { mockMemory.unshift(row); return row; }
+}
+
 /** Top winning patterns to bias new analyses (fed into the prompt). */
 export async function getMemoryWinners(industry: string, limit = 8): Promise<string[]> {
   const rows = await getVantaMemory(industry, limit);

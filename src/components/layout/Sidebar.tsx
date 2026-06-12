@@ -295,14 +295,11 @@ export function Sidebar({ onClose }: SidebarProps) {
         {isVanta && (
           <>
             <SectionLabel label="Vanta Creative" />
-            <NavLink label="Vanta Studio"   href="/vanta"          icon={Clapperboard} />
-            <NavLink label="Projects"       href="/vanta/projects" icon={Layers} />
-
-            <SectionLabel label="Coming Soon" />
-            <ComingSoonItem icon={ImageIcon}     label="Color Lab"      />
-            <ComingSoonItem icon={Sparkles}      label="Hook Lab"       />
-            <ComingSoonItem icon={MessageSquare} label="Caption Lab"    />
-            <ComingSoonItem icon={Brain}         label="Creative Memory" />
+            {/* One simple workflow: Auto Editor is the product. Color/Hook/Caption/
+                Sound/Memory run as internal agents inside it — not separate labs. */}
+            <NavLink label="Auto Editor"    href="/vanta"          icon={Clapperboard} />
+            <NavLink label="Drafts"         href="/vanta/projects" icon={Layers} />
+            <NavLink label="Studio (advanced)" href="/vanta/studio" icon={Sparkles} />
           </>
         )}
 

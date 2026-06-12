@@ -1,9 +1,10 @@
-// VANTA — Creative Intelligence studio hub (V1).
+// VANTA — Auto Editor (V1.7). One workflow: drop a video, get an edited draft.
+// The studio/knowledge view moved to /vanta/studio (advanced).
 
-import { VantaHub } from "@/components/vanta/VantaHub";
+import { VantaAutoEditor } from "@/components/vanta/VantaAutoEditor";
 
-export const metadata = { title: "Vanta Studio · Vault Co" };
+export const metadata = { title: "Auto Editor · Vanta" };
 
-export default function VantaHubPage() {
-  return <VantaHub />;
+export default function VantaAutoEditorPage() {
+  return <VantaAutoEditor />;
 }

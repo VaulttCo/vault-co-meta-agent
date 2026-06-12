@@ -233,7 +233,10 @@ deterministic clips/hooks/dead-space rubric in `scoring.ts`, Footage Intelligenc
 · V1.4 worker contract hardening (bearer + per-claim-token guarded
 claim/heartbeat/complete/fail under `/api/vanta/runs`, validated completion payloads,
 stale visibility, `docs/vanta-worker-spec.md`) · V1.5 local worker runtime
-(`scripts/vanta-worker.mjs` — fixture contract-QA mode + real media mode).
+(`scripts/vanta-worker.mjs` — fixture contract-QA mode + real media mode) · V1.6 measured
+package materialization · V1.7 Auto Editor reframe (drop-to-draft + revision memory) ·
+V1.8 auto transcription (local whisper tier) · V1.9 cloud transcription bridge
+(browser audio extract → private Supabase Storage → OpenAI whisper-1).
 **Next unblocked step:** run the schema + stand up the worker box against a real
 Supabase project (claim → real whisper/scenes → measured clips), then Phase 2 labs.
 

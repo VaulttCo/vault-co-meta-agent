@@ -195,6 +195,56 @@ export async function executeTranscriptionJob(run: VantaAgentRun, asset: VantaAs
   }
 }
 
+// ── Cloud transcription executor (V1.9 — POST /api/vanta/jobs/[id]/transcribe-cloud) ─
+//
+// Tier 1 of the transcription cascade: PRIVATE stored audio (browser-extracted) →
+// hosted OpenAI transcription → vanta_transcripts. The provider call is bounded and
+// fast (no local decode), stages are patched for the UI rail, and any failure resolves
+// through failJob with a bounded reason — never a stuck run, never provider details.
+
+/** Cloud-tier failure must NOT consume the shared transcript job — requeue it so the
+ *  local-whisper route or the external worker can still claim it (cascade integrity). */
+async function requeueAfterCloudFailure(id: string, reason: string): Promise<VantaAgentRun | null> {
+  return patchVantaRun(id, {
+    status: "queued", started_at: null, finished_at: null, error: null,
+    result: { requeued: true, last_cloud_error: reason.slice(0, 300) },
+  });
+}
+
+export async function executeCloudTranscriptionJob(run: VantaAgentRun, asset: VantaAsset): Promise<VantaAgentRun | null> {
+  await patchVantaRun(run.id, { status: "running", started_at: nowIso(), result: { stage: "transcribing" } });
+  try {
+    const existing = await getVantaTranscript(asset.id);
+    if (existing && existing.segments.length > 0) {
+      return finalizeSuccess(run.id, {
+        mock: false, planned: false, stage: "done", source: existing.source,
+        transcript_id: existing.id, segment_count: existing.segments.length,
+        notes: ["Timestamped transcript already present."],
+      });
+    }
+    const { transcribeStoredAudio } = await import("./cloud-transcribe");
+    const cloud = await transcribeStoredAudio(asset.project_id ?? "", asset.id);
+    if (!cloud.ok) return requeueAfterCloudFailure(run.id, cloud.reason);
+
+    const tx = await createVantaTranscript({
+      asset_id: asset.id, source: "whisper", full_text: cloud.result.full_text,
+      segments: cloud.result.segments, language: cloud.result.language,
+    });
+    await updateVantaAssetMedia(asset.id, {
+      storage_bucket: "vanta-transcripts",
+      storage_path: cloud.storage_path,
+      size_bytes: asset.size_bytes ?? cloud.audio_bytes,
+    });
+    return finalizeSuccess(run.id, {
+      mock: false, planned: false, stage: "done", source: "whisper", engine: cloud.result.engine,
+      transcript_id: tx.id, segment_count: tx.segments.length, word_count: tx.word_count,
+      notes: ["Auto-transcribed in the cloud (browser audio extract → private storage → OpenAI whisper-1)."],
+    });
+  } catch (e) {
+    return requeueAfterCloudFailure(run.id, (e as Error).message.slice(0, 300));
+  }
+}
+
 // ── Inline executor (smoke-test/dev path — POST /api/vanta/jobs/[id]/run) ────
 //
 // Light jobs run for real when binaries + local footage exist; heavy jobs ALWAYS

@@ -225,3 +225,21 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Authorization: Bearer wrong
 
 The mock worker lifecycle (claim → heartbeat → complete with valid and invalid payloads →
 fail, plus ownership 409s) is exercised in the V1.4 QA session via the in-memory store.
+
+## Transcription cascade (V1.9)
+
+For an asset with no pasted transcript, transcription resolves in this order:
+
+1. **Cloud** — `AI_PROVIDER=openai` + `OPENAI_API_KEY` + Supabase Storage: browser
+   extracts 16kHz mono audio → signed-URL PUT to the private `vanta-transcripts` bucket
+   (`{project_id}/{asset_id}/audio-16k.wav`) → `POST /api/vanta/jobs/[id]/transcribe-cloud`
+   downloads server-side and transcribes with whisper-1 (verbose_json segments).
+2. **Local whisper** — `POST /api/vanta/jobs/[id]/transcribe` when the whisper CLI and
+   the source file under `VANTA_MEDIA_ROOT` exist on the app box.
+3. **External worker** — this spec's claim/heartbeat/complete contract (the job stays
+   queued for the worker when tiers 1–2 are unavailable).
+4. **Manual paste** — the Auto Editor's manual override (word-proportional derived
+   segments).
+
+The worker remains the path for footage longer than the cloud caps (12 min / 24 MB) and
+for all heavy media work (proxies, real scene detection, renders).

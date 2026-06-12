@@ -90,3 +90,17 @@ CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` (technically public, but still keep out of source control)
 
 `.env.local` is in `.gitignore`. Never commit it. If a key is accidentally committed, rotate it immediately in the respective provider's console.
+
+## Vanta cloud transcription (V1.9)
+
+| Variable | Required for | Behaviour when missing |
+|---|---|---|
+| `AI_PROVIDER=openai` + `OPENAI_API_KEY` | Cloud transcription (Auto Editor tier 1) | Falls through: local whisper → external worker → manual paste. App fully functional. |
+| Supabase URL + `SUPABASE_SERVICE_ROLE_KEY` + private `vanta-transcripts` bucket | Signed audio upload + server-side download | Same fall-through; "Cloud transcription unavailable" (409), never a crash. |
+
+Caps: extracted audio ≤ 24 MB and ≤ 12 minutes (16kHz mono WAV), enforced in the browser
+before upload, at the upload-target route, and again server-side before the provider
+call. Only browser-extracted AUDIO is uploaded (private bucket) — never the raw video.
+Audio is sent to OpenAI (whisper-1) for transcription when this tier is active; no other
+external destination. Signed URLs, keys, audio bytes, and raw provider responses are
+never logged.

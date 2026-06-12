@@ -13,6 +13,8 @@ import { resolveServerRole } from "@/lib/auth/server-role";
 import { can } from "@/lib/auth/permissions";
 import { createVantaProject, registerVantaAsset } from "@/lib/vanta/db";
 import { enqueueAssetPipeline, claimJob, executeProcessingJob, isLocalTranscriptionAvailable } from "@/lib/vanta/jobs";
+import { isCloudTranscriptionAvailable } from "@/lib/vanta/cloud-transcribe";
+import { MAX_CLOUD_AUDIO_BYTES, MAX_CLOUD_AUDIO_DURATION_MS } from "@/lib/vanta/storage";
 import { materializeCreativePackage } from "@/lib/vanta/package";
 
 export const runtime = "nodejs";
@@ -67,16 +69,21 @@ export async function POST(req: NextRequest) {
     // failed materialization.
     if (!hasManualTranscript) {
       const transcriptJob = jobResults.find((j) => j.job_type === "transcript");
-      const localTranscription = await isLocalTranscriptionAvailable(asset);
+      // Transcription cascade (V1.9): cloud → local whisper → external worker → paste.
+      const cloud = isCloudTranscriptionAvailable();
+      const local = await isLocalTranscriptionAvailable(asset);
+      const transcription = cloud ? "cloud_available" : local ? "local_available" : "worker_required";
       return NextResponse.json({
         project_id: project.id, asset_id: asset.id, jobs: jobResults,
         draft: null,
         stage: "needs_transcription",
         transcript_job_id: transcriptJob?.id ?? null,
-        transcription: localTranscription ? "local_available" : "worker_required",
-        ...(localTranscription ? {} : {
+        transcription,
+        capabilities: { cloud, local },
+        ...(cloud ? { caps: { max_bytes: MAX_CLOUD_AUDIO_BYTES, max_duration_ms: MAX_CLOUD_AUDIO_DURATION_MS } } : {}),
+        ...(transcription === "worker_required" ? {
           notice: "Transcription worker required — start scripts/vanta-worker.mjs on a media box (or paste the transcript manually).",
-        }),
+        } : {}),
       }, { status: 202 });
     }
 

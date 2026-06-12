@@ -210,7 +210,7 @@ export async function getVantaTranscript(assetId: string): Promise<VantaTranscri
 }
 
 /** Patch media metadata on an asset (probe results). Vanta tables only. */
-export async function updateVantaAssetMedia(id: string, patch: Partial<Pick<VantaAsset, "duration_ms" | "width" | "height" | "fps" | "codec" | "mime_type" | "size_bytes" | "probe" | "audio_analysis" | "status">>): Promise<VantaAsset | null> {
+export async function updateVantaAssetMedia(id: string, patch: Partial<Pick<VantaAsset, "duration_ms" | "width" | "height" | "fps" | "codec" | "mime_type" | "size_bytes" | "probe" | "audio_analysis" | "status" | "storage_bucket" | "storage_path">>): Promise<VantaAsset | null> {
   const next = { ...patch, updated_at: nowIso() };
   const apply = () => {
     const i = mockAssets.findIndex((a) => a.id === id);

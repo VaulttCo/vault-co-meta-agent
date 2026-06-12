@@ -77,9 +77,10 @@ export function VantaAutoEditor() {
   const [instruction, setInstruction] = useState("");
   const [learned, setLearned] = useState<LearnedNote[]>([]);
   const [lastApplied, setLastApplied] = useState<string | null>(null);
-  // V1.8 auto-transcription pipeline stage (drives the status rail)
-  const [phase, setPhase] = useState<"registering" | "extracting" | "transcribing" | "waiting_worker" | "building" | null>(null);
+  // V1.8/V1.9 auto-transcription pipeline stage (drives the status rail)
+  const [phase, setPhase] = useState<"registering" | "extracting" | "uploading" | "transcribing" | "waiting_worker" | "building" | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const rawFileRef = useRef<File | null>(null); // retained for browser audio extraction (V1.9)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -95,6 +96,7 @@ export function VantaAutoEditor() {
 
   const acceptFile = useCallback(async (f: File) => {
     setNotice(null);
+    rawFileRef.current = f;
     const duration_ms = await readDurationMs(f);
     setFile({ name: f.name, duration_ms });
   }, []);
@@ -169,19 +171,62 @@ export function VantaAutoEditor() {
       if (res.status === 201 && d.draft) { setDraft(d.draft); setLastApplied(null); setBusy(null); setPhase(null); return; }
 
       if (d.stage === "needs_transcription" && d.transcript_job_id) {
-        if (d.transcription === "local_available") {
-          // Auto-transcribe on this box: fire the dedicated route; the poller renders
-          // extracting → transcribing from the job's stage patches.
+        // V1.9 cascade: cloud → local whisper → external worker → manual paste.
+        const fallThrough = (reason?: string) => {
+          if (reason) setNotice(reason);
+          if (d.capabilities?.local) {
+            setPhase("extracting");
+            watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
+            fetch(`/api/vanta/jobs/${d.transcript_job_id}/transcribe`, { method: "POST" }).catch(() => null);
+          } else {
+            setPhase("waiting_worker");
+            setNotice((reason ? `${reason} — ` : "") + (d.notice ?? "Transcription worker required — start scripts/vanta-worker.mjs on a media box, or paste the transcript manually."));
+            setShowManualTranscript(true);
+            watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
+          }
+        };
+
+        if (d.transcription === "cloud_available" && rawFileRef.current) {
+          // Tier 1 — cloud: extract audio in the browser, PUT it to private storage via
+          // the signed URL, then transcribe server-side. Any failure cascades down.
           setPhase("extracting");
-          watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
-          fetch(`/api/vanta/jobs/${d.transcript_job_id}/transcribe`, { method: "POST" }).catch(() => null);
-        } else {
-          // No whisper here → the external Vanta Worker owns the job; keep watching.
-          setPhase("waiting_worker");
-          setNotice(d.notice ?? "Transcription worker required — start scripts/vanta-worker.mjs on a media box, or paste the transcript manually.");
-          setShowManualTranscript(true);
-          watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds);
+          const { extractAudioWav } = await import("./extractAudio");
+          const extracted = await extractAudioWav(
+            rawFileRef.current,
+            d.caps?.max_duration_ms ?? 12 * 60_000,
+            d.caps?.max_bytes ?? 24 * 1024 * 1024,
+          );
+          if (!extracted.ok) { fallThrough(`Cloud transcription skipped: ${extracted.reason}`); return; }
+
+          const targetRes = await fetch(`/api/vanta/assets/${d.asset_id}/audio-upload`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ size_bytes: extracted.audio.sizeBytes, duration_ms: extracted.audio.durationMs }),
+          });
+          const target = await targetRes.json().catch(() => ({}));
+          if (!targetRes.ok || !target.upload?.signed_url) { fallThrough(target.error ?? "Could not create the audio upload target"); return; }
+
+          setPhase("uploading");
+          const put = await fetch(target.upload.signed_url, {
+            method: "PUT",
+            headers: { "Content-Type": "audio/wav", "x-upsert": "true" },
+            body: extracted.audio.blob,
+          }).catch(() => null);
+          if (!put?.ok) { fallThrough("Audio upload failed"); return; }
+
+          setPhase("transcribing");
+          watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds); // advances on success
+          const cloudRes = await fetch(`/api/vanta/jobs/${d.transcript_job_id}/transcribe-cloud`, { method: "POST" }).catch(() => null);
+          if (!cloudRes || !cloudRes.ok) {
+            // Cloud tier failed (409 unavailable / 422 requeued / network) — the job is
+            // back in (or still in) the queue, so cascade to local/worker immediately
+            // instead of polling a job nothing is processing.
+            const err = cloudRes ? await cloudRes.json().catch(() => ({})) : {};
+            fallThrough(err?.error ?? "Cloud transcription failed");
+          }
+          return; // busy stays on; the watcher/builder clears it
         }
+
+        fallThrough();
         return; // busy stays on; the watcher/builder clears it
       }
 
@@ -241,14 +286,14 @@ export function VantaAutoEditor() {
                 <FileVideo size={28} style={{ color: ORANGE }} />
                 <p className="text-[14px] font-semibold" style={{ color: "var(--t-text)" }}>{file.name}</p>
                 <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>
-                  {file.duration_ms ? `${Math.round(file.duration_ms / 1000)}s detected from file metadata` : "duration unknown"} · file bytes stay on your machine — Vanta plans from metadata + transcript
+                  {file.duration_ms ? `${Math.round(file.duration_ms / 1000)}s detected from file metadata` : "duration unknown"} · video bytes never upload — with cloud transcription enabled, only the extracted audio is stored privately for transcription
                 </p>
               </>
             ) : (
               <>
                 <UploadCloud size={30} style={{ color: dragOver ? ORANGE : "var(--t-dim)" }} />
                 <p className="text-[14px] font-semibold" style={{ color: "var(--t-text)" }}>Drag a video here, or click to browse</p>
-                <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>mp4 / mov / audio — Vanta reads the duration locally and builds the draft from the transcript</p>
+                <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>mp4 / mov / audio — Vanta auto-transcribes and builds the draft; the video itself never uploads</p>
               </>
             )}
           </div>
@@ -274,6 +319,10 @@ export function VantaAutoEditor() {
             </VCButton>
             {needs && <VCChip label={`waiting on: ${needs.join(", ")}`} color="#f59e0b" />}
           </div>
+          <p className="text-[10px]" style={{ color: "var(--t-dim)" }}>
+            When cloud transcription is enabled, audio extracted from your video (not the video) is uploaded to
+            private storage and sent to the configured transcription provider. It may contain spoken personal details.
+          </p>
 
           {/* Pipeline status rail (V1.8) */}
           {phase && (
@@ -281,10 +330,11 @@ export function VantaAutoEditor() {
               {([
                 ["registering", "Register footage"],
                 ["extracting", "Extract audio"],
+                ["uploading", "Upload audio"],
                 ["transcribing", "Transcribe"],
                 ["building", "Build draft"],
               ] as const).map(([key, label]) => {
-                const order = ["registering", "extracting", "transcribing", "building"];
+                const order = ["registering", "extracting", "uploading", "transcribing", "building"];
                 const activeIdx = order.indexOf(phase === "waiting_worker" ? "transcribing" : phase);
                 const myIdx = order.indexOf(key);
                 const state = myIdx < activeIdx ? "done" : myIdx === activeIdx ? "active" : "pending";

@@ -13,8 +13,9 @@
 // truncated before it touches a Vanta table.
 
 import OpenAI from "openai";
-import { downloadAudio, MAX_CLOUD_AUDIO_BYTES } from "./storage";
+import { downloadAudio, downloadVideo, MAX_CLOUD_AUDIO_BYTES, MAX_CLOUD_VIDEO_BYTES } from "./storage";
 import { isVantaStorageConfigured } from "./storage";
+import { extractWavFromVideo } from "./media/server-extract";
 import type { VantaTranscriptSegment } from "./types";
 import type { TranscriptionResult } from "./media/transcribe";
 
@@ -31,6 +32,40 @@ export function isCloudTranscriptionAvailable(): boolean {
 
 interface VerboseSegment { start?: number; end?: number; text?: string }
 
+type CloudOutcome =
+  | { ok: true; result: TranscriptionResult; audio_bytes: number; storage_path: string }
+  | { ok: false; reason: string };
+
+/**
+ * V1.10 primary path: transcribe the asset's stored ORIGINAL video — download from the
+ * private bucket, extract 16kHz mono WAV server-side (ffmpeg normalizes any common
+ * codec), send the audio to the provider. Falls back to a previously-uploaded audio
+ * object (V1.9 path) when no video exists.
+ */
+export async function transcribeStoredVideo(
+  projectId: string,
+  assetId: string,
+  onStage?: (stage: "extracting_audio" | "transcribing") => void | Promise<void>,
+): Promise<CloudOutcome> {
+  if (!isCloudTranscriptionAvailable()) {
+    return { ok: false, reason: "Cloud transcription is not configured (VANTA_TRANSCRIPTION_PROVIDER=openai + OPENAI_API_KEY + Supabase required)" };
+  }
+  await onStage?.("extracting_audio");
+  const video = await downloadVideo(projectId, assetId);
+  if (!video) {
+    // No stored video — V1.9 audio-object path keeps working as the inner fallback.
+    await onStage?.("transcribing");
+    return transcribeStoredAudio(projectId, assetId);
+  }
+  if (video.size > MAX_CLOUD_VIDEO_BYTES) {
+    return { ok: false, reason: `Video is over the ${Math.round(MAX_CLOUD_VIDEO_BYTES / 1024 / 1024)}MB cloud cap — use the worker path` };
+  }
+  const extracted = await extractWavFromVideo(video.bytes, video.ext);
+  if (!extracted.ok) return { ok: false, reason: extracted.reason };
+  await onStage?.("transcribing");
+  return transcribeWav(extracted.wav, video.path);
+}
+
 /**
  * Transcribe the stored audio for (project, asset). Returns sanitized segments or a
  * bounded failure reason — never throws, never leaks provider details.
@@ -38,19 +73,24 @@ interface VerboseSegment { start?: number; end?: number; text?: string }
 export async function transcribeStoredAudio(
   projectId: string,
   assetId: string,
-): Promise<{ ok: true; result: TranscriptionResult; audio_bytes: number; storage_path: string } | { ok: false; reason: string }> {
+): Promise<CloudOutcome> {
   if (!isCloudTranscriptionAvailable()) {
     return { ok: false, reason: "Cloud transcription is not configured (VANTA_TRANSCRIPTION_PROVIDER=openai + OPENAI_API_KEY + Supabase required)" };
   }
   const audio = await downloadAudio(projectId, assetId);
   if (!audio) {
-    return { ok: false, reason: `Uploaded audio not found or over the ${Math.round(MAX_CLOUD_AUDIO_BYTES / 1024 / 1024)}MB cap — re-upload or use the worker/manual path` };
+    return { ok: false, reason: `Uploaded media not found or over the ${Math.round(MAX_CLOUD_AUDIO_BYTES / 1024 / 1024)}MB cap — re-upload or use the worker/manual path` };
   }
+  return transcribeWav(audio.bytes, audio.path);
+}
+
+/** Shared provider call — bounded, sanitized, never leaks provider details. */
+async function transcribeWav(wav: Buffer, storagePath: string): Promise<CloudOutcome> {
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: REQUEST_TIMEOUT_MS, maxRetries: 1 });
     // whisper-1 is the segment-timestamped (verbose_json) transcription model.
     const response = await client.audio.transcriptions.create({
-      file: new File([new Uint8Array(audio.bytes)], "audio-16k.wav", { type: "audio/wav" }),
+      file: new File([new Uint8Array(wav)], "audio-16k.wav", { type: "audio/wav" }),
       model: "whisper-1",
       response_format: "verbose_json",
     });
@@ -73,8 +113,8 @@ export async function transcribeStoredAudio(
         language: typeof raw.language === "string" ? raw.language.slice(0, 16) : "en",
         engine: "openai whisper-1 (cloud)",
       },
-      audio_bytes: audio.size,
-      storage_path: audio.path,
+      audio_bytes: wav.byteLength,
+      storage_path: storagePath,
     };
   } catch (e) {
     // Bounded, provider-detail-free error (no response bodies, no keys).

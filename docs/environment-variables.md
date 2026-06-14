@@ -98,9 +98,11 @@ CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 | `VANTA_TRANSCRIPTION_PROVIDER=openai` + `OPENAI_API_KEY` | Cloud transcription (Auto Editor tier 1) | Falls through: local whisper → external worker → manual paste. App fully functional. |
 | Supabase URL + `SUPABASE_SERVICE_ROLE_KEY` + private `vanta-transcripts` bucket | Signed audio upload + server-side download | Same fall-through; "Cloud transcription unavailable" (409), never a crash. |
 
-Caps: extracted audio ≤ 24 MB and ≤ 12 minutes (16kHz mono WAV), enforced in the browser
-before upload, at the upload-target route, and again server-side before the provider
-call. Only browser-extracted AUDIO is uploaded (private bucket) — never the raw video.
+Caps (V1.10): uploaded video ≤ 300 MB and ≤ 12 minutes; extracted audio ≤ 24 MB —
+enforced client-side, at the upload-target route, and again server-side (over-cap
+objects are deleted). The ORIGINAL video uploads to the private vanta-raw-footage
+bucket; the server extracts 16kHz mono audio with ffmpeg (bundled ffmpeg-static on
+Vercel) so any common codec works — no browser decoding required.
 Audio is sent to OpenAI (whisper-1) for transcription when this tier is active; no other
 external destination. Signed URLs, keys, audio bytes, and raw provider responses are
 never logged.

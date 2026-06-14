@@ -1,5 +1,10 @@
 // VANTA — browser-side audio extraction (CLIENT ONLY, V1.9).
 //
+// V1.10 NOTE: superseded in the primary Auto Editor flow by original-video upload +
+// SERVER-side ffmpeg extraction (browser decodeAudioData failed on too many real-world
+// codecs: H.265, DSLR/GoPro/drone footage). Kept as working V1.9 infrastructure — the
+// audio-upload route + stored-audio transcription path still accept its output.
+//
 // Decodes the dropped video/audio file with the Web Audio API and renders a 16kHz mono
 // PCM16 WAV — the only bytes that ever leave the browser (uploaded to private storage
 // for cloud transcription; the video itself never uploads). Pure browser APIs, no wasm,

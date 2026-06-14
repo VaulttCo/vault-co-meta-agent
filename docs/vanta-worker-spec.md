@@ -230,10 +230,15 @@ fail, plus ownership 409s) is exercised in the V1.4 QA session via the in-memory
 
 For an asset with no pasted transcript, transcription resolves in this order:
 
-1. **Cloud** — `VANTA_TRANSCRIPTION_PROVIDER=openai` + `OPENAI_API_KEY` + Supabase Storage: browser
-   extracts 16kHz mono audio → signed-URL PUT to the private `vanta-transcripts` bucket
-   (`{project_id}/{asset_id}/audio-16k.wav`) → `POST /api/vanta/jobs/[id]/transcribe-cloud`
-   downloads server-side and transcribes with whisper-1 (verbose_json segments).
+1. **Cloud (V1.10)** — `VANTA_TRANSCRIPTION_PROVIDER=openai` + `OPENAI_API_KEY` + Supabase
+   Storage: browser uploads the ORIGINAL video via signed PUT to the private
+   `vanta-raw-footage` bucket (`{project_id}/{asset_id}/source.<ext>`, ≤300MB/≤12min,
+   extension+MIME whitelisted) → `POST /api/vanta/jobs/[id]/transcribe-cloud` downloads
+   server-side, extracts 16kHz mono audio with ffmpeg (system or bundled ffmpeg-static —
+   any common codec: H.264/H.265, MOV/MP4/M4V, iPhone/DSLR/GoPro/drone), and transcribes
+   with whisper-1 (verbose_json segments). Temp extraction artifacts are always deleted.
+   A previously-uploaded audio object (V1.9 path, `vanta-transcripts` bucket) still works
+   as the inner fallback input.
 2. **Local whisper** — `POST /api/vanta/jobs/[id]/transcribe` when the whisper CLI and
    the source file under `VANTA_MEDIA_ROOT` exist on the app box.
 3. **External worker** — this spec's claim/heartbeat/complete contract (the job stays

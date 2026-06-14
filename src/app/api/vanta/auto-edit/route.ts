@@ -14,7 +14,7 @@ import { can } from "@/lib/auth/permissions";
 import { createVantaProject, registerVantaAsset } from "@/lib/vanta/db";
 import { enqueueAssetPipeline, claimJob, executeProcessingJob, isLocalTranscriptionAvailable } from "@/lib/vanta/jobs";
 import { isCloudTranscriptionAvailable } from "@/lib/vanta/cloud-transcribe";
-import { MAX_CLOUD_AUDIO_BYTES, MAX_CLOUD_AUDIO_DURATION_MS } from "@/lib/vanta/storage";
+import { MAX_CLOUD_VIDEO_BYTES, MAX_CLOUD_AUDIO_DURATION_MS } from "@/lib/vanta/storage";
 import { materializeCreativePackage } from "@/lib/vanta/package";
 
 export const runtime = "nodejs";
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         transcript_job_id: transcriptJob?.id ?? null,
         transcription,
         capabilities: { cloud, local },
-        ...(cloud ? { caps: { max_bytes: MAX_CLOUD_AUDIO_BYTES, max_duration_ms: MAX_CLOUD_AUDIO_DURATION_MS } } : {}),
+        ...(cloud ? { caps: { max_bytes: MAX_CLOUD_VIDEO_BYTES, max_duration_ms: MAX_CLOUD_AUDIO_DURATION_MS } } : {}),
         ...(transcription === "worker_required" ? {
           notice: "Transcription worker required — start scripts/vanta-worker.mjs on a media box (or paste the transcript manually).",
         } : {}),

@@ -187,33 +187,31 @@ export function VantaAutoEditor() {
         };
 
         if (d.transcription === "cloud_available" && rawFileRef.current) {
-          // Tier 1 — cloud: extract audio in the browser, PUT it to private storage via
-          // the signed URL, then transcribe server-side. Any failure cascades down.
-          setPhase("extracting");
-          const { extractAudioWav } = await import("./extractAudio");
-          const extracted = await extractAudioWav(
-            rawFileRef.current,
-            d.caps?.max_duration_ms ?? 12 * 60_000,
-            d.caps?.max_bytes ?? 24 * 1024 * 1024,
-          );
-          if (!extracted.ok) { fallThrough(`Cloud transcription skipped: ${extracted.reason}`); return; }
+          // Tier 1 — cloud (V1.10): upload the ORIGINAL file to private storage; the
+          // server extracts audio with ffmpeg (any common codec — no browser decoding)
+          // and transcribes. Any failure cascades down to local/worker/paste.
+          const raw = rawFileRef.current;
+          const maxBytes = d.caps?.max_bytes ?? 300 * 1024 * 1024;
+          const maxDur = d.caps?.max_duration_ms ?? 12 * 60_000;
+          if (raw.size > maxBytes) { fallThrough(`File is ${Math.round(raw.size / 1024 / 1024)}MB — over the ${Math.round(maxBytes / 1024 / 1024)}MB cloud cap`); return; }
+          if (file.duration_ms && file.duration_ms > maxDur) { fallThrough(`Footage is ${Math.round(file.duration_ms / 60_000)} min — over the ${Math.round(maxDur / 60_000)}-minute cloud cap`); return; }
 
-          const targetRes = await fetch(`/api/vanta/assets/${d.asset_id}/audio-upload`, {
+          const targetRes = await fetch(`/api/vanta/assets/${d.asset_id}/video-upload`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ size_bytes: extracted.audio.sizeBytes, duration_ms: extracted.audio.durationMs }),
+            body: JSON.stringify({ file_name: raw.name, mime_type: raw.type || null, size_bytes: raw.size, duration_ms: file.duration_ms }),
           });
           const target = await targetRes.json().catch(() => ({}));
-          if (!targetRes.ok || !target.upload?.signed_url) { fallThrough(target.error ?? "Could not create the audio upload target"); return; }
+          if (!targetRes.ok || !target.upload?.signed_url) { fallThrough(target.error ?? "Could not create the video upload target"); return; }
 
           setPhase("uploading");
           const put = await fetch(target.upload.signed_url, {
             method: "PUT",
-            headers: { "Content-Type": "audio/wav", "x-upsert": "true" },
-            body: extracted.audio.blob,
+            headers: { "Content-Type": target.content_type ?? raw.type ?? "video/mp4", "x-upsert": "true" },
+            body: raw,
           }).catch(() => null);
-          if (!put?.ok) { fallThrough("Audio upload failed"); return; }
+          if (!put?.ok) { fallThrough("Video upload failed (storage)"); return; }
 
-          setPhase("transcribing");
+          setPhase("extracting");
           watchTranscription(d.project_id, d.asset_id, d.transcript_job_id, jobIds); // advances on success
           const cloudRes = await fetch(`/api/vanta/jobs/${d.transcript_job_id}/transcribe-cloud`, { method: "POST" }).catch(() => null);
           if (!cloudRes || !cloudRes.ok) {
@@ -286,7 +284,7 @@ export function VantaAutoEditor() {
                 <FileVideo size={28} style={{ color: ORANGE }} />
                 <p className="text-[14px] font-semibold" style={{ color: "var(--t-text)" }}>{file.name}</p>
                 <p className="text-[11.5px]" style={{ color: "var(--t-muted)" }}>
-                  {file.duration_ms ? `${Math.round(file.duration_ms / 1000)}s detected from file metadata` : "duration unknown"} · video bytes never upload — with cloud transcription enabled, only the extracted audio is stored privately for transcription
+                  {file.duration_ms ? `${Math.round(file.duration_ms / 1000)}s detected from file metadata` : "duration unknown"} · iPhone, DSLR, drone, GoPro, H.264/H.265, MOV/MP4/M4V — the server normalizes the codec
                 </p>
               </>
             ) : (
@@ -320,8 +318,8 @@ export function VantaAutoEditor() {
             {needs && <VCChip label={`waiting on: ${needs.join(", ")}`} color="#f59e0b" />}
           </div>
           <p className="text-[10px]" style={{ color: "var(--t-dim)" }}>
-            When cloud transcription is enabled, audio extracted from your video (not the video) is uploaded to
-            private storage and sent to the configured transcription provider. It may contain spoken personal details.
+            When cloud transcription is enabled, your video is uploaded to private storage and its audio is sent to
+            the configured transcription provider. Footage may contain spoken personal details.
           </p>
 
           {/* Pipeline status rail (V1.8) */}
@@ -329,12 +327,12 @@ export function VantaAutoEditor() {
             <div className="flex items-center gap-1.5 flex-wrap">
               {([
                 ["registering", "Register footage"],
+                ["uploading", "Upload video"],
                 ["extracting", "Extract audio"],
-                ["uploading", "Upload audio"],
                 ["transcribing", "Transcribe"],
                 ["building", "Build draft"],
               ] as const).map(([key, label]) => {
-                const order = ["registering", "extracting", "uploading", "transcribing", "building"];
+                const order = ["registering", "uploading", "extracting", "transcribing", "building"];
                 const activeIdx = order.indexOf(phase === "waiting_worker" ? "transcribing" : phase);
                 const myIdx = order.indexOf(key);
                 const state = myIdx < activeIdx ? "done" : myIdx === activeIdx ? "active" : "pending";

@@ -222,8 +222,12 @@ export async function executeCloudTranscriptionJob(run: VantaAgentRun, asset: Va
         notes: ["Timestamped transcript already present."],
       });
     }
-    const { transcribeStoredAudio } = await import("./cloud-transcribe");
-    const cloud = await transcribeStoredAudio(asset.project_id ?? "", asset.id);
+    // V1.10: video-first (server-side ffmpeg extraction); falls back to a stored audio
+    // object (V1.9) inside transcribeStoredVideo. Stages patch through for the UI rail.
+    const { transcribeStoredVideo } = await import("./cloud-transcribe");
+    const cloud = await transcribeStoredVideo(asset.project_id ?? "", asset.id, async (stage) => {
+      await patchVantaRun(run.id, { result: { stage } });
+    });
     if (!cloud.ok) return requeueAfterCloudFailure(run.id, cloud.reason);
 
     const tx = await createVantaTranscript({
@@ -231,7 +235,9 @@ export async function executeCloudTranscriptionJob(run: VantaAgentRun, asset: Va
       segments: cloud.result.segments, language: cloud.result.language,
     });
     await updateVantaAssetMedia(asset.id, {
-      storage_bucket: "vanta-transcripts",
+      // storage_path points at whichever object fed the transcription: the original
+      // video (vanta-raw-footage, V1.10) or the extracted audio (vanta-transcripts, V1.9).
+      storage_bucket: cloud.storage_path.endsWith(".wav") ? "vanta-transcripts" : "vanta-raw-footage",
       storage_path: cloud.storage_path,
       size_bytes: asset.size_bytes ?? cloud.audio_bytes,
     });

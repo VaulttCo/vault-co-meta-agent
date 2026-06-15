@@ -101,8 +101,9 @@ CREDENTIAL_ENCRYPTION_KEY=<your-64-char-hex-key>
 Caps (V1.10): uploaded video ≤ 300 MB and ≤ 12 minutes; extracted audio ≤ 24 MB —
 enforced client-side, at the upload-target route, and again server-side (over-cap
 objects are deleted). The ORIGINAL video uploads to the private vanta-raw-footage
-bucket; the server extracts 16kHz mono audio with ffmpeg (bundled ffmpeg-static on
-Vercel) so any common codec works — no browser decoding required.
+bucket; the server extracts 16kHz mono audio with ffmpeg (bundled @ffmpeg-installer
+binary — ships per-OS, no install download, kept external via serverExternalPackages so
+it runs on Vercel Linux) so any common codec works — no browser decoding required.
 Audio is sent to OpenAI (whisper-1) for transcription when this tier is active; no other
 external destination. Signed URLs, keys, audio bytes, and raw provider responses are
 never logged.

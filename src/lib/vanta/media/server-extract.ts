@@ -1,11 +1,17 @@
 // VANTA — server-side audio extraction (server-only, V1.10).
 //
 // Extracts a 16kHz mono WAV from an uploaded video/audio buffer using ffmpeg — the
-// system binary when present (media boxes), the bundled ffmpeg-static binary otherwise
-// (Vercel). `-vn` skips video decoding entirely, so extraction is demux + audio decode:
-// fast and memory-light even for 4K H.265 sources. Everything is bounded: input size is
-// capped by the caller, extraction has a hard timeout, the output WAV is size-capped,
-// and ALL temp files are deleted in `finally`. Never logs bytes or paths beyond basenames.
+// system binary when present (media boxes), the bundled @ffmpeg-installer binary
+// otherwise (Vercel). @ffmpeg-installer ships the per-OS binary INSIDE its package (no
+// install-time download, no pnpm build-approval), so the correct Linux binary is present
+// on Vercel; `serverExternalPackages` (next.config.ts) keeps the package un-bundled so
+// its `__dirname`-relative binary resolution still works inside the serverless function,
+// and `outputFileTracingIncludes` bundles the binary into the function.
+//
+// `-vn` skips video decoding entirely, so extraction is demux + audio decode: fast and
+// memory-light even for 4K H.265 sources. Everything is bounded: input size is capped by
+// the caller, extraction has a hard timeout + duration cap, the output WAV is size-capped,
+// and ALL temp files are deleted in `finally`. Never logs bytes, keys, or audio content.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -19,14 +25,29 @@ const pExecFile = promisify(execFile);
 const EXTRACT_TIMEOUT_MS = 120_000; // bounded — audio-only decode of a ≤300MB source
 const MAX_OUTPUT_SECONDS = Math.round(MAX_CLOUD_AUDIO_DURATION_MS / 1000); // hard duration cap
 
-/** Resolve a runnable ffmpeg: system binary first, bundled ffmpeg-static otherwise. */
+/**
+ * Resolve a runnable ffmpeg: system binary first (media boxes), then the bundled
+ * @ffmpeg-installer platform binary. On the failure path it logs a single bounded
+ * diagnostic (platform/arch/resolved-path/exists) so a Vercel-vs-local resolution gap is
+ * visible in production logs without exposing anything sensitive.
+ */
 export async function resolveFfmpegBinary(): Promise<string | null> {
   if (await isFfmpegAvailable()) return "ffmpeg";
   try {
-    const mod = await import("ffmpeg-static");
-    const bin = (mod.default ?? mod) as unknown as string | null;
-    return typeof bin === "string" && existsSync(bin) ? bin : null;
-  } catch { return null; }
+    const mod = await import("@ffmpeg-installer/ffmpeg");
+    const installer = ((mod as { default?: { path?: string } }).default ?? mod) as { path?: string };
+    const bin = typeof installer.path === "string" ? installer.path : null;
+    if (bin && existsSync(bin)) return bin;
+    console.error("[vanta:ffmpeg] binary not found " + JSON.stringify({
+      platform: process.platform, arch: process.arch, resolved: bin, exists: bin ? existsSync(bin) : false,
+    }));
+    return null;
+  } catch (e) {
+    console.error("[vanta:ffmpeg] resolution error " + JSON.stringify({
+      platform: process.platform, arch: process.arch, message: (e as Error).message.slice(0, 120),
+    }));
+    return null;
+  }
 }
 
 export async function isServerExtractionAvailable(): Promise<boolean> {
@@ -57,7 +78,14 @@ export async function extractWavFromVideo(videoBytes: Buffer, ext: string): Prom
       // 720s × 16kHz × 2 bytes mono ≈ 23MB, under MAX_CLOUD_AUDIO_BYTES.
       await pExecFile(bin, ["-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-t", String(MAX_OUTPUT_SECONDS), "-c:a", "pcm_s16le", output],
         { timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, shell: false });
-    } catch {
+    } catch (e) {
+      // ENOEXEC/EACCES here = a binary-launch problem (wrong arch / not executable),
+      // distinct from a bad media file. Log the code only (no bytes, no full paths).
+      const code = (e as { code?: string | number })?.code;
+      if (code === "ENOEXEC" || code === "EACCES" || code === "ENOENT") {
+        console.error("[vanta:ffmpeg] launch failed " + JSON.stringify({ platform: process.platform, arch: process.arch, code }));
+        return { ok: false, reason: "Audio extraction unavailable on this server" };
+      }
       return { ok: false, reason: "Audio extraction failed — the file may be corrupted or contain no audio track" };
     }
     if (!existsSync(output)) return { ok: false, reason: "Audio extraction produced no output — the file may contain no audio track" };

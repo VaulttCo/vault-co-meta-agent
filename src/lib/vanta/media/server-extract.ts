@@ -92,6 +92,18 @@ async function probeStreams(bin: string, input: string): Promise<StreamInfo | nu
   };
 }
 
+/** Pull the most informative ffmpeg error line out of stderr, with temp paths redacted.
+ *  Surfacing ffmpeg's actual words beats guessing the cause from a broad keyword match. */
+function pickFfmpegError(stderr: string): string {
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const meaningful = [...lines].reverse().find((l) =>
+    /(invalid data|error while|could not|cannot|not found|no such|denied|unsupported|does not contain|conversion failed|moov atom)/i.test(l));
+  return (meaningful ?? lines[lines.length - 1] ?? "ffmpeg exited with an error")
+    .replace(/\/\S*vanta-extract-\S+/g, "<file>")  // redact temp paths
+    .replace(/\s+@\s+0x[0-9a-f]+/gi, "")           // drop ffmpeg context addresses
+    .slice(0, 160);
+}
+
 /**
  * videoBytes → 16kHz mono PCM16 WAV. ffmpeg normalizes any common container/codec
  * (H.264, H.265/HEVC, MOV, MP4, M4V, MKV, GoPro/DJI/DSLR exports). Bounded + cleaned up.
@@ -135,11 +147,17 @@ export async function extractWavFromVideo(videoBytes: Buffer, ext: string): Prom
       };
     }
 
-    // 2. Extract. -t bounds the OUTPUT to the duration cap regardless of source
-    //    length/bitrate, so a low-bitrate/crafted file can't expand past budget or fill /tmp.
+    // 2. Extract. `-analyzeduration`/`-probesize` (input options, before -i) make ffmpeg
+    //    fully analyze the stream before decoding — this resolves the common-on-older-builds
+    //    "Invalid data found" / codec-parameter failures on real-world phone footage that the
+    //    demuxer (probe) tolerates. `-t` bounds the OUTPUT to the duration cap so a low-bitrate
+    //    file can't expand past budget or fill /tmp.
     try {
-      await pExecFile(bin, ["-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-t", String(MAX_OUTPUT_SECONDS), "-c:a", "pcm_s16le", output],
-        { timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, shell: false });
+      await pExecFile(bin, [
+        "-y", "-analyzeduration", "200M", "-probesize", "200M",
+        "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-t", String(MAX_OUTPUT_SECONDS),
+        "-c:a", "pcm_s16le", output,
+      ], { timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, shell: false });
     } catch (e) {
       const err = e as { code?: string | number; killed?: boolean; stderr?: string };
       // Binary-launch problem (wrong arch / not executable) — distinct from a media issue.
@@ -147,19 +165,22 @@ export async function extractWavFromVideo(videoBytes: Buffer, ext: string): Prom
         console.error("[vanta:ffmpeg] launch failed " + JSON.stringify({ platform: process.platform, arch: process.arch, code: err.code }));
         return { ok: false, reason: "Audio extraction is unavailable on this server", cause: "no_ffmpeg" };
       }
-      const tail = String(err.stderr ?? "").split("\n").filter(Boolean).slice(-4).join(" | ").slice(0, 300);
-      console.error("[vanta:ffmpeg] extract failed " + JSON.stringify({ code: err.code, killed: err.killed ?? false, audioCodec: streams?.audioCodec ?? null, tail: tail.slice(0, 200) }));
-      // No-stream / decoder-missing → precise codec-aware message.
-      if (/does not contain any stream/i.test(tail)) {
+      const stderr = String(err.stderr ?? "");
+      const detail = pickFfmpegError(stderr);
+      // Log the FULL stderr (bounded) — the real ffmpeg error, not a keyword guess.
+      console.error("[vanta:ffmpeg] extract failed " + JSON.stringify({ code: err.code, killed: err.killed ?? false, audioCodec: streams?.audioCodec ?? null, detail, stderr: stderr.slice(-1500) }));
+      if (/does not contain any stream/i.test(stderr)) {
         return { ok: false, reason: "This file has no usable audio track to transcribe. Paste a transcript manually to build a draft.", cause: "no_audio_stream" };
       }
-      if (/Decoder.*not found|Unknown decoder|Could not find codec|not implemented|Invalid data found/i.test(tail)) {
-        return { ok: false, cause: "unsupported_codec", reason: `The audio track${streams?.audioCodec ? ` (${streams.audioCodec})` : ""} couldn't be decoded on this server — the worker can process it, or paste a transcript manually.` };
+      // ONLY a genuine missing-decoder error is a codec-support problem. Generic errors
+      // ("Invalid data found", timestamp/parse issues) are NOT — surface ffmpeg's real words.
+      if (/Decoder \(codec [^)]*\) not found|Unknown decoder|Could not find a decoder|Decoder not found/i.test(stderr)) {
+        return { ok: false, cause: "unsupported_codec", reason: `The audio track${streams?.audioCodec ? ` (${streams.audioCodec})` : ""} couldn't be decoded on this server (ffmpeg: ${detail}). Use the worker, or paste a transcript manually.` };
       }
       if (err.killed) {
         return { ok: false, reason: "Audio extraction timed out — the file is too long for the cloud path; use the worker, or paste a transcript.", cause: "extraction_failed" };
       }
-      return { ok: false, reason: "Audio extraction failed while decoding the audio track — try the worker, or paste a transcript manually.", cause: "extraction_failed" };
+      return { ok: false, reason: `Audio extraction failed (ffmpeg: ${detail}). Use the worker, or paste a transcript manually.`, cause: "extraction_failed" };
     }
 
     if (!existsSync(output)) return { ok: false, reason: "This file has no usable audio track to transcribe. Paste a transcript manually to build a draft.", cause: "no_audio_stream" };
